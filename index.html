@@ -485,6 +485,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <div style="font-size:12px;color:#888;font-weight:600">Filtrar listas por área</div>
             <button class="btn-sm btn-edit admin-only" id="btnForzarRotacion" style="display:none" onclick="forzarRotacionManual()">🔄 Forzar rotación</button>
+            <button class="btn-sm admin-only" id="btnCorregirMerma" style="display:none;background:#fff3cd;border-color:#b8860b;color:#b8860b" onclick="corregirMermaAyer()">🔧 Corregir merma→ayer</button>
           </div>
           <div class="stock-area-btns" id="stockListaAreaBtns">
             <button class="stock-area-btn active" onclick="selStockListaArea(this,'')">Todos</button>
@@ -2852,9 +2853,38 @@ async function programarRespaldoMedianoche() {
 programarRespaldoMedianoche();
 
 // ═══════════════════════════
-// ═══════════════════════════
-// STOCK — 3 CATEGORÍAS
-// ═══════════════════════════
+// FUNCIÓN TEMPORAL: mueve productos de Merma que son del 1/7 de vuelta a Ayer
+window.corregirMermaAyer = async function() {
+  if (!confirm('¿Mover los productos del 1/7 de Merma → Ayer?\n\nEsto corrige la rotación incorrecta que ocurrió esta noche.')) return;
+  const btn = document.getElementById('btnCorregirMerma');
+  btn.disabled = true; btn.textContent = 'Corrigiendo...';
+  try {
+    const snap = await getDocs(collection(db, 'stock'));
+    let count = 0;
+    for (const stockDoc of snap.docs) {
+      const data = stockDoc.data();
+      if (data.sucursal !== sucursal) continue;
+      if (!data.merma || !data.merma.cantidad || data.merma.cantidad <= 0) continue;
+      const fechaMerma = data.merma.fecha || '';
+      // Detectar productos del 1/7 en cualquier formato de fecha es-CL
+      const esJulio1 = fechaMerma.includes('1/7') || fechaMerma.includes('01-07') || fechaMerma.includes('01/07') || fechaMerma === '1-7-2026';
+      if (!esJulio1) continue;
+      const cantMerma = data.merma.cantidad;
+      const ayerPrev  = data.ayer?.cantidad || 0;
+      await updateDoc(doc(db, 'stock', stockDoc.id), {
+        ayer:  { cantidad: ayerPrev + cantMerma, fecha: fechaMerma },
+        merma: null
+      });
+      console.log(`✅ Corregido: ${stockDoc.id} → ${cantMerma} ud. movidas de Merma a Ayer`);
+      count++;
+    }
+    await cargarStockPorCategoria();
+    showToast(`✅ ${count} producto(s) movidos de Merma → Ayer`);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = '🔧 Corregir merma→ayer';
+};
 
 let _stockListaArea = ''; // filtro de área compartido para las 3 categorías
 
@@ -3135,37 +3165,41 @@ async function verificarYRotarStock() {
   try {
     const metaSnap = await getDoc(metaRef);
 
-    // Ya verificado hoy con el flag correcto → nada que hacer
-    if (metaSnap.exists()
-        && metaSnap.data().fecha === hoyStr
-        && metaSnap.data().verificado === true) {
+    // Aunque meta_rotacion diga "ya verificado hoy", comprobamos si hay stock
+    // viejo en "hoy" que no debería estar ahí (puede ocurrir si el flag quedó
+    // mal puesto por el bug de zona horaria en versiones anteriores).
+    const yaVerificadoHoy = metaSnap.exists()
+      && metaSnap.data().fecha === hoyStr
+      && metaSnap.data().verificado === true;
+
+    if (yaVerificadoHoy) {
+      // Verificación extra: ¿hay stock en "hoy" que sea de antes de hoy?
+      const diasReal = await calcularDiasSinRotar();
+      if (diasReal === 0) return; // todo en orden, nada que hacer
+      // Hay stock viejo → el flag estaba mal, forzamos la rotación
+      console.log(`⚠️ meta_rotacion decía verificado pero hay ${diasReal} día(s) de stock sin rotar`);
+      const vueltas = Math.min(diasReal, 3);
+      for (let i = 0; i < vueltas; i++) await rotarStock();
+      await setDoc(metaRef, { fecha: hoyStr, verificado: true });
       return;
     }
 
     let diffDias = 0;
-
     if (metaSnap.exists() && metaSnap.data().fecha) {
-      // Fuente de verdad: la fecha de la ÚLTIMA ROTACIÓN registrada.
-      // Esto funciona aunque no se haya ingresado stock nuevo (hoy=null).
       const ultimaFecha = metaSnap.data().fecha;
       diffDias = Math.round(
         (new Date(hoyStr + 'T00:00:00') - new Date(ultimaFecha + 'T00:00:00')) / 86400000
       );
     } else {
-      // Sin registro previo → inspeccionar las fechas reales del stock
-      // como último recurso (solo aplica la primera vez o si se borró el registro)
       diffDias = await calcularDiasSinRotar();
     }
 
     if (diffDias > 0) {
       const vueltas = Math.min(diffDias, 3);
       console.log(`🔄 Catch-up: ${diffDias} día(s) sin rotar → ejecutando ${vueltas} rotación(es)`);
-      for (let i = 0; i < vueltas; i++) {
-        await rotarStock();
-      }
+      for (let i = 0; i < vueltas; i++) await rotarStock();
     }
 
-    // Guardar hoy como última rotación verificada
     await setDoc(metaRef, { fecha: hoyStr, verificado: true });
   } catch (e) {
     console.error('❌ Error en catch-up de rotación de stock:', e);
