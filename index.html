@@ -257,6 +257,13 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .rep-quick-btns { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
 .rep-quick-btn { padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; white-space: nowrap; }
 .rep-quick-btn.active { background: #003a79; color: white; border-color: #003a79; }
+/* VISOR DE STOCK — SELECTOR DE SUCURSAL */
+.visor-suc-btns { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.visor-suc-btn { flex: 1; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; text-align: center; transition: all .15s; }
+.visor-suc-btn.active { background: #003a79; color: white; border-color: #003a79; }
+.visor-stock-qty { font-size: 15px; font-weight: 700; color: #003a79; text-align: right; padding: 4px 8px; }
+.visor-ambas-detalle { font-size: 10px; color: #aaa; margin-top: 1px; }
+
 /* REPORTES — TABS */
 .rep-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 4px; }
 .rep-tab { padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; white-space: nowrap; }
@@ -403,7 +410,20 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
   <!-- STOCK -->
   <div class="section" id="sec-stock">
 
-    <!-- Ingresar stock -->
+    <!-- Selector de sucursal para visor de stock (oculto para usuarios normales) -->
+    <div id="visorSucursalSelector" style="display:none">
+      <div class="card" style="padding:14px">
+        <div style="font-size:12px;color:#888;font-weight:600;margin-bottom:10px">Ver stock de:</div>
+        <div class="visor-suc-btns">
+          <button class="visor-suc-btn active" onclick="selVisorSucursal(this,'ainavillo')">🏪 Ainavillo</button>
+          <button class="visor-suc-btn" onclick="selVisorSucursal(this,'barros_arana')">🏪 Barros Arana</button>
+          <button class="visor-suc-btn" onclick="selVisorSucursal(this,'ambas')">📊 Total ambas</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ingresar stock (oculto para visor) -->
+    <div id="stockIngresoForm">
     <div class="card">
       <div class="card-title">+ Ingresar stock del día</div>
 
@@ -437,6 +457,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <input type="text" id="stockObs" placeholder="Ej: Producción mañana"/>
       <button class="btn btn-primary btn-full" style="margin-top:12px" id="btnIngresarStock" onclick="ingresarStock()">+ Ingresar stock</button>
     </div>
+    </div><!-- /stockIngresoForm -->
 
     <!-- Filtro de área para las listas de stock (Hoy/Ayer/Antesayer) -->
     <div class="card" style="padding-bottom:10px">
@@ -832,6 +853,8 @@ let medioSeleccionado = 'efectivo';
 let descTipo = 'pct';
 let cajaId = null;
 let esAdmin = false;
+let esStockViewer = false;
+let visorSucursal = 'ainavillo';
 
 // ═══════════════════════════
 // AUTH
@@ -843,7 +866,14 @@ onAuthStateChanged(auth, async (user) => {
     const adminDoc = await getDoc(doc(db, 'admins', user.uid));
     esAdmin = adminDoc.exists();
     if (esAdmin) document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
-    mostrarSucursal();
+    // Verificar si es visor de stock
+    const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
+    esStockViewer = viewerDoc.exists();
+    if (esStockViewer) {
+      await iniciarVisorStock();
+    } else {
+      mostrarSucursal();
+    }
   } else {
     mostrarLogin();
   }
@@ -886,6 +916,98 @@ function mostrarSucursal() {
   document.getElementById('sucursalScreen').style.display = 'flex';
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('sucursalUsuario').textContent = `Hola, ${usuario.email}`;
+}
+
+// ══════════════════════════════════
+// VISOR DE STOCK
+// ══════════════════════════════════
+async function iniciarVisorStock() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('sucursalScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('headerSucursal').textContent = 'Fën · Stock';
+  document.getElementById('headerUsuario').textContent = usuario.email;
+  // Mostrar solo la pestaña Stock
+  document.querySelectorAll('.nav-btn').forEach(b => b.style.display = 'none');
+  document.getElementById('sec-stock').classList.add('active');
+  // Mostrar selector de sucursal del visor
+  document.getElementById('visorSucursalSelector').style.display = '';
+  // Ocultar formulario de ingreso
+  document.getElementById('stockIngresoForm').style.display = 'none';
+  // Cargar con Ainavillo por defecto
+  visorSucursal = 'ainavillo';
+  sucursal = 'ainavillo';
+  await cargarAreas();
+  await cargarProductos();
+  await cargarStockPorCategoria();
+}
+
+window.selVisorSucursal = async function(btn, suc) {
+  visorSucursal = suc;
+  document.querySelectorAll('.visor-suc-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (suc === 'ambas') {
+    await cargarStockAmbas();
+  } else {
+    sucursal = suc;
+    await cargarProductos();
+    await cargarStockPorCategoria();
+  }
+};
+
+async function cargarStockAmbas() {
+  const snap = await getDocs(collection(db, 'stock'));
+  const SUCS = ['ainavillo', 'barros_arana'];
+  const CATS_LIST = ['hoy', 'ayer', 'antesayer', 'cuartoDia', 'merma'];
+
+  // Agrupar por productoId, sumar cantidades de ambas sucursales
+  const merged = {};
+  snap.docs.forEach(d => {
+    const data = d.data();
+    if (!SUCS.includes(data.sucursal)) return;
+    const pid = data.productoId;
+    if (!merged[pid]) merged[pid] = { productoId: pid, ain: {}, ba: {} };
+    const key = data.sucursal === 'ainavillo' ? 'ain' : 'ba';
+    CATS_LIST.forEach(cat => {
+      if (data[cat]?.cantidad > 0) merged[pid][key][cat] = data[cat];
+    });
+  });
+
+  const CATS = [
+    { key: 'hoy',        listaId: 'stockListaHoy',        totalId: 'totalHoy',        titulo: '📦 Stock del día',         cls: 'cat-hoy' },
+    { key: 'ayer',       listaId: 'stockListaAyer',        totalId: 'totalAyer',       titulo: '📦 Stock de ayer',          cls: 'cat-ayer' },
+    { key: 'antesayer',  listaId: 'stockListaAntesayer',   totalId: 'totalAntesayer',  titulo: '📦 Antes de ayer',          cls: 'cat-antesayer' },
+    { key: 'cuartoDia',  listaId: 'stockListaCuartoDia',   totalId: 'totalCuartoDia',  titulo: '📦 Cuarto día',             cls: 'cat-cuartodia' },
+    { key: 'merma',      listaId: 'stockListaMerma',       totalId: 'totalMerma',      titulo: '🗑️ Merma',                  cls: 'cat-merma' },
+  ];
+
+  CATS.forEach(({ key, listaId, totalId }) => {
+    const cont  = document.getElementById(listaId);
+    const totalEl = document.getElementById(totalId);
+    if (!cont) return;
+    // Productos que tienen stock en esta categoría en al menos una sucursal
+    const conStock = Object.values(merged).filter(m => m.ain[key]?.cantidad > 0 || m.ba[key]?.cantidad > 0);
+    if (!conStock.length) { cont.innerHTML = '<div class="empty">Sin stock</div>'; if (totalEl) totalEl.textContent = ''; return; }
+
+    let valorTotal = 0;
+    cont.innerHTML = conStock.map(m => {
+      const prod = productos.find(p => p.id === m.productoId);
+      const nombre = prod?.nombre || m.productoId;
+      const qAin = m.ain[key]?.cantidad || 0;
+      const qBa  = m.ba[key]?.cantidad  || 0;
+      const total = qAin + qBa;
+      const precio = prod ? getPrecioProducto(prod, key) : 0;
+      valorTotal += total * precio;
+      return `<div class="stock-row" style="grid-template-columns:1fr auto">
+        <div>
+          <div class="stock-prod-nombre">${nombre}</div>
+          <div class="visor-ambas-detalle">Ain: ${qAin} · BA: ${qBa}</div>
+        </div>
+        <div class="visor-stock-qty">${total} ud.</div>
+      </div>`;
+    }).join('');
+    if (totalEl) totalEl.textContent = `Total: $${valorTotal.toLocaleString('es-CL')}`;
+  });
 }
 
 window.selSucursal = async function(s) {
@@ -2675,11 +2797,13 @@ async function cargarStockPorCategoria() {
           <div class="stock-prod-nombre">${nombre}</div>
           <div class="stock-prod-meta">${i[key].fecha || ''}</div>
         </div>
-        <div class="stock-qty-ctrl">
-          <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
-          <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
-          <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
-        </div>
+        ${esStockViewer
+          ? `<div class="visor-stock-qty">${qty} ud.</div>`
+          : `<div class="stock-qty-ctrl">
+              <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
+              <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
+              <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
+            </div>`}
       </div>`;
     }).join('');
 
