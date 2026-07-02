@@ -485,7 +485,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <div style="font-size:12px;color:#888;font-weight:600">Filtrar listas por área</div>
             <button class="btn-sm btn-edit admin-only" id="btnForzarRotacion" style="display:none" onclick="forzarRotacionManual()">🔄 Forzar rotación</button>
-            <button class="btn-sm admin-only" id="btnCorregirMerma" style="display:none;background:#fff3cd;border-color:#b8860b;color:#b8860b" onclick="corregirMermaAyer()">🔧 Corregir merma→ayer</button>
+            <button class="btn-sm admin-only" id="btnMigrarStock" style="display:none;background:#e8f0fb;border-color:#003a79;color:#003a79" onclick="migrarStockFormato()">⚡ Migrar datos stock</button>
           </div>
           <div class="stock-area-btns" id="stockListaAreaBtns">
             <button class="stock-area-btn active" onclick="selStockListaArea(this,'')">Todos</button>
@@ -2916,37 +2916,67 @@ async function programarRespaldoMedianoche() {
 programarRespaldoMedianoche();
 
 // ═══════════════════════════
-// FUNCIÓN TEMPORAL: mueve productos de Merma que son del 1/7 de vuelta a Ayer
-window.corregirMermaAyer = async function() {
-  if (!confirm('¿Mover los productos del 1/7 de Merma → Ayer?\n\nEsto corrige la rotación incorrecta que ocurrió esta noche.')) return;
-  const btn = document.getElementById('btnCorregirMerma');
-  btn.disabled = true; btn.textContent = 'Corrigiendo...';
+// Migra datos del formato viejo (hoy/ayer/antesayer/cuartoDia/merma como campos)
+// al nuevo formato (entradas: {"20260701": 10}) para AMBAS sucursales
+window.migrarStockFormato = async function() {
+  if (!confirm('¿Migrar todos los datos de stock al nuevo formato?\n\nEsto convierte el stock existente (Hoy/Ayer/Antesayer/Cuarto día/Merma) al nuevo sistema basado en fechas.\n\nSolo es necesario hacerlo una vez.')) return;
+  const btn = document.getElementById('btnMigrarStock');
+  btn.disabled = true; btn.textContent = '⏳ Migrando...';
   try {
     const snap = await getDocs(collection(db, 'stock'));
-    let count = 0;
+    let migrados = 0, omitidos = 0;
+
     for (const stockDoc of snap.docs) {
       const data = stockDoc.data();
-      if (data.sucursal !== sucursal) continue;
-      if (!data.merma || !data.merma.cantidad || data.merma.cantidad <= 0) continue;
-      const fechaMerma = data.merma.fecha || '';
-      // Detectar productos del 1/7 en cualquier formato de fecha es-CL
-      const esJulio1 = fechaMerma.includes('1/7') || fechaMerma.includes('01-07') || fechaMerma.includes('01/07') || fechaMerma === '1-7-2026';
-      if (!esJulio1) continue;
-      const cantMerma = data.merma.cantidad;
-      const ayerPrev  = data.ayer?.cantidad || 0;
+
+      // Si ya tiene el formato nuevo, omitir
+      if (data.entradas && Object.keys(data.entradas).length > 0) {
+        omitidos++;
+        continue;
+      }
+
+      // Campos del formato viejo que pueden tener datos
+      const camposViejos = [
+        { campo: 'hoy',       data: data.hoy },
+        { campo: 'ayer',      data: data.ayer },
+        { campo: 'antesayer', data: data.antesayer },
+        { campo: 'cuartoDia', data: data.cuartoDia },
+        { campo: 'merma',     data: data.merma },
+      ];
+
+      const entradasNuevas = {};
+      let tieneDatos = false;
+
+      for (const { data: campoData } of camposViejos) {
+        if (!campoData || !campoData.cantidad || campoData.cantidad <= 0) continue;
+        // Convertir fecha es-CL "01-07-2026" o "1/7/2026" → key "20260701"
+        const key = parseFechaEsCLToKey(campoData.fecha);
+        entradasNuevas[key] = (entradasNuevas[key] || 0) + campoData.cantidad;
+        tieneDatos = true;
+      }
+
+      if (!tieneDatos) { omitidos++; continue; }
+
+      // Guardar nuevo formato y limpiar campos viejos
       await updateDoc(doc(db, 'stock', stockDoc.id), {
-        ayer:  { cantidad: ayerPrev + cantMerma, fecha: fechaMerma },
-        merma: null
+        entradas:  entradasNuevas,
+        hoy:       null,
+        ayer:      null,
+        antesayer: null,
+        cuartoDia: null,
+        merma:     null,
       });
-      console.log(`✅ Corregido: ${stockDoc.id} → ${cantMerma} ud. movidas de Merma a Ayer`);
-      count++;
+      migrados++;
     }
+
     await cargarStockPorCategoria();
-    showToast(`✅ ${count} producto(s) movidos de Merma → Ayer`);
+    showToast(`✅ Migración completa: ${migrados} documentos migrados, ${omitidos} ya estaban actualizados`);
+    console.log(`Migración: ${migrados} migrados, ${omitidos} omitidos`);
   } catch(e) {
-    alert('Error: ' + e.message);
+    alert('Error en migración: ' + e.message);
+    console.error(e);
   }
-  btn.disabled = false; btn.textContent = '🔧 Corregir merma→ayer';
+  btn.disabled = false; btn.textContent = '⚡ Migrar datos stock';
 };
 
 let _stockListaArea = ''; // filtro de área compartido para las 3 categorías
