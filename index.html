@@ -257,6 +257,20 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .rep-quick-btns { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
 .rep-quick-btn { padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; white-space: nowrap; }
 .rep-quick-btn.active { background: #003a79; color: white; border-color: #003a79; }
+/* VISOR DE STOCK — LAYOUT DOS COLUMNAS */
+.visor-stock-columns { display: none; gap: 14px; align-items: flex-start; }
+#visorStockLeft { flex: 1; min-width: 0; }
+#visorResumenPanel { width: 280px; flex-shrink: 0; position: sticky; top: 12px; display: none; }
+@media (max-width: 800px) {
+  .visor-stock-columns { flex-direction: column; }
+  #visorResumenPanel { width: 100%; position: static; }
+}
+.visor-resumen-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 0.5px solid #f0f0f0; gap: 8px; }
+.visor-resumen-row:last-child { border-bottom: none; }
+.visor-resumen-nombre { font-size: 12px; font-weight: 600; color: #222; }
+.visor-resumen-detalle { font-size: 10px; color: #aaa; margin-top: 2px; line-height: 1.4; }
+.visor-resumen-total { font-size: 14px; font-weight: 700; color: #003a79; white-space: nowrap; }
+
 /* VISOR DE STOCK — SELECTOR DE SUCURSAL */
 .visor-suc-btns { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .visor-suc-btn { flex: 1; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; text-align: center; transition: all .15s; }
@@ -459,62 +473,84 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     </div>
     </div><!-- /stockIngresoForm -->
 
-    <!-- Filtro de área para las listas de stock (Hoy/Ayer/Antesayer) -->
-    <div class="card" style="padding-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-size:12px;color:#888;font-weight:600">Filtrar listas por área</div>
-        <button class="btn-sm btn-edit admin-only" id="btnForzarRotacion" style="display:none" onclick="forzarRotacionManual()">🔄 Forzar rotación</button>
-      </div>
-      <div class="stock-area-btns" id="stockListaAreaBtns">
-        <button class="stock-area-btn active" onclick="selStockListaArea(this,'')">Todos</button>
-      </div>
-    </div>
+    <!-- Layout dos columnas (activo solo para visor) -->
+    <div class="visor-stock-columns" id="visorStockColumns">
 
-    <!-- Hoy -->
-    <div class="card">
-      <div class="stock-cat-header">
-        <div class="stock-cat-titulo cat-hoy">📦 Stock del día</div>
-        <span id="totalHoy" style="font-size:11px;color:#888"></span>
-      </div>
-      <div id="stockListaHoy"><div class="empty">Sin stock ingresado hoy</div></div>
-    </div>
+      <!-- Columna izquierda: categorías de stock -->
+      <div id="visorStockLeft">
 
-    <!-- Ayer -->
-    <div class="card">
-      <div class="stock-cat-header">
-        <div class="stock-cat-titulo cat-ayer">📦 Stock de ayer</div>
-        <span id="totalAyer" style="font-size:11px;color:#888"></span>
-      </div>
-      <div id="stockListaAyer"><div class="empty">Sin stock de ayer</div></div>
-    </div>
+        <!-- Filtro de área para las listas de stock (Hoy/Ayer/Antesayer) -->
+        <div class="card" style="padding-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="font-size:12px;color:#888;font-weight:600">Filtrar listas por área</div>
+            <button class="btn-sm btn-edit admin-only" id="btnForzarRotacion" style="display:none" onclick="forzarRotacionManual()">🔄 Forzar rotación</button>
+          </div>
+          <div class="stock-area-btns" id="stockListaAreaBtns">
+            <button class="stock-area-btn active" onclick="selStockListaArea(this,'')">Todos</button>
+          </div>
+        </div>
 
-    <!-- Antes de ayer -->
-    <div class="card">
-      <div class="stock-cat-header">
-        <div class="stock-cat-titulo cat-antesayer">📦 Stock de antes de ayer</div>
-        <span id="totalAntesayer" style="font-size:11px;color:#888"></span>
-      </div>
-      <div id="stockListaAntesayer"><div class="empty">Sin stock de antes de ayer</div></div>
-    </div>
+        <!-- Hoy -->
+        <div class="card">
+          <div class="stock-cat-header">
+            <div class="stock-cat-titulo cat-hoy">📦 Stock del día</div>
+            <span id="totalHoy" style="font-size:11px;color:#888"></span>
+          </div>
+          <div id="stockListaHoy"><div class="empty">Sin stock ingresado hoy</div></div>
+        </div>
 
-    <!-- Cuarto día -->
-    <div class="card">
-      <div class="stock-cat-header">
-        <div class="stock-cat-titulo cat-cuartodia">📦 Cuarto día</div>
-        <span id="totalCuartoDia" style="font-size:11px;color:#888"></span>
-      </div>
-      <div id="stockListaCuartoDia"><div class="empty">Sin stock de cuarto día</div></div>
-    </div>
+        <!-- Ayer -->
+        <div class="card">
+          <div class="stock-cat-header">
+            <div class="stock-cat-titulo cat-ayer">📦 Stock de ayer</div>
+            <span id="totalAyer" style="font-size:11px;color:#888"></span>
+          </div>
+          <div id="stockListaAyer"><div class="empty">Sin stock de ayer</div></div>
+        </div>
 
-    <!-- Merma -->
-    <div class="card">
-      <div class="stock-cat-header">
-        <div class="stock-cat-titulo cat-merma">🗑️ Merma</div>
-        <span id="totalMerma" style="font-size:11px;color:#888"></span>
+        <!-- Antes de ayer -->
+        <div class="card">
+          <div class="stock-cat-header">
+            <div class="stock-cat-titulo cat-antesayer">📦 Stock de antes de ayer</div>
+            <span id="totalAntesayer" style="font-size:11px;color:#888"></span>
+          </div>
+          <div id="stockListaAntesayer"><div class="empty">Sin stock de antes de ayer</div></div>
+        </div>
+
+        <!-- Cuarto día -->
+        <div class="card">
+          <div class="stock-cat-header">
+            <div class="stock-cat-titulo cat-cuartodia">📦 Cuarto día</div>
+            <span id="totalCuartoDia" style="font-size:11px;color:#888"></span>
+          </div>
+          <div id="stockListaCuartoDia"><div class="empty">Sin stock de cuarto día</div></div>
+        </div>
+
+        <!-- Merma -->
+        <div class="card">
+          <div class="stock-cat-header">
+            <div class="stock-cat-titulo cat-merma">🗑️ Merma</div>
+            <span id="totalMerma" style="font-size:11px;color:#888"></span>
+          </div>
+          <p style="font-size:11px;color:#888;margin-bottom:8px">Productos fuera de venta. Al registrar la merma, se exporta a Sheets y se elimina del stock.</p>
+          <div id="stockListaMerma"><div class="empty">Sin merma registrada</div></div>
+        </div>
+
+      </div><!-- /visorStockLeft -->
+
+      <!-- Columna derecha: resumen total por producto (solo visor) -->
+      <div id="visorResumenPanel">
+        <div class="card" style="position:sticky;top:12px">
+          <div class="card-title" style="margin-bottom:8px">📊 Total por producto</div>
+          <!-- Filtro por área -->
+          <div class="area-filter-btns" id="visorResumenAreaBtns" style="margin-bottom:10px">
+            <button class="area-filter-btn active" onclick="selVisorResumenArea(this,'')">Todos</button>
+          </div>
+          <div id="visorResumenLista"><div class="empty">Cargando...</div></div>
+        </div>
       </div>
-      <p style="font-size:11px;color:#888;margin-bottom:8px">Productos fuera de venta. Al registrar la merma, se exporta a Sheets y se elimina del stock.</p>
-      <div id="stockListaMerma"><div class="empty">Sin merma registrada</div></div>
-    </div>
+
+    </div><!-- /visorStockColumns -->
 
   </div>
 
@@ -927,11 +963,14 @@ async function iniciarVisorStock() {
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('headerSucursal').textContent = 'Fën · Stock';
   document.getElementById('headerUsuario').textContent = usuario.email;
-  // Mostrar solo la pestaña Stock
+  // Desactivar todas las secciones y mostrar solo Stock
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.style.display = 'none');
   document.getElementById('sec-stock').classList.add('active');
-  // Mostrar selector de sucursal del visor
+  // Mostrar selector de sucursal del visor y panel resumen
   document.getElementById('visorSucursalSelector').style.display = '';
+  document.getElementById('visorStockColumns').style.display = 'flex';
+  document.getElementById('visorResumenPanel').style.display = 'block';
   // Ocultar formulario de ingreso
   document.getElementById('stockIngresoForm').style.display = 'none';
   // Cargar con Ainavillo por defecto
@@ -940,7 +979,10 @@ async function iniciarVisorStock() {
   await cargarAreas();
   await cargarProductos();
   await cargarStockPorCategoria();
+  renderResumenVisor();
 }
+
+let _visorResumenArea = '';
 
 window.selVisorSucursal = async function(btn, suc) {
   visorSucursal = suc;
@@ -953,7 +995,75 @@ window.selVisorSucursal = async function(btn, suc) {
     await cargarProductos();
     await cargarStockPorCategoria();
   }
+  if (esStockViewer) renderResumenVisor();
 };
+
+window.selVisorResumenArea = function(btn, area) {
+  _visorResumenArea = area;
+  document.querySelectorAll('#visorResumenAreaBtns .area-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderResumenVisor();
+};
+
+// Renderiza el panel resumen: total por producto sumando todas las categorías
+function renderResumenVisor() {
+  const lista = document.getElementById('visorResumenLista');
+  const areasBtns = document.getElementById('visorResumenAreaBtns');
+  if (!lista) return;
+
+  // Actualizar filtros de área
+  if (areasBtns) {
+    areasBtns.innerHTML = `<button class="area-filter-btn${_visorResumenArea === '' ? ' active' : ''}" onclick="selVisorResumenArea(this,'')">Todos</button>` +
+      AREAS.map(a => `<button class="area-filter-btn${_visorResumenArea === a.id ? ' active' : ''}" onclick="selVisorResumenArea(this,'${a.id}')">${a.emoji} ${a.id}</button>`).join('');
+  }
+
+  const CATS = ['hoy', 'ayer', 'antesayer', 'cuartoDia'];
+  const snap = window._stockMap || {};
+  const resumen = {};
+
+  // Para vista "ambas", usamos el stockMap que ya fue cargado por cargarStockAmbas
+  // Para vista de sucursal, usamos _stockMap filtrado
+  const prefijo = visorSucursal === 'ambas' ? null : visorSucursal + '_';
+
+  Object.entries(snap).forEach(([key, data]) => {
+    if (prefijo && !key.startsWith(prefijo)) return;
+    const prod = productos.find(p => p.id === data.productoId);
+    if (!prod) return;
+    if (_visorResumenArea && normalizarArea(prod.area) !== _visorResumenArea) return;
+
+    if (!resumen[data.productoId]) {
+      resumen[data.productoId] = { nombre: prod.nombre, emoji: prod.emoji || '📦', cats: {}, total: 0 };
+    }
+    CATS.forEach(cat => {
+      const qty = data[cat]?.cantidad || 0;
+      if (qty > 0) {
+        resumen[data.productoId].cats[cat] = (resumen[data.productoId].cats[cat] || 0) + qty;
+        resumen[data.productoId].total += qty;
+      }
+    });
+  });
+
+  const items = Object.values(resumen).filter(r => r.total > 0)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  if (!items.length) { lista.innerHTML = '<div class="empty">Sin stock</div>'; return; }
+
+  const catLabel = { hoy: 'Hoy', ayer: 'Ayer', antesayer: 'Ant.', cuartoDia: '4to' };
+
+  lista.innerHTML = items.map(r => {
+    const detalle = CATS
+      .filter(c => r.cats[c] > 0)
+      .map(c => `${catLabel[c]}: ${r.cats[c]}`)
+      .join(' · ');
+    return `<div class="visor-resumen-row">
+      <div>
+        <div class="visor-resumen-nombre">${r.emoji} ${r.nombre}</div>
+        <div class="visor-resumen-detalle">${detalle}</div>
+      </div>
+      <div class="visor-resumen-total">${r.total} ud.</div>
+    </div>`;
+  }).join('');
+}
 
 async function cargarStockAmbas() {
   const snap = await getDocs(collection(db, 'stock'));
@@ -2757,6 +2867,7 @@ async function cargarStockPorCategoria() {
   items.forEach(i => { window._stockMap[i._id] = i; });
   renderProductos(); // refrescar badges en grilla de ventas
   renderStockListaAreaBtns();
+  if (esStockViewer) renderResumenVisor();
 
   // Solo productos con control de stock activo, y filtrados por área si corresponde
   const itemsFiltrados = items.filter(i => {
