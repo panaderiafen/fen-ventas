@@ -183,6 +183,10 @@ input:focus, select:focus { border-color: #003a79; }
 .stock-cat-titulo.cat-antesayer { color: #c0392b; }
 .stock-cat-titulo.cat-cuartodia { color: #92400E; }
 .stock-cat-titulo.cat-merma     { color: #374151; }
+.stock-cat-titulo.cat-permanente { color: #1D7A5F; }
+.cat-badge.cat-permanente { background: #E3F3EC; color: #1D7A5F; }
+.stock-cat-btn.active.cat-permanente { background: #1D7A5F; color: white; }
+
 /* BOTÓN ADMIN PARA REGISTRAR MERMA */
 .btn-reg-merma { font-size: 11px; padding: 3px 9px; border-radius: 6px; border: 1px solid #999; background: white; color: #555; cursor: pointer; margin-top: 4px; white-space: nowrap; }
 .btn-reg-merma:hover { background: #374151; color: white; border-color: #374151; }
@@ -528,6 +532,16 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
             <span id="totalCuartoDia" style="font-size:11px;color:#888"></span>
           </div>
           <div id="stockListaCuartoDia"><div class="empty">Sin stock de cuarto día</div></div>
+        </div>
+
+        <!-- Sin vencimiento -->
+        <div class="card">
+          <div class="stock-cat-header">
+            <div class="stock-cat-titulo cat-permanente">🔁 Sin vencimiento</div>
+            <span id="totalPermanente" style="font-size:11px;color:#888"></span>
+          </div>
+          <p style="font-size:11px;color:#888;margin-bottom:8px">Productos que no tienen fecha de vencimiento (no rotan entre categorías).</p>
+          <div id="stockListaPermanente"><div class="empty">Sin productos permanentes</div></div>
         </div>
 
         <!-- Merma -->
@@ -1400,11 +1414,17 @@ function renderProductos() {
     // Producto CON control de stock → categoría calculada dinámicamente por fecha
     const stockKey  = sucursal + '_' + p.id;
     const stockItem = window._stockMap ? window._stockMap[stockKey] : null;
-    const qty       = stockItem ? getQtyCategoria(stockItem, categoriaStockActiva) : 0;
+    // Productos permanentes (autoEliminar: false) muestran stock total ignorando el switch
+    const esPermanente = p.autoEliminar === false;
+    const qty = stockItem
+      ? (esPermanente
+          ? Object.values(stockItem.entradas || {}).reduce((s, q) => s + (q || 0), 0)
+          : getQtyCategoria(stockItem, categoriaStockActiva))
+      : 0;
     const sinStock  = qty <= 0;
     if (sinStock && !mostrarSinStock) return '';
     const stockLabel = sinStock ? 'Sin stock' : `Stock: ${qty}`;
-    const precio = getPrecioProducto(p, categoriaStockActiva);
+    const precio = getPrecioProducto(p, esPermanente ? 'hoy' : categoriaStockActiva);
     return `
     <button class="prod-btn${sinStock ? ' sin-stock' : ''}" onclick="agregarAlPedido('${p.id}')" ${sinStock ? 'disabled' : ''}>
       <div class="icon">${p.emoji || '🍞'}</div>
@@ -1758,14 +1778,19 @@ window.agregarAlPedido = function(id) {
   if (!cajaId) { alert('⚠️ Debes abrir la caja antes de realizar ventas'); return; }
   const prod = productos.find(p => p.id === id);
   if (!prod) return;
-  const conControl = prod.controlStock !== false;
+  const conControl  = prod.controlStock !== false;
+  const esPermanente = prod.autoEliminar === false;
 
   if (conControl) {
     const stockKey   = sucursal + '_' + id;
     const stockItem  = window._stockMap ? window._stockMap[stockKey] : null;
-    const disponible = stockItem ? getQtyCategoria(stockItem, categoriaStockActiva) : 0;
+    const disponible = stockItem
+      ? (esPermanente
+          ? Object.values(stockItem.entradas || {}).reduce((s, q) => s + (q || 0), 0)
+          : getQtyCategoria(stockItem, categoriaStockActiva))
+      : 0;
     if (disponible <= 0) {
-      alert(`⚠️ Sin stock en categoría "${categoriaStockActiva}" para ${prod.nombre}`);
+      alert(`⚠️ Sin stock${esPermanente ? '' : ` en categoría "${categoriaStockActiva}"`} para ${prod.nombre}`);
       return;
     }
     const cantEnPedido = pedidoLineas
@@ -3075,6 +3100,45 @@ async function cargarStockPorCategoria() {
     if (totalEl) totalEl.textContent = `Valor: $${valorTotal.toLocaleString('es-CL')}`;
   });
 
+  // Sin vencimiento — productos con autoEliminar: false
+  const contenedorPerm = document.getElementById('stockListaPermanente');
+  const totalPermEl    = document.getElementById('totalPermanente');
+  if (contenedorPerm) {
+    const conPerm = items.filter(i => {
+      const prod = productos.find(p => p.id === i.productoId);
+      if (!prod || prod.controlStock === false || prod.autoEliminar !== false) return false;
+      if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
+      return Object.values(i.entradas || {}).reduce((s, q) => s + (q || 0), 0) > 0;
+    });
+    if (!conPerm.length) {
+      contenedorPerm.innerHTML = '<div class="empty">Sin stock permanente</div>';
+      if (totalPermEl) totalPermEl.textContent = '';
+    } else {
+      let valorPerm = 0;
+      contenedorPerm.innerHTML = conPerm.map(i => {
+        const prod   = productos.find(p => p.id === i.productoId);
+        const nombre = prod ? prod.nombre : i.productoId;
+        const precio = prod ? (prod.precioHoy || prod.precio || 0) : 0;
+        const qty    = Object.values(i.entradas || {}).reduce((s, q) => s + (q || 0), 0);
+        valorPerm += qty * precio;
+        return `<div class="stock-row">
+          <div>
+            <div class="stock-prod-nombre">${nombre}</div>
+            <div class="stock-prod-meta">Sin vencimiento · ${qty} ud.</div>
+          </div>
+          ${esStockViewer
+            ? `<div class="visor-stock-qty">${qty} ud.</div>`
+            : `<div class="stock-qty-ctrl">
+                <button class="stock-qty-btn" onclick="ajustarStockPerm('${i.productoId}',-1)">−</button>
+                <div class="stock-qty-num" id="sqty-perm-${i.productoId}">${qty}</div>
+                <button class="stock-qty-btn" onclick="ajustarStockPerm('${i.productoId}',1)">+</button>
+              </div>`}
+        </div>`;
+      }).join('');
+      if (totalPermEl) totalPermEl.textContent = `Valor: $${valorPerm.toLocaleString('es-CL')}`;
+    }
+  }
+
   // Merma
   const contenedorMerma = document.getElementById('stockListaMerma');
   const totalMermaEl    = document.getElementById('totalMerma');
@@ -3187,6 +3251,35 @@ window.ajustarStock = async function(productoId, cat, delta) {
   const newQty = getQtyCategoria(window._stockMap[stockKey], cat);
   const el = document.getElementById(`sqty-${cat}-${productoId}`);
   if (el) el.textContent = newQty;
+  renderProductos();
+};
+
+// Ajusta stock de productos sin vencimiento (suma/resta en la entrada más reciente)
+window.ajustarStockPerm = async function(productoId, delta) {
+  const stockKey = `${sucursal}_${productoId}`;
+  const ref  = doc(db, 'stock', stockKey);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const entradas = snap.data().entradas || {};
+  const keys = Object.keys(entradas).sort();
+  if (!keys.length) return;
+  if (delta < 0) {
+    // FIFO: descontar de la más antigua
+    let toDeduct = 1;
+    for (const key of keys) {
+      if (toDeduct <= 0) break;
+      const qty = entradas[key] || 0;
+      if (qty <= 0) continue;
+      const deducir = Math.min(qty, toDeduct);
+      await updateDoc(ref, { [`entradas.${key}`]: qty - deducir });
+      toDeduct -= deducir;
+    }
+  } else {
+    // Añadir a la más reciente
+    const key = keys[keys.length - 1];
+    await updateDoc(ref, { [`entradas.${key}`]: (entradas[key] || 0) + 1 });
+  }
+  await cargarStockPorCategoria();
   renderProductos();
 };
 
