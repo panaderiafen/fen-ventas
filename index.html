@@ -1128,9 +1128,8 @@ window.selSucursal = async function(s) {
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('headerSucursal').textContent = s === 'ainavillo' ? 'Fën · Ainavillo' : 'Fën · Barros Arana';
   document.getElementById('headerUsuario').textContent = usuario.email;
-  await cargarAreas();       // primero áreas (otros dependen de ellas)
+  await cargarAreas();
   await cargarProductos();
-  await verificarYRotarStock(); // catch-up: rota stock si pasaron días sin abrir el sistema
   await verificarCaja();
   cargarStockLista();
 };
@@ -1244,6 +1243,65 @@ function showToast(msg, tipo = 'ok') {
 }
 
 // Devuelve el precio correcto según categoría de stock y hora actual
+// ══════════════════════════════════════════════════════
+// HELPERS DE STOCK — SISTEMA BASADO EN FECHAS REALES
+// La categoría (hoy/ayer/antesayer/cuartoDia/merma) se
+// calcula dinámicamente a partir de la fecha de ingreso.
+// No hay rotación: los datos nunca se mueven en Firestore.
+// ══════════════════════════════════════════════════════
+
+// Convierte fecha es-CL ("01-07-2026", "1/7/2026") a clave de almacenamiento "20260701"
+function parseFechaEsCLToKey(fechaStr) {
+  if (!fechaStr) return fechaLocalHoy().replace(/-/g, '');
+  const partes = fechaStr.split(/[-\/]/);
+  if (partes.length !== 3) return fechaLocalHoy().replace(/-/g, '');
+  const d = partes[0].padStart(2, '0');
+  const m = partes[1].padStart(2, '0');
+  const y = partes[2].length === 4 ? partes[2] : `20${partes[2]}`;
+  return `${y}${m}${d}`;
+}
+
+// Clave de hoy en formato "20260702"
+function fechaKeyHoy() { return fechaLocalHoy().replace(/-/g, ''); }
+
+// Convierte clave "20260701" a texto legible "01-07-2026"
+function keyToFechaCL(key) {
+  if (!key || key.length !== 8) return '';
+  return `${key.slice(6,8)}-${key.slice(4,6)}-${key.slice(0,4)}`;
+}
+
+// Determina la categoría de stock según la diferencia de días con hoy
+function getCategoriaFecha(dateKey) {
+  if (!dateKey || dateKey.length !== 8) return 'hoy';
+  const hoyISO  = fechaLocalHoy();
+  const keyISO  = `${dateKey.slice(0,4)}-${dateKey.slice(4,6)}-${dateKey.slice(6,8)}`;
+  const hoyDate = new Date(hoyISO  + 'T00:00:00');
+  const entDate = new Date(keyISO  + 'T00:00:00');
+  const diff    = Math.round((hoyDate - entDate) / 86400000);
+  if (diff <= 0) return 'hoy';
+  if (diff === 1) return 'ayer';
+  if (diff === 2) return 'antesayer';
+  if (diff === 3) return 'cuartoDia';
+  return 'merma';
+}
+
+// Devuelve la cantidad total para una categoría sumando todas las entradas de esa fecha
+function getQtyCategoria(stockItem, cat) {
+  const entradas = stockItem?.entradas || {};
+  return Object.entries(entradas)
+    .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
+    .reduce((sum, [, q]) => sum + q, 0);
+}
+
+// Devuelve las entradas de una categoría ordenadas de más antigua a más nueva
+function getEntradasPorCategoria(stockItem, cat) {
+  const entradas = stockItem?.entradas || {};
+  return Object.entries(entradas)
+    .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, qty]) => ({ key, qty }));
+}
+
 function getPrecioProducto(prod, cat) {
   const hora = new Date().getHours();
   if (cat === 'hoy') return prod.precioHoy || prod.precio || 0;
@@ -1337,11 +1395,10 @@ function renderProductos() {
       </button>`;
     }
 
-    // Producto CON control de stock → exige entrada explícita, nunca "ilimitado" por defecto
+    // Producto CON control de stock → categoría calculada dinámicamente por fecha
     const stockKey  = sucursal + '_' + p.id;
     const stockItem = window._stockMap ? window._stockMap[stockKey] : null;
-    const catData   = stockItem ? stockItem[categoriaStockActiva] : null;
-    const qty       = catData ? catData.cantidad : 0; // sin entrada = 0, nunca null/ilimitado
+    const qty       = stockItem ? getQtyCategoria(stockItem, categoriaStockActiva) : 0;
     const sinStock  = qty <= 0;
     if (sinStock && !mostrarSinStock) return '';
     const stockLabel = sinStock ? 'Sin stock' : `Stock: ${qty}`;
@@ -1702,17 +1759,16 @@ window.agregarAlPedido = function(id) {
   const conControl = prod.controlStock !== false;
 
   if (conControl) {
-    // Verificar stock en la categoría activa (exige entrada explícita)
-    const stockKey  = sucursal + '_' + id;
-    const stockItem = window._stockMap ? window._stockMap[stockKey] : null;
-    const catData   = stockItem ? stockItem[categoriaStockActiva] : null;
-    const disponible = catData ? catData.cantidad : 0;
+    const stockKey   = sucursal + '_' + id;
+    const stockItem  = window._stockMap ? window._stockMap[stockKey] : null;
+    const disponible = stockItem ? getQtyCategoria(stockItem, categoriaStockActiva) : 0;
     if (disponible <= 0) {
       alert(`⚠️ Sin stock en categoría "${categoriaStockActiva}" para ${prod.nombre}`);
       return;
     }
-    const lineasMismaCateg = pedidoLineas.filter(l => l.id === id && l.categoriaStock === categoriaStockActiva);
-    const cantEnPedido = lineasMismaCateg.reduce((a, l) => a + l.cantidad, 0);
+    const cantEnPedido = pedidoLineas
+      .filter(l => l.id === id && l.categoriaStock === categoriaStockActiva)
+      .reduce((a, l) => a + l.cantidad, 0);
     if (cantEnPedido >= disponible) {
       alert(`⚠️ Solo hay ${disponible} unidad(es) de ${prod.nombre} en stock (${categoriaStockActiva})`);
       return;
@@ -1828,10 +1884,9 @@ window.cambiarQty = function(i, delta) {
     const prod = productos.find(p => p.id === linea.id);
     const conControl = prod ? prod.controlStock !== false : true;
     if (conControl) {
-      const stockKey  = sucursal + '_' + linea.id;
-      const stockItem = window._stockMap ? window._stockMap[stockKey] : null;
-      const catData   = stockItem ? stockItem[linea.categoriaStock] : null;
-      const disponible = catData ? catData.cantidad : 0;
+      const stockKey   = sucursal + '_' + linea.id;
+      const stockItem  = window._stockMap ? window._stockMap[stockKey] : null;
+      const disponible = stockItem ? getQtyCategoria(stockItem, linea.categoriaStock) : 0;
       const totalEnPedido = pedidoLineas
         .filter(l => l.id === linea.id && l.categoriaStock === linea.categoriaStock)
         .reduce((a, l) => a + l.cantidad, 0);
@@ -1905,14 +1960,25 @@ window.registrarVenta = async function() {
       totalVentas: increment(total),
       nVentas: increment(1)
     });
-    // Descontar stock por categoría
+    // Descontar stock — FIFO por fechas (más antiguo primero dentro de la categoría)
     for (const l of pedidoLineas) {
-      const stockRef = doc(db, 'stock', `${sucursal}_${l.id}`);
+      const prod = productos.find(p => p.id === l.id);
+      if (prod && prod.controlStock === false) continue; // sin control, nada que descontar
+      const stockRef  = doc(db, 'stock', `${sucursal}_${l.id}`);
       const stockSnap = await getDoc(stockRef);
-      if (stockSnap.exists()) {
-        const cat = l.categoriaStock || 'hoy';
-        const campoQty = `${cat}.cantidad`;
-        await updateDoc(stockRef, { [campoQty]: increment(-l.cantidad) });
+      if (!stockSnap.exists()) continue;
+      const entradas = stockSnap.data().entradas || {};
+      const cat = l.categoriaStock || 'hoy';
+      // Ordenar entradas de esta categoría de más antigua a más nueva
+      const entradasCat = Object.entries(entradas)
+        .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
+        .sort(([a], [b]) => a.localeCompare(b));
+      let toDeduct = l.cantidad;
+      for (const [key, qty] of entradasCat) {
+        if (toDeduct <= 0) break;
+        const deducir = Math.min(qty, toDeduct);
+        await updateDoc(stockRef, { [`entradas.${key}`]: Math.max(0, qty - deducir) });
+        toDeduct -= deducir;
       }
     }
     await imprimirComanda(venta);
@@ -2807,10 +2873,7 @@ async function programarRespaldoMedianoche() {
 
   setTimeout(async () => {
     try {
-      // 1. Rotar stock de categorías (vía catch-up, mantiene meta_rotacion al día)
-      await verificarYRotarStock();
-
-      // 2. Exportar cajas no exportadas
+      // Exportar cajas no exportadas (rotación eliminada - ahora es por fechas dinámicas)
       const hoy = fechaLocalHoy();
       const tsDesde = Timestamp.fromDate(new Date(hoy + 'T00:00:00'));
       const tsHasta = Timestamp.fromDate(new Date(hoy + 'T23:59:59'));
@@ -2896,23 +2959,15 @@ async function cargarStockPorCategoria() {
     .filter(d => d.id.startsWith(sucursal + '_'))
     .map(d => ({ _id: d.id, ...d.data() }));
   items.forEach(i => { window._stockMap[i._id] = i; });
-  renderProductos(); // refrescar badges en grilla de ventas
+  renderProductos();
   renderStockListaAreaBtns();
   if (esStockViewer) renderResumenVisor();
 
-  // Solo productos con control de stock activo, y filtrados por área si corresponde
-  const itemsFiltrados = items.filter(i => {
-    const prod = productos.find(p => p.id === i.productoId);
-    if (!prod || prod.controlStock === false) return false;
-    if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
-    return true;
-  });
-
   const CATS = [
-    { key: 'hoy',        listaId: 'stockListaHoy',        totalId: 'totalHoy' },
-    { key: 'ayer',       listaId: 'stockListaAyer',       totalId: 'totalAyer' },
-    { key: 'antesayer',  listaId: 'stockListaAntesayer',  totalId: 'totalAntesayer' },
-    { key: 'cuartoDia',  listaId: 'stockListaCuartoDia',  totalId: 'totalCuartoDia' },
+    { key: 'hoy',       listaId: 'stockListaHoy',       totalId: 'totalHoy' },
+    { key: 'ayer',      listaId: 'stockListaAyer',       totalId: 'totalAyer' },
+    { key: 'antesayer', listaId: 'stockListaAntesayer',  totalId: 'totalAntesayer' },
+    { key: 'cuartoDia', listaId: 'stockListaCuartoDia',  totalId: 'totalCuartoDia' },
   ];
 
   CATS.forEach(({ key, listaId, totalId }) => {
@@ -2920,8 +2975,15 @@ async function cargarStockPorCategoria() {
     const totalEl    = document.getElementById(totalId);
     if (!contenedor) return;
 
-    const conStock = itemsFiltrados.filter(i => i[key] && i[key].cantidad > 0);
-    if (conStock.length === 0) {
+    // Calcular qué productos tienen stock en esta categoría dinámicamente
+    const conStock = items.filter(i => {
+      const prod = productos.find(p => p.id === i.productoId);
+      if (!prod || prod.controlStock === false) return false;
+      if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
+      return getQtyCategoria(i, key) > 0;
+    });
+
+    if (!conStock.length) {
       contenedor.innerHTML = '<div class="empty">Sin stock</div>';
       if (totalEl) totalEl.textContent = '';
       return;
@@ -2929,15 +2991,18 @@ async function cargarStockPorCategoria() {
 
     let valorTotal = 0;
     contenedor.innerHTML = conStock.map(i => {
-      const prod = productos.find(p => p.id === i.productoId);
+      const prod   = productos.find(p => p.id === i.productoId);
       const nombre = prod ? prod.nombre : i.productoId;
-      const qty    = i[key].cantidad;
+      const qty    = getQtyCategoria(i, key);
       const precio = prod ? getPrecioProducto(prod, key) : 0;
       valorTotal  += qty * precio;
+      // Fecha más antigua de esta categoría para mostrar referencia
+      const entradas = getEntradasPorCategoria(i, key);
+      const fechaRef = entradas.length ? keyToFechaCL(entradas[0].key) : '';
       return `<div class="stock-row">
         <div>
           <div class="stock-prod-nombre">${nombre}</div>
-          <div class="stock-prod-meta">${i[key].fecha || ''}</div>
+          <div class="stock-prod-meta">${fechaRef}</div>
         </div>
         ${esStockViewer
           ? `<div class="visor-stock-qty">${qty} ud.</div>`
@@ -2948,33 +3013,47 @@ async function cargarStockPorCategoria() {
             </div>`}
       </div>`;
     }).join('');
-
     if (totalEl) totalEl.textContent = `Valor: $${valorTotal.toLocaleString('es-CL')}`;
   });
 
-  // Merma — solo admin puede registrar (exportar a Sheets + eliminar de stock)
+  // Merma — entradas con 4+ días
   const contenedorMerma = document.getElementById('stockListaMerma');
   const totalMermaEl    = document.getElementById('totalMerma');
   if (contenedorMerma) {
-    const conMerma = itemsFiltrados.filter(i => i.merma && i.merma.cantidad > 0);
-    if (conMerma.length === 0) {
+    const conMerma = items.filter(i => {
+      const prod = productos.find(p => p.id === i.productoId);
+      if (!prod || prod.controlStock === false) return false;
+      if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
+      // Merma nueva: entradas en campo entradas con cat=merma
+      if (getQtyCategoria(i, 'merma') > 0) return true;
+      // Merma legacy: campo merma del formato viejo
+      if (i.merma && i.merma.cantidad > 0) return true;
+      return false;
+    });
+
+    if (!conMerma.length) {
       contenedorMerma.innerHTML = '<div class="empty">Sin merma registrada</div>';
       if (totalMermaEl) totalMermaEl.textContent = '';
     } else {
       let valorMerma = 0;
       contenedorMerma.innerHTML = conMerma.map(i => {
-        const prod    = productos.find(p => p.id === i.productoId);
-        const nombre  = prod ? prod.nombre : i.productoId;
-        const qty     = i.merma.cantidad;
-        const precio  = prod ? (prod.precioHoy || prod.precio || 0) : 0;
-        valorMerma   += qty * precio;
+        const prod   = productos.find(p => p.id === i.productoId);
+        const nombre = prod ? prod.nombre : i.productoId;
+        const precio = prod ? (prod.precioHoy || prod.precio || 0) : 0;
+        // Soporta ambos formatos
+        const qtyNuevo = getQtyCategoria(i, 'merma');
+        const qtyLegacy = (i.merma?.cantidad || 0);
+        const qty = qtyNuevo + qtyLegacy;
+        const entradasMerma = getEntradasPorCategoria(i, 'merma');
+        const fechaRef = entradasMerma.length ? keyToFechaCL(entradasMerma[0].key) : (i.merma?.fecha || '');
+        valorMerma += qty * precio;
         return `<div class="stock-row" style="grid-template-columns:1fr auto">
           <div>
             <div class="stock-prod-nombre">${nombre}</div>
-            <div class="stock-prod-meta">${i.merma.fecha || ''} · ${qty} ud. · pérdida $${(qty * precio).toLocaleString('es-CL')}</div>
+            <div class="stock-prod-meta">${fechaRef} · ${qty} ud. · pérdida $${(qty*precio).toLocaleString('es-CL')}</div>
           </div>
           ${esAdmin
-            ? `<button class="btn-reg-merma" onclick="registrarMerma('${i.productoId}','${nombre.replace(/'/g,"\\'")}',${qty},${precio},'${i.merma.fecha||''}')">✓ Registrar merma</button>`
+            ? `<button class="btn-reg-merma" onclick="registrarMermaItem('${i.productoId}','${nombre.replace(/'/g,"\'")}',${qty},${precio})">✓ Registrar merma</button>`
             : '<span style="font-size:11px;color:#aaa">Solo admin</span>'}
         </div>`;
       }).join('');
@@ -2986,28 +3065,40 @@ async function cargarStockPorCategoria() {
 // Alias para compatibilidad con el hook existente
 async function cargarStockLista() { await cargarStockPorCategoria(); }
 
+
+
 // Admin: registra la merma en Sheets y la elimina del stock en Firestore
-window.registrarMerma = async function(productoId, nombre, cantidad, precioOriginal, fechaIngreso) {
+// Registra merma en Sheets y elimina del stock (soporta formato nuevo y legacy)
+window.registrarMermaItem = async function(productoId, nombre, cantidad, precioOriginal) {
   if (!confirm(`¿Registrar merma de ${cantidad} ud. de "${nombre}"?\n\nSe exportará a la pestaña Merma en Sheets y se eliminará del stock.`)) return;
   try {
+    const stockRef  = doc(db, 'stock', `${sucursal}_${productoId}`);
+    const stockSnap = await getDoc(stockRef);
+    if (!stockSnap.exists()) return;
+    const data = stockSnap.data();
+
+    // Recopilar fechas para el reporte
+    const entradasMerma = Object.entries(data.entradas || {})
+      .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === 'merma');
+    const fechaIngreso = entradasMerma.length
+      ? keyToFechaCL(entradasMerma.sort()[0][0])
+      : (data.merma?.fecha || '');
+
     // 1. Exportar a Sheets
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({
-        tipo: 'merma',
-        sucursal,
-        producto: nombre,
-        cantidad,
-        precioOriginal,
-        monto: cantidad * precioOriginal,
-        fechaIngreso,
-        fechaMerma: new Date().toLocaleDateString('es-CL')
+        tipo: 'merma', sucursal, producto: nombre, cantidad,
+        precioOriginal, monto: cantidad * precioOriginal,
+        fechaIngreso, fechaMerma: new Date().toLocaleDateString('es-CL')
       })
     });
-    // 2. Eliminar de Firestore
-    const stockRef = doc(db, 'stock', `${sucursal}_${productoId}`);
-    await updateDoc(stockRef, { merma: null });
+
+    // 2. Eliminar de Firestore — borrar entradas de merma y campo legacy
+    const updates = { merma: null };
+    entradasMerma.forEach(([k]) => { updates[`entradas.${k}`] = 0; });
+    await updateDoc(stockRef, updates);
     await cargarStockPorCategoria();
     showToast('✅ Merma registrada en Sheets');
   } catch(e) {
@@ -3020,31 +3111,39 @@ window.ajustarStock = async function(productoId, cat, delta) {
   const ref = doc(db, 'stock', stockKey);
   const snap = await getDoc(ref);
   if (!snap.exists()) return;
-  const data = snap.data();
-  const catData = data[cat];
-  if (!catData) return;
-  const nuevaCant = Math.max(0, (catData.cantidad || 0) + delta);
-  await updateDoc(ref, { [`${cat}.cantidad`]: nuevaCant });
-  // Actualizar UI directo sin recargar todo
-  const el = document.getElementById(`sqty-${cat}-${productoId}`);
-  if (el) el.textContent = nuevaCant;
-  // Actualizar stockMap
-  if (window._stockMap[stockKey] && window._stockMap[stockKey][cat]) {
-    window._stockMap[stockKey][cat].cantidad = nuevaCant;
+  const entradas = snap.data().entradas || {};
+  const entradasCat = Object.entries(entradas)
+    .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
+    .sort(([a], [b]) => a.localeCompare(b)); // oldest first
+  if (!entradasCat.length) return;
+  if (delta < 0) {
+    // FIFO: descontar de la más antigua primero
+    let toDeduct = Math.abs(delta);
+    for (const [key, qty] of entradasCat) {
+      if (toDeduct <= 0) break;
+      const deducir = Math.min(qty, toDeduct);
+      await updateDoc(ref, { [`entradas.${key}`]: Math.max(0, qty - deducir) });
+      if (window._stockMap[stockKey]?.entradas) window._stockMap[stockKey].entradas[key] = Math.max(0, qty - deducir);
+      toDeduct -= deducir;
+    }
+  } else {
+    // Añadir a la entrada más reciente
+    const [key, qty] = entradasCat[entradasCat.length - 1];
+    await updateDoc(ref, { [`entradas.${key}`]: qty + delta });
+    if (window._stockMap[stockKey]?.entradas) window._stockMap[stockKey].entradas[key] = qty + delta;
   }
+  // Actualizar UI
+  const newQty = getQtyCategoria(window._stockMap[stockKey], cat);
+  const el = document.getElementById(`sqty-${cat}-${productoId}`);
+  if (el) el.textContent = newQty;
   renderProductos();
 };
 
-// Determina categoría de stock según fecha de producción
-function determinarCatPorFecha(fechaStr) {
-  if (!fechaStr) return 'hoy';
-  const fecha = new Date(fechaStr + 'T12:00:00');
-  const hoy   = new Date(); hoy.setHours(12, 0, 0, 0);
-  const diff  = Math.round((hoy - fecha) / 86400000);
-  if (diff <= 0) return 'hoy';
-  if (diff === 1) return 'ayer';
-  if (diff === 2) return 'antesayer';
-  return 'cuartoDia';
+// Determina categoría según fecha ISO de input (usa el nuevo sistema de fechas)
+function determinarCatPorFecha(fechaISO) {
+  if (!fechaISO) return 'hoy';
+  const key = fechaISO.replace(/-/g, '');
+  return getCategoriaFecha(key);
 }
 
 // Actualiza el badge de categoría al cambiar la fecha
@@ -3082,25 +3181,23 @@ window.ingresarStock = async function() {
     return;
   }
 
-  const cat     = determinarCatPorFecha(fechaInput);
-  const fechaStr = fechaInput
-    ? new Date(fechaInput + 'T12:00:00').toLocaleDateString('es-CL')
-    : new Date().toLocaleDateString('es-CL');
+  // Clave de fecha YYYYMMDD — nunca se mueve, la categoría se calcula dinámicamente
+  const fechaKey = fechaInput ? fechaInput.replace(/-/g, '') : fechaKeyHoy();
+  const cat = getCategoriaFecha(fechaKey);
 
   btn.disabled = true; btn.textContent = 'Ingresando...';
   const ref  = doc(db, 'stock', `${sucursal}_${productoId}`);
   const snap = await getDoc(ref);
   try {
     if (snap.exists()) {
-      const prev = snap.data()[cat]?.cantidad || 0;
-      await updateDoc(ref, { [`${cat}.cantidad`]: prev + cantidad, [`${cat}.fecha`]: fechaStr });
+      const prevQty = snap.data().entradas?.[fechaKey] || 0;
+      await updateDoc(ref, { [`entradas.${fechaKey}`]: prevQty + cantidad });
     } else {
-      const data = { sucursal, productoId, hoy: null, ayer: null, antesayer: null };
-      data[cat] = { cantidad, fecha: fechaStr };
-      await setDoc(ref, data);
+      await setDoc(ref, { sucursal, productoId, entradas: { [fechaKey]: cantidad } });
     }
     await addDoc(collection(db, 'stockMovimientos'), {
-      sucursal, productoId, cantidad, categoria: cat, tipo: 'ingreso', obs,
+      sucursal, productoId, cantidad, categoria: cat,
+      fechaKey, tipo: 'ingreso', obs,
       usuario: usuario.email, fecha: Timestamp.now()
     });
     document.getElementById('stockCantidad').value = '';
