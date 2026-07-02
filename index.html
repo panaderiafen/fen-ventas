@@ -258,11 +258,12 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .rep-quick-btn { padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; white-space: nowrap; }
 .rep-quick-btn.active { background: #003a79; color: white; border-color: #003a79; }
 /* VISOR DE STOCK — LAYOUT DOS COLUMNAS */
-.visor-stock-columns { display: none; gap: 14px; align-items: flex-start; }
+.visor-stock-columns { display: block; } /* visible para todos; flex solo para el visor */
+.visor-stock-columns.visor-active { display: flex; gap: 14px; align-items: flex-start; }
 #visorStockLeft { flex: 1; min-width: 0; }
-#visorResumenPanel { width: 280px; flex-shrink: 0; position: sticky; top: 12px; display: none; }
+#visorResumenPanel { width: 280px; flex-shrink: 0; display: none; position: sticky; top: 12px; }
 @media (max-width: 800px) {
-  .visor-stock-columns { flex-direction: column; }
+  .visor-stock-columns.visor-active { flex-direction: column; }
   #visorResumenPanel { width: 100%; position: static; }
 }
 .visor-resumen-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 0.5px solid #f0f0f0; gap: 8px; }
@@ -904,7 +905,7 @@ onAuthStateChanged(auth, async (user) => {
     if (esAdmin) document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
     // Verificar si es visor de stock
     const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
-    esStockViewer = viewerDoc.exists();
+    esStockViewer = viewerDoc.exists() && !esAdmin; // admin siempre tiene prioridad
     if (esStockViewer) {
       await iniciarVisorStock();
     } else {
@@ -969,7 +970,7 @@ async function iniciarVisorStock() {
   document.getElementById('sec-stock').classList.add('active');
   // Mostrar selector de sucursal del visor y panel resumen
   document.getElementById('visorSucursalSelector').style.display = '';
-  document.getElementById('visorStockColumns').style.display = 'flex';
+  document.getElementById('visorStockColumns').classList.add('visor-active');
   document.getElementById('visorResumenPanel').style.display = 'block';
   // Ocultar formulario de ingreso
   document.getElementById('stockIngresoForm').style.display = 'none';
