@@ -2009,7 +2009,6 @@ window.confirmarCierreCiego = async function() {
   const manDebito   = parseInt(document.getElementById('cierrDebito').value)   || 0;
   const manCredito  = parseInt(document.getElementById('cierrCredito').value)  || 0;
   const manTransfer = parseInt(document.getElementById('cierrTransfer').value) || 0;
-  const manTotal    = manEfectivo + manDebito + manCredito + manTransfer;
 
   btn.disabled = true; btn.textContent = 'Cerrando...';
   try {
@@ -2017,12 +2016,26 @@ window.confirmarCierreCiego = async function() {
     const cajaData = cajaSnap.data();
     const cajaDocId = cajaId;
     const t = cajaData.totales || {};
+    const montoInicial = parseInt(cajaData.montoInicial) || 0;
 
-    const sistEfectivo = (parseInt(t.efectivo) || 0) + (parseInt(cajaData.montoInicial) || 0); // ventas + monto inicial
-    const sistDebito   = parseInt(t.debito)              || 0;
-    const sistCredito  = parseInt(t.credito)             || 0;
-    const sistTransfer = parseInt(t.transferencia)       || 0;
-    const sistTotal    = (parseInt(cajaData.totalVentas) || 0) + (parseInt(cajaData.montoInicial) || 0); // ventas + monto inicial
+    // Sistema: solo ventas (sin monto inicial)
+    const sistEfectivo = parseInt(t.efectivo)        || 0;
+    const sistDebito   = parseInt(t.debito)          || 0;
+    const sistCredito  = parseInt(t.credito)         || 0;
+    const sistTransfer = parseInt(t.transferencia)   || 0;
+    const sistTotal    = parseInt(cajaData.totalVentas) || 0;
+
+    // Cajero: desconta el monto inicial del efectivo contado
+    // (el cajero cuenta todo el efectivo físico = ventas + inicial)
+    const manEfectivoNeto = manEfectivo - montoInicial;
+    const manTotal        = manEfectivoNeto + manDebito + manCredito + manTransfer;
+
+    // Diferencias sobre ventas netas (sin el inicial)
+    const difEfectivo = manEfectivoNeto - sistEfectivo;
+    const difDebito   = manDebito       - sistDebito;
+    const difCredito  = manCredito      - sistCredito;
+    const difTransfer = manTransfer     - sistTransfer;
+    const difTotal    = manTotal        - sistTotal;
 
     // Cerrar caja en Firestore
     await updateDoc(doc(db, 'cajas', cajaDocId), { estado: 'cerrada', cierre: Timestamp.now() });
@@ -2032,16 +2045,16 @@ window.confirmarCierreCiego = async function() {
       cajaId: cajaDocId, sucursal, usuario: cajaData.usuario || usuario.email,
       fecha: new Date().toLocaleDateString('es-CL'),
       nVentas: cajaData.nVentas || 0,
-      montoInicial: cajaData.montoInicial || 0,
+      montoInicial,
       apertura: cajaData.apertura,
       cierre: Timestamp.now(),
+      // Sistema (solo ventas)
       sistEfectivo, sistDebito, sistCredito, sistTransfer, sistTotal,
-      manEfectivo,  manDebito,  manCredito,  manTransfer,  manTotal,
-      difEfectivo: manEfectivo - sistEfectivo,
-      difDebito:   manDebito   - sistDebito,
-      difCredito:  manCredito  - sistCredito,
-      difTransfer: manTransfer - sistTransfer,
-      difTotal:    manTotal    - sistTotal
+      // Cajero (efectivo ya descontado el inicial, débito/crédito/transfer igual)
+      manEfectivo, manEfectivoNeto,
+      manDebito, manCredito, manTransfer, manTotal,
+      // Diferencias (comparación limpia sobre ventas)
+      difEfectivo, difDebito, difCredito, difTransfer, difTotal
     });
 
     cajaId = null;
@@ -2261,10 +2274,11 @@ window.cargarEvaluacionesCaja = async function() {
             <th style="text-align:right;padding:4px">Cajero</th>
             <th style="text-align:right;padding:4px">Dif.</th>
           </tr>
-          ${[['💵 Efectivo',e.sistEfectivo,e.manEfectivo,e.difEfectivo],
-             ['💳 Débito',  e.sistDebito,  e.manDebito,  e.difDebito],
-             ['💳 Crédito', e.sistCredito, e.manCredito, e.difCredito],
-             ['📲 Transfer.',e.sistTransfer,e.manTransfer,e.difTransfer]
+          ${[
+            ['💵 Efectivo', e.sistEfectivo, e.manEfectivoNeto ?? e.manEfectivo, e.difEfectivo],
+            ['💳 Débito',   e.sistDebito,   e.manDebito,   e.difDebito],
+            ['💳 Crédito',  e.sistCredito,  e.manCredito,  e.difCredito],
+            ['📲 Transfer.',e.sistTransfer, e.manTransfer, e.difTransfer]
           ].map(([lbl,s,m,d]) => `
             <tr style="border-top:0.5px solid #f0f0f0">
               <td style="padding:5px 0">${lbl}</td>
@@ -2272,8 +2286,12 @@ window.cargarEvaluacionesCaja = async function() {
               <td style="text-align:right;padding:5px">$${parseInt(m||0).toLocaleString('es-CL')}</td>
               <td style="text-align:right;padding:5px;font-weight:600;color:${difColor(d||0)}">${difLabel(d||0)}</td>
             </tr>`).join('')}
+          ${e.montoInicial ? `
+          <tr style="border-top:0.5px solid #f0f0f0;color:#888">
+            <td style="padding:4px 0;font-size:11px;font-style:italic" colspan="4">💰 Monto inicial descontado del efectivo: $${parseInt(e.montoInicial).toLocaleString('es-CL')}</td>
+          </tr>` : ''}
           <tr style="border-top:1px solid #ddd;font-weight:700">
-            <td style="padding:6px 0">TOTAL</td>
+            <td style="padding:6px 0">TOTAL VENTAS</td>
             <td style="text-align:right;padding:5px">$${parseInt(e.sistTotal||0).toLocaleString('es-CL')}</td>
             <td style="text-align:right;padding:5px">$${parseInt(e.manTotal||0).toLocaleString('es-CL')}</td>
             <td style="text-align:right;padding:5px;color:${difColor(e.difTotal||0)}">${difLabel(e.difTotal||0)}</td>
