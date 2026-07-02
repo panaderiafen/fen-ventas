@@ -1288,7 +1288,9 @@ function keyToFechaCL(key) {
 
 // Determina la categoría de stock según la diferencia de días con hoy
 function getCategoriaFecha(dateKey) {
-  if (!dateKey || dateKey.length !== 8) return 'hoy';
+  if (!dateKey) return 'hoy';
+  if (dateKey === 'permanente') return 'permanente'; // clave especial, nunca envejece
+  if (dateKey.length !== 8) return 'hoy';
   const hoyISO  = fechaLocalHoy();
   const keyISO  = `${dateKey.slice(0,4)}-${dateKey.slice(4,6)}-${dateKey.slice(6,8)}`;
   const hoyDate = new Date(hoyISO  + 'T00:00:00');
@@ -1418,7 +1420,7 @@ function renderProductos() {
     const esPermanente = p.autoEliminar === false;
     const qty = stockItem
       ? (esPermanente
-          ? Object.values(stockItem.entradas || {}).reduce((s, q) => s + (q || 0), 0)
+          ? (stockItem.entradas?.['permanente'] || 0)
           : getQtyCategoria(stockItem, categoriaStockActiva))
       : 0;
     const sinStock  = qty <= 0;
@@ -1786,7 +1788,7 @@ window.agregarAlPedido = function(id) {
     const stockItem  = window._stockMap ? window._stockMap[stockKey] : null;
     const disponible = stockItem
       ? (esPermanente
-          ? Object.values(stockItem.entradas || {}).reduce((s, q) => s + (q || 0), 0)
+          ? (stockItem.entradas?.['permanente'] || 0)
           : getQtyCategoria(stockItem, categoriaStockActiva))
       : 0;
     if (disponible <= 0) {
@@ -1990,22 +1992,30 @@ window.registrarVenta = async function() {
     // Descontar stock — FIFO por fechas (más antiguo primero dentro de la categoría)
     for (const l of pedidoLineas) {
       const prod = productos.find(p => p.id === l.id);
-      if (prod && prod.controlStock === false) continue; // sin control, nada que descontar
+      if (prod && prod.controlStock === false) continue;
+      const esPerm   = prod && prod.autoEliminar === false;
       const stockRef  = doc(db, 'stock', `${sucursal}_${l.id}`);
       const stockSnap = await getDoc(stockRef);
       if (!stockSnap.exists()) continue;
       const entradas = stockSnap.data().entradas || {};
-      const cat = l.categoriaStock || 'hoy';
-      // Ordenar entradas de esta categoría de más antigua a más nueva
-      const entradasCat = Object.entries(entradas)
-        .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
-        .sort(([a], [b]) => a.localeCompare(b));
-      let toDeduct = l.cantidad;
-      for (const [key, qty] of entradasCat) {
-        if (toDeduct <= 0) break;
-        const deducir = Math.min(qty, toDeduct);
-        await updateDoc(stockRef, { [`entradas.${key}`]: Math.max(0, qty - deducir) });
-        toDeduct -= deducir;
+
+      if (esPerm) {
+        // Producto permanente: descontar siempre de la clave "permanente"
+        const qtyActual = entradas['permanente'] || 0;
+        await updateDoc(stockRef, { 'entradas.permanente': Math.max(0, qtyActual - l.cantidad) });
+      } else {
+        // Producto perecedero: FIFO dentro de la categoría
+        const cat = l.categoriaStock || 'hoy';
+        const entradasCat = Object.entries(entradas)
+          .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
+          .sort(([a], [b]) => a.localeCompare(b));
+        let toDeduct = l.cantidad;
+        for (const [key, qty] of entradasCat) {
+          if (toDeduct <= 0) break;
+          const deducir = Math.min(qty, toDeduct);
+          await updateDoc(stockRef, { [`entradas.${key}`]: Math.max(0, qty - deducir) });
+          toDeduct -= deducir;
+        }
       }
     }
     await imprimirComanda(venta);
@@ -3100,7 +3110,7 @@ async function cargarStockPorCategoria() {
     if (totalEl) totalEl.textContent = `Valor: $${valorTotal.toLocaleString('es-CL')}`;
   });
 
-  // Sin vencimiento — productos con autoEliminar: false
+  // Sin vencimiento — productos con autoEliminar: false, usan clave "permanente"
   const contenedorPerm = document.getElementById('stockListaPermanente');
   const totalPermEl    = document.getElementById('totalPermanente');
   if (contenedorPerm) {
@@ -3108,7 +3118,7 @@ async function cargarStockPorCategoria() {
       const prod = productos.find(p => p.id === i.productoId);
       if (!prod || prod.controlStock === false || prod.autoEliminar !== false) return false;
       if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
-      return Object.values(i.entradas || {}).reduce((s, q) => s + (q || 0), 0) > 0;
+      return (i.entradas?.['permanente'] || 0) > 0;
     });
     if (!conPerm.length) {
       contenedorPerm.innerHTML = '<div class="empty">Sin stock permanente</div>';
@@ -3119,12 +3129,12 @@ async function cargarStockPorCategoria() {
         const prod   = productos.find(p => p.id === i.productoId);
         const nombre = prod ? prod.nombre : i.productoId;
         const precio = prod ? (prod.precioHoy || prod.precio || 0) : 0;
-        const qty    = Object.values(i.entradas || {}).reduce((s, q) => s + (q || 0), 0);
+        const qty    = i.entradas?.['permanente'] || 0;
         valorPerm += qty * precio;
         return `<div class="stock-row">
           <div>
             <div class="stock-prod-nombre">${nombre}</div>
-            <div class="stock-prod-meta">Sin vencimiento · ${qty} ud.</div>
+            <div class="stock-prod-meta">Sin vencimiento</div>
           </div>
           ${esStockViewer
             ? `<div class="visor-stock-qty">${qty} ud.</div>`
@@ -3254,32 +3264,18 @@ window.ajustarStock = async function(productoId, cat, delta) {
   renderProductos();
 };
 
-// Ajusta stock de productos sin vencimiento (suma/resta en la entrada más reciente)
+// Ajusta stock de productos sin vencimiento (clave "permanente" fija)
 window.ajustarStockPerm = async function(productoId, delta) {
   const stockKey = `${sucursal}_${productoId}`;
   const ref  = doc(db, 'stock', stockKey);
   const snap = await getDoc(ref);
   if (!snap.exists()) return;
   const entradas = snap.data().entradas || {};
-  const keys = Object.keys(entradas).sort();
-  if (!keys.length) return;
-  if (delta < 0) {
-    // FIFO: descontar de la más antigua
-    let toDeduct = 1;
-    for (const key of keys) {
-      if (toDeduct <= 0) break;
-      const qty = entradas[key] || 0;
-      if (qty <= 0) continue;
-      const deducir = Math.min(qty, toDeduct);
-      await updateDoc(ref, { [`entradas.${key}`]: qty - deducir });
-      toDeduct -= deducir;
-    }
-  } else {
-    // Añadir a la más reciente
-    const key = keys[keys.length - 1];
-    await updateDoc(ref, { [`entradas.${key}`]: (entradas[key] || 0) + 1 });
-  }
-  await cargarStockPorCategoria();
+  const qtyActual = entradas['permanente'] || 0;
+  const nuevaQty  = Math.max(0, qtyActual + delta);
+  await updateDoc(ref, { 'entradas.permanente': nuevaQty });
+  const el = document.getElementById(`sqty-perm-${productoId}`);
+  if (el) el.textContent = nuevaQty;
   renderProductos();
 };
 
@@ -3325,8 +3321,9 @@ window.ingresarStock = async function() {
     return;
   }
 
-  // Clave de fecha YYYYMMDD — nunca se mueve, la categoría se calcula dinámicamente
-  const fechaKey = fechaInput ? fechaInput.replace(/-/g, '') : fechaKeyHoy();
+  // Productos permanentes siempre usan la clave "permanente" — nunca envejecen
+  const esPermanente = prod && prod.autoEliminar === false;
+  const fechaKey = esPermanente ? 'permanente' : (fechaInput ? fechaInput.replace(/-/g, '') : fechaKeyHoy());
   const cat = getCategoriaFecha(fechaKey);
 
   btn.disabled = true; btn.textContent = 'Ingresando...';
