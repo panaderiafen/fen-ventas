@@ -2985,12 +2985,44 @@ let _stockListaArea = ''; // filtro de área compartido para las 3 categorías
 
 async function cargarStockPorCategoria() {
   if (!sucursal) return;
+
+  // Cargar todos los docs de stock
   const snap = await getDocs(collection(db, 'stock'));
+
+  // Auto-migración silenciosa: convierte formato viejo al nuevo sin acción del usuario
+  let necesitaRecarga = false;
+  for (const stockDoc of snap.docs) {
+    const data = stockDoc.data();
+    if (data.entradas && Object.keys(data.entradas).length > 0) continue;
+    const camposViejos = [data.hoy, data.ayer, data.antesayer, data.cuartoDia, data.merma];
+    if (!camposViejos.some(c => c?.cantidad > 0)) continue;
+    const entradasNuevas = {};
+    camposViejos.forEach(c => {
+      if (!c?.cantidad || c.cantidad <= 0) return;
+      const key = parseFechaEsCLToKey(c.fecha);
+      entradasNuevas[key] = (entradasNuevas[key] || 0) + c.cantidad;
+    });
+    try {
+      await updateDoc(doc(db, 'stock', stockDoc.id), {
+        entradas: entradasNuevas,
+        hoy: null, ayer: null, antesayer: null, cuartoDia: null, merma: null,
+      });
+      necesitaRecarga = true;
+      console.log('✅ Auto-migrado:', stockDoc.id);
+    } catch(e) { console.error('Error migrando:', stockDoc.id, e); }
+  }
+
+  // Si hubo migración, recargar datos frescos
+  const snapFinal = necesitaRecarga
+    ? await getDocs(collection(db, 'stock'))
+    : snap;
+
   window._stockMap = {};
-  const items = snap.docs
+  const items = snapFinal.docs
     .filter(d => d.id.startsWith(sucursal + '_'))
     .map(d => ({ _id: d.id, ...d.data() }));
   items.forEach(i => { window._stockMap[i._id] = i; });
+
   renderProductos();
   renderStockListaAreaBtns();
   if (esStockViewer) renderResumenVisor();
@@ -3006,21 +3038,17 @@ async function cargarStockPorCategoria() {
     const contenedor = document.getElementById(listaId);
     const totalEl    = document.getElementById(totalId);
     if (!contenedor) return;
-
-    // Calcular qué productos tienen stock en esta categoría dinámicamente
     const conStock = items.filter(i => {
       const prod = productos.find(p => p.id === i.productoId);
       if (!prod || prod.controlStock === false) return false;
       if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
       return getQtyCategoria(i, key) > 0;
     });
-
     if (!conStock.length) {
       contenedor.innerHTML = '<div class="empty">Sin stock</div>';
       if (totalEl) totalEl.textContent = '';
       return;
     }
-
     let valorTotal = 0;
     contenedor.innerHTML = conStock.map(i => {
       const prod   = productos.find(p => p.id === i.productoId);
@@ -3028,7 +3056,6 @@ async function cargarStockPorCategoria() {
       const qty    = getQtyCategoria(i, key);
       const precio = prod ? getPrecioProducto(prod, key) : 0;
       valorTotal  += qty * precio;
-      // Fecha más antigua de esta categoría para mostrar referencia
       const entradas = getEntradasPorCategoria(i, key);
       const fechaRef = entradas.length ? keyToFechaCL(entradas[0].key) : '';
       return `<div class="stock-row">
@@ -3048,7 +3075,7 @@ async function cargarStockPorCategoria() {
     if (totalEl) totalEl.textContent = `Valor: $${valorTotal.toLocaleString('es-CL')}`;
   });
 
-  // Merma — entradas con 4+ días
+  // Merma
   const contenedorMerma = document.getElementById('stockListaMerma');
   const totalMermaEl    = document.getElementById('totalMerma');
   if (contenedorMerma) {
@@ -3056,13 +3083,8 @@ async function cargarStockPorCategoria() {
       const prod = productos.find(p => p.id === i.productoId);
       if (!prod || prod.controlStock === false) return false;
       if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
-      // Merma nueva: entradas en campo entradas con cat=merma
-      if (getQtyCategoria(i, 'merma') > 0) return true;
-      // Merma legacy: campo merma del formato viejo
-      if (i.merma && i.merma.cantidad > 0) return true;
-      return false;
+      return getQtyCategoria(i, 'merma') > 0 || (i.merma?.cantidad > 0);
     });
-
     if (!conMerma.length) {
       contenedorMerma.innerHTML = '<div class="empty">Sin merma registrada</div>';
       if (totalMermaEl) totalMermaEl.textContent = '';
@@ -3072,10 +3094,7 @@ async function cargarStockPorCategoria() {
         const prod   = productos.find(p => p.id === i.productoId);
         const nombre = prod ? prod.nombre : i.productoId;
         const precio = prod ? (prod.precioHoy || prod.precio || 0) : 0;
-        // Soporta ambos formatos
-        const qtyNuevo = getQtyCategoria(i, 'merma');
-        const qtyLegacy = (i.merma?.cantidad || 0);
-        const qty = qtyNuevo + qtyLegacy;
+        const qty    = getQtyCategoria(i, 'merma') + (i.merma?.cantidad || 0);
         const entradasMerma = getEntradasPorCategoria(i, 'merma');
         const fechaRef = entradasMerma.length ? keyToFechaCL(entradasMerma[0].key) : (i.merma?.fecha || '');
         valorMerma += qty * precio;
