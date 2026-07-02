@@ -1728,7 +1728,7 @@ window.imprimirComanda = async function(venta) {
 // CAJA
 // ═══════════════════════════
 async function verificarCaja() {
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = fechaLocalHoy();
   const q = query(collection(db, 'cajas'),
     where('sucursal', '==', sucursal),
     where('fecha', '==', hoy),
@@ -1948,7 +1948,7 @@ window.abrirCaja = async function() {
   const btn = document.getElementById('btnAbrirCaja');
   const monto = parseInt(document.getElementById('cajaMontoInicial').value) || 0;
   btn.disabled = true; btn.textContent = 'Abriendo...';
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = fechaLocalHoy();
   try {
     const ref = await addDoc(collection(db, 'cajas'), {
       sucursal, usuario: usuario.email, fecha: hoy,
@@ -2022,7 +2022,7 @@ window.confirmarCierreCiego = async function() {
     const sistDebito   = parseInt(t.debito)              || 0;
     const sistCredito  = parseInt(t.credito)             || 0;
     const sistTransfer = parseInt(t.transferencia)       || 0;
-    const sistTotal    = parseInt(cajaData.totalVentas)  || 0;
+    const sistTotal    = (parseInt(cajaData.totalVentas) || 0) + (parseInt(cajaData.montoInicial) || 0); // ventas + monto inicial
 
     // Cerrar caja en Firestore
     await updateDoc(doc(db, 'cajas', cajaDocId), { estado: 'cerrada', cierre: Timestamp.now() });
@@ -2083,6 +2083,18 @@ window.selRepTab = function(btn, id) {
 };
 
 function fechaStr(d) { return d.toISOString().split('T')[0]; }
+
+// Devuelve la fecha local (no UTC) en formato YYYY-MM-DD.
+// Crítico para la rotación de stock: evita que la diferencia de zona
+// horaria (Chile = UTC-3/UTC-4) haga creer al sistema que pasó un día
+// cuando en realidad no pasó, disparando rotaciones incorrectas.
+function fechaLocalHoy() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dia}`;
+}
 
 window.selPeriodo = function(btn, periodo) {
   document.querySelectorAll('.rep-quick-btn').forEach(b => b.classList.remove('active'));
@@ -2547,7 +2559,7 @@ async function programarRespaldoMedianoche() {
       await verificarYRotarStock();
 
       // 2. Exportar cajas no exportadas
-      const hoy = new Date().toISOString().split('T')[0];
+      const hoy = fechaLocalHoy();
       const tsDesde = Timestamp.fromDate(new Date(hoy + 'T00:00:00'));
       const tsHasta = Timestamp.fromDate(new Date(hoy + 'T23:59:59'));
 
@@ -2766,7 +2778,7 @@ window.actualizarCatFecha = function() {
 function inicializarFechaStock() {
   const input = document.getElementById('stockFecha');
   if (input) {
-    input.value = new Date().toISOString().split('T')[0];
+    input.value = fechaLocalHoy();
     actualizarCatFecha();
   }
 }
@@ -2864,7 +2876,7 @@ async function rotarStock() {
  */
 async function verificarYRotarStock() {
   if (!sucursal) return;
-  const hoyStr = new Date().toISOString().split('T')[0];
+  const hoyStr = fechaLocalHoy();
   const metaRef = doc(db, 'meta_rotacion', sucursal);
   try {
     const metaSnap = await getDoc(metaRef);
@@ -2954,7 +2966,7 @@ window.forzarRotacionManual = async function() {
   if (btn) { btn.disabled = true; btn.textContent = 'Rotando...'; }
   try {
     await rotarStock();
-    const hoyStr = new Date().toISOString().split('T')[0];
+    const hoyStr = fechaLocalHoy();
     await setDoc(doc(db, 'meta_rotacion', sucursal), { fecha: hoyStr, verificado: true });
     await cargarStockPorCategoria();
     showToast('✅ Rotación ejecutada correctamente');
