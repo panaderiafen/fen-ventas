@@ -3076,6 +3076,7 @@ async function cargarStockPorCategoria() {
     const conStock = items.filter(i => {
       const prod = productos.find(p => p.id === i.productoId);
       if (!prod || prod.controlStock === false) return false;
+      if (prod.autoEliminar === false) return false; // permanentes van a su propia card
       if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
       return getQtyCategoria(i, key) > 0;
     });
@@ -3156,6 +3157,7 @@ async function cargarStockPorCategoria() {
     const conMerma = items.filter(i => {
       const prod = productos.find(p => p.id === i.productoId);
       if (!prod || prod.controlStock === false) return false;
+      if (prod.autoEliminar === false) return false; // permanentes nunca van a merma
       if (_stockListaArea && normalizarArea(prod.area) !== _stockListaArea) return false;
       return getQtyCategoria(i, 'merma') > 0 || (i.merma?.cantidad > 0);
     });
@@ -3331,8 +3333,26 @@ window.ingresarStock = async function() {
   const snap = await getDoc(ref);
   try {
     if (snap.exists()) {
-      const prevQty = snap.data().entradas?.[fechaKey] || 0;
-      await updateDoc(ref, { [`entradas.${fechaKey}`]: prevQty + cantidad });
+      const dataActual = snap.data();
+      const entradasActuales = dataActual.entradas || {};
+
+      if (esPermanente) {
+        // Consolidar: sumar todas las entradas con fecha (no "permanente") al acumulado
+        const qtyPermActual = entradasActuales['permanente'] || 0;
+        let qtyFechasViejas = 0;
+        const updates = {};
+        Object.entries(entradasActuales).forEach(([k, q]) => {
+          if (k !== 'permanente' && q > 0) {
+            qtyFechasViejas += q;
+            updates[`entradas.${k}`] = 0; // limpiar entrada con fecha
+          }
+        });
+        updates['entradas.permanente'] = qtyPermActual + cantidad + qtyFechasViejas;
+        await updateDoc(ref, updates);
+      } else {
+        const prevQty = entradasActuales[fechaKey] || 0;
+        await updateDoc(ref, { [`entradas.${fechaKey}`]: prevQty + cantidad });
+      }
     } else {
       await setDoc(ref, { sucursal, productoId, entradas: { [fechaKey]: cantidad } });
     }
