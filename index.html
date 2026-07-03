@@ -739,6 +739,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
         <!-- Selector rápido de período -->
         <div class="rep-quick-btns">
           <button class="rep-quick-btn active" onclick="selPeriodo(this,'hoy')">Hoy</button>
+          <button class="rep-quick-btn" onclick="selPeriodo(this,'ayer')">Ayer</button>
           <button class="rep-quick-btn" onclick="selPeriodo(this,'semana')">Semana actual</button>
           <button class="rep-quick-btn" onclick="selPeriodo(this,'semana-ant')">Sem. anterior</button>
           <button class="rep-quick-btn" onclick="selPeriodo(this,'mes')">Mes actual</button>
@@ -2477,6 +2478,10 @@ window.selPeriodo = function(btn, periodo) {
   if (periodo === 'hoy') {
     desde = hasta = fechaStr(hoy);
     document.getElementById('customRangeDiv').style.display = 'none';
+  } else if (periodo === 'ayer') {
+    const ayer = new Date(hoy); ayer.setDate(hoy.getDate() - 1);
+    desde = hasta = fechaStr(ayer);
+    document.getElementById('customRangeDiv').style.display = 'none';
   } else if (periodo === 'semana') {
     const lunes = new Date(hoy);
     lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7)); // lunes local
@@ -2512,45 +2517,61 @@ window.cargarValorStock = async function() {
   btn.disabled = true; btn.textContent = 'Calculando...';
   el.innerHTML = '';
   try {
-    await cargarStockMap();
     const snap = await getDocs(collection(db, 'stock'));
     const items = snap.docs.filter(d => d.id.startsWith(sucursal + '_')).map(d => d.data());
 
-    let totalHoy = 0, totalAyer = 0, totalAnt = 0, total4to = 0, totalMermaVal = 0;
-    const dHoy = [], dAyer = [], dAnt = [], d4to = [], dMerma = [];
+    let totalHoy = 0, totalAyer = 0, totalAnt = 0, total4to = 0, totalPerm = 0, totalMermaVal = 0;
+    const dHoy = [], dAyer = [], dAnt = [], d4to = [], dPerm = [], dMerma = [];
 
     items.forEach(i => {
       const prod = productos.find(p => p.id === i.productoId);
       if (!prod || prod.controlStock === false) return;
-      if (i.hoy?.cantidad > 0) {
-        const v = i.hoy.cantidad * getPrecioProducto(prod, 'hoy');
-        totalHoy += v;
-        dHoy.push({ nombre: prod.nombre, qty: i.hoy.cantidad, valor: v });
-      }
-      if (i.ayer?.cantidad > 0) {
-        const v = i.ayer.cantidad * getPrecioProducto(prod, 'ayer');
-        totalAyer += v;
-        dAyer.push({ nombre: prod.nombre, qty: i.ayer.cantidad, valor: v });
-      }
-      if (i.antesayer?.cantidad > 0) {
-        const v = i.antesayer.cantidad * getPrecioProducto(prod, 'antesayer');
-        totalAnt += v;
-        dAnt.push({ nombre: prod.nombre, qty: i.antesayer.cantidad, valor: v });
-      }
-      if (i.cuartoDia?.cantidad > 0) {
-        const v = i.cuartoDia.cantidad * getPrecioProducto(prod, 'cuartoDia');
-        total4to += v;
-        d4to.push({ nombre: prod.nombre, qty: i.cuartoDia.cantidad, valor: v });
-      }
-      if (i.merma?.cantidad > 0) {
-        const precioOrig = prod.precioHoy || prod.precio || 0;
-        const v = i.merma.cantidad * precioOrig;
-        totalMermaVal += v;
-        dMerma.push({ nombre: prod.nombre, qty: i.merma.cantidad, valor: v });
-      }
+      const esPerm = prod.autoEliminar === false;
+      const entradas = i.entradas || {};
+
+      Object.entries(entradas).forEach(([fechaKey, qty]) => {
+        if (!qty || qty <= 0) return;
+        const cat = getCategoriaFecha(fechaKey);
+
+        if (esPerm) {
+          const v = qty * (prod.precioHoy || prod.precio || 0);
+          totalPerm += v;
+          const ex = dPerm.find(d => d.nombre === prod.nombre);
+          if (ex) { ex.qty += qty; ex.valor += v; }
+          else dPerm.push({ nombre: prod.nombre, qty, valor: v });
+          return;
+        }
+
+        if (cat === 'hoy') {
+          const v = qty * getPrecioProducto(prod, 'hoy');
+          totalHoy += v;
+          const ex = dHoy.find(d => d.nombre === prod.nombre);
+          if (ex) { ex.qty += qty; ex.valor += v; } else dHoy.push({ nombre: prod.nombre, qty, valor: v });
+        } else if (cat === 'ayer') {
+          const v = qty * getPrecioProducto(prod, 'ayer');
+          totalAyer += v;
+          const ex = dAyer.find(d => d.nombre === prod.nombre);
+          if (ex) { ex.qty += qty; ex.valor += v; } else dAyer.push({ nombre: prod.nombre, qty, valor: v });
+        } else if (cat === 'antesayer') {
+          const v = qty * getPrecioProducto(prod, 'antesayer');
+          totalAnt += v;
+          const ex = dAnt.find(d => d.nombre === prod.nombre);
+          if (ex) { ex.qty += qty; ex.valor += v; } else dAnt.push({ nombre: prod.nombre, qty, valor: v });
+        } else if (cat === 'cuartoDia') {
+          const v = qty * getPrecioProducto(prod, 'cuartoDia');
+          total4to += v;
+          const ex = d4to.find(d => d.nombre === prod.nombre);
+          if (ex) { ex.qty += qty; ex.valor += v; } else d4to.push({ nombre: prod.nombre, qty, valor: v });
+        } else if (cat === 'merma') {
+          const v = qty * (prod.precioHoy || prod.precio || 0);
+          totalMermaVal += v;
+          const ex = dMerma.find(d => d.nombre === prod.nombre);
+          if (ex) { ex.qty += qty; ex.valor += v; } else dMerma.push({ nombre: prod.nombre, qty, valor: v });
+        }
+      });
     });
 
-    const totalGral = totalHoy + totalAyer + totalAnt + total4to;
+    const totalGral = totalHoy + totalAyer + totalAnt + total4to + totalPerm;
     function renderCat(titulo, cls, detalle, total) {
       if (!detalle.length) return '';
       return `<div class="card" style="margin-bottom:10px">
@@ -2568,6 +2589,7 @@ window.cargarValorStock = async function() {
       ${renderCat('📦 Stock de ayer',          'cat-ayer',       dAyer, totalAyer)}
       ${renderCat('📦 Stock de antes de ayer', 'cat-antesayer',  dAnt,  totalAnt)}
       ${renderCat('📦 Cuarto día',             'cat-cuartodia',  d4to,  total4to)}
+      ${renderCat('🔁 Sin vencimiento',        'cat-permanente', dPerm, totalPerm)}
       ${renderCat('🗑️ En merma',               'cat-merma',      dMerma, totalMermaVal)}
     `;
   } catch(e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
@@ -2610,7 +2632,8 @@ window.cargarEvaluacionesCaja = async function() {
     const snap = await getDocs(query(collection(db, 'evaluacion_caja'), where('sucursal', '==', sucursal)));
     if (snap.empty) { el.innerHTML = '<div class="empty">Sin evaluaciones de caja</div>'; btn.disabled = false; btn.textContent = 'Cargar evaluaciones'; return; }
 
-    const evals = snap.docs.map(d => d.data()).sort((a, b) => (b.fecha||'').localeCompare(a.fecha||''));
+    const evals = snap.docs.map(d => d.data())
+      .sort((a, b) => (b.cierre?.seconds || 0) - (a.cierre?.seconds || 0)); // más reciente primero
     const difColor = d => d === 0 ? '#1D9E75' : (d > 0 ? '#003a79' : '#e74c3c');
     const difLabel = d => d === 0 ? '✅ Exacto' : (d > 0 ? '+' : '') + '$' + Math.abs(d).toLocaleString('es-CL');
 
