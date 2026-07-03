@@ -578,6 +578,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <div class="card-title">💵 Abrir caja</div>
       <label>Monto inicial en efectivo ($)</label>
       <input type="number" id="cajaMontoInicial" placeholder="0" min="0"/>
+      <div id="saldoSugeridoHint" style="display:none;font-size:11px;color:#1D7A5F;margin-top:4px;padding:6px 10px;background:#E3F3EC;border-radius:6px"></div>
       <button class="btn btn-primary btn-full" style="margin-top:12px" id="btnAbrirCaja" onclick="abrirCaja()">Abrir caja</button>
     </div>
     <div class="card hidden" id="cardCajaAbierta">
@@ -817,6 +818,14 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <input type="number" id="cierrCredito" placeholder="0" min="0"/>
     <label>📲 Transferencia ($)</label>
     <input type="number" id="cierrTransfer" placeholder="0" min="0"/>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f0f0f0">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#555;margin-bottom:6px">
+        💰 Monto retirado de caja ($)
+        <span style="font-size:10px;font-weight:400;color:#aaa">(opcional)</span>
+      </label>
+      <input type="number" id="cierrRetirado" placeholder="0" min="0"/>
+      <p style="font-size:11px;color:#aaa;margin-top:4px">El saldo restante se sugerirá como monto inicial del turno siguiente.</p>
+    </div>
     <div class="modal-btns">
       <button class="btn btn-secondary" style="flex:1" onclick="cerrarModalCierre()">Cancelar</button>
       <button class="btn btn-danger" style="flex:2" id="btnConfirmarCierre" onclick="confirmarCierreCiego()">🔒 Confirmar cierre</button>
@@ -1183,6 +1192,7 @@ window.showSection = function(id, el) {
   if (el) el.classList.add('active');
   if (id === 'stock')     { cargarStockPorCategoria(); renderStockIngresoGrid(); inicializarFechaStock(); }
   if (id === 'productos') { cargarProdAdmin(); renderAllAreaUIs(); }
+  if (id === 'caja')      { cargarSaldoSugerido(); }
 };
 
 // ═══════════════════════════
@@ -2304,8 +2314,37 @@ window.confirmarSolicitudAnulacion = async function() {
   btn.disabled = false; btn.textContent = '📩 Enviar solicitud';
 };
 
+// Busca el último cierre de caja de esta sucursal que tenga saldoSiguiente
+// y lo sugiere como monto inicial del turno siguiente
+async function cargarSaldoSugerido() {
+  const hint = document.getElementById('saldoSugeridoHint');
+  const input = document.getElementById('cajaMontoInicial');
+  if (!hint || !input) return;
+  hint.style.display = 'none';
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'cajas'),
+      where('sucursal', '==', sucursal),
+      where('estado', '==', 'cerrada')
+    ));
+    if (snap.empty) return;
+    // Buscar la más reciente con saldoSiguiente
+    const cierres = snap.docs.map(d => d.data())
+      .filter(d => d.saldoSiguiente != null)
+      .sort((a, b) => (b.cierre?.seconds || 0) - (a.cierre?.seconds || 0));
+    if (!cierres.length) return;
+    const ultimo = cierres[0];
+    const saldo = parseInt(ultimo.saldoSiguiente);
+    if (saldo < 0) return;
+    hint.textContent = `💡 Saldo sugerido del turno anterior: $${saldo.toLocaleString('es-CL')} — puedes ajustarlo si es necesario`;
+    hint.style.display = 'block';
+    // Pre-llenar solo si el campo está vacío
+    if (!input.value) input.value = saldo;
+  } catch(e) { console.error('Error cargando saldo sugerido:', e); }
+}
+
 window.abrirCaja = async function() {
-  const btn = document.getElementById('btnAbrirCaja');
+  const btn   = document.getElementById('btnAbrirCaja');
   const monto = parseInt(document.getElementById('cajaMontoInicial').value) || 0;
   btn.disabled = true; btn.textContent = 'Abriendo...';
   const hoy = fechaLocalHoy();
@@ -2352,10 +2391,11 @@ window.actualizarArqueo = async function() {
 
 // Abre el modal de cierre ciego (NO muestra totales del sistema)
 window.cerrarCaja = function() {
-  document.getElementById('cierrEfectivo').value = '';
-  document.getElementById('cierrDebito').value   = '';
-  document.getElementById('cierrCredito').value  = '';
-  document.getElementById('cierrTransfer').value = '';
+  document.getElementById('cierrEfectivo').value  = '';
+  document.getElementById('cierrDebito').value    = '';
+  document.getElementById('cierrCredito').value   = '';
+  document.getElementById('cierrTransfer').value  = '';
+  document.getElementById('cierrRetirado').value  = '';
   document.getElementById('modalCierreCiego').classList.add('open');
 };
 
@@ -2365,10 +2405,11 @@ window.cerrarModalCierre = function() {
 
 window.confirmarCierreCiego = async function() {
   const btn = document.getElementById('btnConfirmarCierre');
-  const manEfectivo = parseInt(document.getElementById('cierrEfectivo').value) || 0;
-  const manDebito   = parseInt(document.getElementById('cierrDebito').value)   || 0;
-  const manCredito  = parseInt(document.getElementById('cierrCredito').value)  || 0;
-  const manTransfer = parseInt(document.getElementById('cierrTransfer').value) || 0;
+  const manEfectivo  = parseInt(document.getElementById('cierrEfectivo').value)  || 0;
+  const manDebito    = parseInt(document.getElementById('cierrDebito').value)    || 0;
+  const manCredito   = parseInt(document.getElementById('cierrCredito').value)   || 0;
+  const manTransfer  = parseInt(document.getElementById('cierrTransfer').value)  || 0;
+  const montoRetirado = parseInt(document.getElementById('cierrRetirado').value) || 0;
 
   btn.disabled = true; btn.textContent = 'Cerrando...';
   try {
@@ -2386,7 +2427,6 @@ window.confirmarCierreCiego = async function() {
     const sistTotal    = parseInt(cajaData.totalVentas) || 0;
 
     // Cajero: desconta el monto inicial del efectivo contado
-    // (el cajero cuenta todo el efectivo físico = ventas + inicial)
     const manEfectivoNeto = manEfectivo - montoInicial;
     const manTotal        = manEfectivoNeto + manDebito + manCredito + manTransfer;
 
@@ -2397,8 +2437,15 @@ window.confirmarCierreCiego = async function() {
     const difTransfer = manTransfer     - sistTransfer;
     const difTotal    = manTotal        - sistTotal;
 
+    // Saldo que queda en caja para el turno siguiente
+    // = efectivo físico contado − monto retirado (si se registró retiro)
+    const saldoSiguiente = montoRetirado > 0 ? manEfectivo - montoRetirado : null;
+
     // Cerrar caja en Firestore
-    await updateDoc(doc(db, 'cajas', cajaDocId), { estado: 'cerrada', cierre: Timestamp.now() });
+    await updateDoc(doc(db, 'cajas', cajaDocId), {
+      estado: 'cerrada', cierre: Timestamp.now(),
+      ...(saldoSiguiente !== null ? { saldoSiguiente } : {})
+    });
 
     // Guardar evaluación de cierre ciego
     await addDoc(collection(db, 'evaluacion_caja'), {
@@ -2410,11 +2457,13 @@ window.confirmarCierreCiego = async function() {
       cierre: Timestamp.now(),
       // Sistema (solo ventas)
       sistEfectivo, sistDebito, sistCredito, sistTransfer, sistTotal,
-      // Cajero (efectivo ya descontado el inicial, débito/crédito/transfer igual)
+      // Cajero (efectivo ya descontado el inicial)
       manEfectivo, manEfectivoNeto,
       manDebito, manCredito, manTransfer, manTotal,
-      // Diferencias (comparación limpia sobre ventas)
-      difEfectivo, difDebito, difCredito, difTransfer, difTotal
+      // Diferencias
+      difEfectivo, difDebito, difCredito, difTransfer, difTotal,
+      // Retiro y saldo siguiente (opcionales)
+      ...(montoRetirado > 0 ? { montoRetirado, saldoSiguiente } : {})
     });
 
     cajaId = null;
@@ -2671,6 +2720,15 @@ window.cargarEvaluacionesCaja = async function() {
           ${e.montoInicial ? `
           <tr style="border-top:0.5px solid #f0f0f0;color:#888">
             <td style="padding:4px 0;font-size:11px;font-style:italic" colspan="4">💰 Monto inicial descontado del efectivo: $${parseInt(e.montoInicial).toLocaleString('es-CL')}</td>
+          </tr>` : ''}
+          ${e.montoRetirado ? `
+          <tr style="border-top:0.5px solid #f0f0f0;color:#555">
+            <td style="padding:4px 0;font-size:11px" colspan="3">💸 Monto retirado de caja</td>
+            <td style="text-align:right;padding:4px;font-size:11px;font-weight:600">−$${parseInt(e.montoRetirado).toLocaleString('es-CL')}</td>
+          </tr>
+          <tr style="border-top:0.5px solid #f0f0f0;background:#f8f8f8">
+            <td style="padding:4px 0;font-size:11px;font-weight:600;color:#1D7A5F" colspan="3">🏦 Saldo en caja para turno siguiente</td>
+            <td style="text-align:right;padding:4px;font-size:12px;font-weight:700;color:#1D7A5F">$${parseInt(e.saldoSiguiente).toLocaleString('es-CL')}</td>
           </tr>` : ''}
           <tr style="border-top:1px solid #ddd;font-weight:700">
             <td style="padding:6px 0">TOTAL VENTAS</td>
