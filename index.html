@@ -1038,23 +1038,28 @@ function renderResumenVisor() {
   const CATS = ['hoy', 'ayer', 'antesayer', 'cuartoDia'];
   const snap = window._stockMap || {};
   const resumen = {};
-
-  // Para vista "ambas", usamos el stockMap que ya fue cargado por cargarStockAmbas
-  // Para vista de sucursal, usamos _stockMap filtrado
   const prefijo = visorSucursal === 'ambas' ? null : visorSucursal + '_';
 
   Object.entries(snap).forEach(([key, data]) => {
     if (prefijo && !key.startsWith(prefijo)) return;
     const prod = productos.find(p => p.id === data.productoId);
-    if (!prod) return;
+    if (!prod || prod.controlStock === false) return;
     if (_visorResumenArea && normalizarArea(prod.area) !== _visorResumenArea) return;
+    const esPerm = prod.autoEliminar === false;
 
     if (!resumen[data.productoId]) {
-      resumen[data.productoId] = { nombre: prod.nombre, emoji: prod.emoji || '📦', cats: {}, total: 0 };
+      resumen[data.productoId] = { nombre: prod.nombre, emoji: prod.emoji || '📦', cats: {}, total: 0, esPerm };
     }
-    CATS.forEach(cat => {
-      const qty = data[cat]?.cantidad || 0;
-      if (qty > 0) {
+
+    const entradas = data.entradas || {};
+    Object.entries(entradas).forEach(([fechaKey, qty]) => {
+      if (!qty || qty <= 0) return;
+      const cat = getCategoriaFecha(fechaKey);
+      if (esPerm) {
+        // Permanentes: mostrar como "Sin venc."
+        resumen[data.productoId].cats['permanente'] = (resumen[data.productoId].cats['permanente'] || 0) + qty;
+        resumen[data.productoId].total += qty;
+      } else if (CATS.includes(cat)) {
         resumen[data.productoId].cats[cat] = (resumen[data.productoId].cats[cat] || 0) + qty;
         resumen[data.productoId].total += qty;
       }
@@ -1066,12 +1071,12 @@ function renderResumenVisor() {
 
   if (!items.length) { lista.innerHTML = '<div class="empty">Sin stock</div>'; return; }
 
-  const catLabel = { hoy: 'Hoy', ayer: 'Ayer', antesayer: 'Ant.', cuartoDia: '4to' };
+  const catLabel = { hoy: 'Hoy', ayer: 'Ayer', antesayer: 'Ant.', cuartoDia: '4to', permanente: 'Sin venc.' };
 
   lista.innerHTML = items.map(r => {
-    const detalle = CATS
-      .filter(c => r.cats[c] > 0)
-      .map(c => `${catLabel[c]}: ${r.cats[c]}`)
+    const detalle = Object.entries(r.cats)
+      .filter(([, q]) => q > 0)
+      .map(([c, q]) => `${catLabel[c] || c}: ${q}`)
       .join(' · ');
     return `<div class="visor-resumen-row">
       <div>
@@ -1086,46 +1091,63 @@ function renderResumenVisor() {
 async function cargarStockAmbas() {
   const snap = await getDocs(collection(db, 'stock'));
   const SUCS = ['ainavillo', 'barros_arana'];
-  const CATS_LIST = ['hoy', 'ayer', 'antesayer', 'cuartoDia', 'merma'];
+  const CATS_KEYS = ['hoy', 'ayer', 'antesayer', 'cuartoDia', 'merma', 'permanente'];
 
-  // Agrupar por productoId, sumar cantidades de ambas sucursales
+  // Agrupar por productoId, sumar cantidades usando nuevo formato entradas
   const merged = {};
   snap.docs.forEach(d => {
     const data = d.data();
     if (!SUCS.includes(data.sucursal)) return;
     const pid = data.productoId;
     if (!merged[pid]) merged[pid] = { productoId: pid, ain: {}, ba: {} };
-    const key = data.sucursal === 'ainavillo' ? 'ain' : 'ba';
-    CATS_LIST.forEach(cat => {
-      if (data[cat]?.cantidad > 0) merged[pid][key][cat] = data[cat];
+    const sideKey = data.sucursal === 'ainavillo' ? 'ain' : 'ba';
+    const entradas = data.entradas || {};
+    // Calcular cantidad por categoría dinámicamente
+    Object.entries(entradas).forEach(([fechaKey, qty]) => {
+      if (!qty || qty <= 0) return;
+      const cat = getCategoriaFecha(fechaKey);
+      merged[pid][sideKey][cat] = (merged[pid][sideKey][cat] || 0) + qty;
     });
   });
 
   const CATS = [
-    { key: 'hoy',        listaId: 'stockListaHoy',        totalId: 'totalHoy',        titulo: '📦 Stock del día',         cls: 'cat-hoy' },
-    { key: 'ayer',       listaId: 'stockListaAyer',        totalId: 'totalAyer',       titulo: '📦 Stock de ayer',          cls: 'cat-ayer' },
-    { key: 'antesayer',  listaId: 'stockListaAntesayer',   totalId: 'totalAntesayer',  titulo: '📦 Antes de ayer',          cls: 'cat-antesayer' },
-    { key: 'cuartoDia',  listaId: 'stockListaCuartoDia',   totalId: 'totalCuartoDia',  titulo: '📦 Cuarto día',             cls: 'cat-cuartodia' },
-    { key: 'merma',      listaId: 'stockListaMerma',       totalId: 'totalMerma',      titulo: '🗑️ Merma',                  cls: 'cat-merma' },
+    { key: 'hoy',        listaId: 'stockListaHoy',       totalId: 'totalHoy' },
+    { key: 'ayer',       listaId: 'stockListaAyer',       totalId: 'totalAyer' },
+    { key: 'antesayer',  listaId: 'stockListaAntesayer',  totalId: 'totalAntesayer' },
+    { key: 'cuartoDia',  listaId: 'stockListaCuartoDia',  totalId: 'totalCuartoDia' },
+    { key: 'permanente', listaId: 'stockListaPermanente', totalId: 'totalPermanente' },
+    { key: 'merma',      listaId: 'stockListaMerma',      totalId: 'totalMerma' },
   ];
 
   CATS.forEach(({ key, listaId, totalId }) => {
-    const cont  = document.getElementById(listaId);
+    const cont    = document.getElementById(listaId);
     const totalEl = document.getElementById(totalId);
     if (!cont) return;
-    // Productos que tienen stock en esta categoría en al menos una sucursal
-    const conStock = Object.values(merged).filter(m => m.ain[key]?.cantidad > 0 || m.ba[key]?.cantidad > 0);
-    if (!conStock.length) { cont.innerHTML = '<div class="empty">Sin stock</div>'; if (totalEl) totalEl.textContent = ''; return; }
+
+    const conStock = Object.values(merged).filter(m => {
+      const prod = productos.find(p => p.id === m.productoId);
+      if (!prod || prod.controlStock === false) return false;
+      // Permanentes solo en su card, perecederos solo en sus cards
+      if (key === 'permanente' && prod.autoEliminar !== false) return false;
+      if (key !== 'permanente' && prod.autoEliminar === false) return false;
+      return (m.ain[key] || 0) + (m.ba[key] || 0) > 0;
+    });
+
+    if (!conStock.length) {
+      cont.innerHTML = '<div class="empty">Sin stock</div>';
+      if (totalEl) totalEl.textContent = '';
+      return;
+    }
 
     let valorTotal = 0;
     cont.innerHTML = conStock.map(m => {
-      const prod = productos.find(p => p.id === m.productoId);
+      const prod   = productos.find(p => p.id === m.productoId);
       const nombre = prod?.nombre || m.productoId;
-      const qAin = m.ain[key]?.cantidad || 0;
-      const qBa  = m.ba[key]?.cantidad  || 0;
-      const total = qAin + qBa;
-      const precio = prod ? getPrecioProducto(prod, key) : 0;
-      valorTotal += total * precio;
+      const qAin   = m.ain[key] || 0;
+      const qBa    = m.ba[key]  || 0;
+      const total  = qAin + qBa;
+      const precio = prod ? getPrecioProducto(prod, key === 'permanente' ? 'hoy' : key) : 0;
+      valorTotal  += total * precio;
       return `<div class="stock-row" style="grid-template-columns:1fr auto">
         <div>
           <div class="stock-prod-nombre">${nombre}</div>
