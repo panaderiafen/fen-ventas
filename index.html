@@ -3203,7 +3203,7 @@ async function cargarStockPorCategoria() {
       const logCat = (i.entradasLog || [])
         .filter(l => entradas.some(e => e.key === l.fechaKey))
         .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
-      const logStr = logCat.length > 1
+      const logStr = logCat.length > 0
         ? logCat.map(l => `${l.cantidad} ud. ${l.hora}`).join('&nbsp;&nbsp;')
         : '';
 
