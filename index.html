@@ -885,7 +885,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -1323,6 +1323,7 @@ function keyToFechaCL(key) {
 function getCategoriaFecha(dateKey) {
   if (!dateKey) return 'hoy';
   if (dateKey === 'permanente') return 'permanente'; // clave especial, nunca envejece
+  if (dateKey.startsWith('merma_')) return 'merma';  // desechado manualmente
   if (dateKey.length !== 8) return 'hoy';
   const hoyISO  = fechaLocalHoy();
   const keyISO  = `${dateKey.slice(0,4)}-${dateKey.slice(4,6)}-${dateKey.slice(6,8)}`;
@@ -3197,17 +3198,29 @@ async function cargarStockPorCategoria() {
       valorTotal  += qty * precio;
       const entradas = getEntradasPorCategoria(i, key);
       const fechaRef = entradas.length ? keyToFechaCL(entradas[0].key) : '';
+
+      // Construir detalle de horas desde entradasLog filtrado por este fechaKey y categoría
+      const logCat = (i.entradasLog || [])
+        .filter(l => entradas.some(e => e.key === l.fechaKey))
+        .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+      const logStr = logCat.length > 1
+        ? logCat.map(l => `${l.cantidad} ud. ${l.hora}`).join('&nbsp;&nbsp;')
+        : '';
+
       return `<div class="stock-row">
-        <div>
+        <div style="flex:1;min-width:0">
           <div class="stock-prod-nombre">${nombre}</div>
-          <div class="stock-prod-meta">${fechaRef}</div>
+          <div class="stock-prod-meta">${fechaRef}${logStr ? `&nbsp;&nbsp;${logStr}` : ''}</div>
         </div>
         ${esStockViewer
           ? `<div class="visor-stock-qty">${qty} ud.</div>`
-          : `<div class="stock-qty-ctrl">
-              <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
-              <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
-              <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
+          : `<div style="display:flex;align-items:center;gap:6px">
+              <div class="stock-qty-ctrl">
+                <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
+                <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
+                <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
+              </div>
+              <button onclick="desecharStock('${i.productoId}','${key}','${nombre.replace(/'/g,"\\'")}',${qty})" title="Desechar" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;padding:4px;line-height:1" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='#ccc'">🗑</button>
             </div>`}
       </div>`;
     }).join('');
@@ -3384,7 +3397,40 @@ window.ajustarStockPerm = async function(productoId, delta) {
   renderProductos();
 };
 
-// Determina categoría según fecha ISO de input (usa el nuevo sistema de fechas)
+// Desecha todo el stock de un producto en una categoría (producto en mal estado)
+// → mueve a Merma para que el admin lo registre luego en Sheets
+window.desecharStock = async function(productoId, cat, nombre, qty) {
+  if (!confirm(`¿Desechar ${qty} unidades de "${nombre}"?\n\nEl stock pasará a la tarjeta Merma para su registro.`)) return;
+  try {
+    const stockRef  = doc(db, 'stock', `${sucursal}_${productoId}`);
+    const stockSnap = await getDoc(stockRef);
+    if (!stockSnap.exists()) return;
+    const entradas = stockSnap.data().entradas || {};
+    const updates  = {};
+
+    // Buscar la fecha más antigua de esta categoría (para registrar en merma)
+    const entradasCat = Object.entries(entradas)
+      .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    if (!entradasCat.length) return;
+    const fechaMermaKey = entradasCat[0][0]; // fecha más antigua
+
+    // Poner a 0 todas las entradas de esta categoría
+    entradasCat.forEach(([k]) => { updates[`entradas.${k}`] = 0; });
+
+    // Mover a clave "merma_YYYYMMDD" usando la fecha más antigua como referencia
+    // Se acumula con merma existente si ya había
+    const qtyMermaActual = entradas[`merma_${fechaMermaKey}`] || 0;
+    updates[`entradas.merma_${fechaMermaKey}`] = qtyMermaActual + qty;
+
+    await updateDoc(stockRef, updates);
+    await cargarStockPorCategoria();
+    showToast(`🗑 ${qty} ud. de "${nombre}" movidas a Merma`);
+  } catch(e) {
+    alert('Error al desechar: ' + e.message);
+  }
+};
 function determinarCatPorFecha(fechaISO) {
   if (!fechaISO) return 'hoy';
   const key = fechaISO.replace(/-/g, '');
@@ -3430,6 +3476,7 @@ window.ingresarStock = async function() {
   const esPermanente = prod && prod.autoEliminar === false;
   const fechaKey = esPermanente ? 'permanente' : (fechaInput ? fechaInput.replace(/-/g, '') : fechaKeyHoy());
   const cat = getCategoriaFecha(fechaKey);
+  const hora = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
 
   btn.disabled = true; btn.textContent = 'Ingresando...';
   const ref  = doc(db, 'stock', `${sucursal}_${productoId}`);
@@ -3440,28 +3487,35 @@ window.ingresarStock = async function() {
       const entradasActuales = dataActual.entradas || {};
 
       if (esPermanente) {
-        // Consolidar: sumar todas las entradas con fecha (no "permanente") al acumulado
         const qtyPermActual = entradasActuales['permanente'] || 0;
         let qtyFechasViejas = 0;
         const updates = {};
         Object.entries(entradasActuales).forEach(([k, q]) => {
           if (k !== 'permanente' && q > 0) {
             qtyFechasViejas += q;
-            updates[`entradas.${k}`] = 0; // limpiar entrada con fecha
+            updates[`entradas.${k}`] = 0;
           }
         });
         updates['entradas.permanente'] = qtyPermActual + cantidad + qtyFechasViejas;
+        updates.entradasLog = arrayUnion({ fechaKey, cantidad, hora });
         await updateDoc(ref, updates);
       } else {
         const prevQty = entradasActuales[fechaKey] || 0;
-        await updateDoc(ref, { [`entradas.${fechaKey}`]: prevQty + cantidad });
+        await updateDoc(ref, {
+          [`entradas.${fechaKey}`]: prevQty + cantidad,
+          entradasLog: arrayUnion({ fechaKey, cantidad, hora })
+        });
       }
     } else {
-      await setDoc(ref, { sucursal, productoId, entradas: { [fechaKey]: cantidad } });
+      await setDoc(ref, {
+        sucursal, productoId,
+        entradas: { [fechaKey]: cantidad },
+        entradasLog: [{ fechaKey, cantidad, hora }]
+      });
     }
     await addDoc(collection(db, 'stockMovimientos'), {
       sucursal, productoId, cantidad, categoria: cat,
-      fechaKey, tipo: 'ingreso', obs,
+      fechaKey, hora, tipo: 'ingreso', obs,
       usuario: usuario.email, fecha: Timestamp.now()
     });
     document.getElementById('stockCantidad').value = '';
