@@ -187,6 +187,14 @@ input:focus, select:focus { border-color: #003a79; }
 .cat-badge.cat-permanente { background: #E3F3EC; color: #1D7A5F; }
 .stock-cat-btn.active.cat-permanente { background: #1D7A5F; color: white; }
 
+.stock-cat-titulo.cat-ultimaoferta { color: #C05621; }
+.cat-badge.cat-ultimaoferta { background: #FEF3C7; color: #C05621; }
+.stock-cat-btn.active.cat-ultimaoferta { background: #C05621; color: white; }
+.btn-a-merma { font-size: 11px; padding: 3px 9px; border-radius: 6px; border: 1px solid #e74c3c; background: white; color: #e74c3c; cursor: pointer; white-space: nowrap; }
+.btn-a-merma:hover { background: #e74c3c; color: white; }
+.btn-rescatar { font-size: 11px; padding: 3px 9px; border-radius: 6px; border: 1px solid #1D7A5F; background: white; color: #1D7A5F; cursor: pointer; white-space: nowrap; }
+.btn-rescatar:hover { background: #1D7A5F; color: white; }
+
 /* BOTÓN ADMIN PARA REGISTRAR MERMA */
 .btn-reg-merma { font-size: 11px; padding: 3px 9px; border-radius: 6px; border: 1px solid #999; background: white; color: #555; cursor: pointer; margin-top: 4px; white-space: nowrap; }
 .btn-reg-merma:hover { background: #374151; color: white; border-color: #374151; }
@@ -364,10 +372,11 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
             <div class="stock-cat-switch" id="stockCatSwitch" style="margin-bottom:0;flex:1">
               <span class="stock-cat-label">Descontar de:</span>
               <div class="stock-cat-btns">
-                <button class="stock-cat-btn active cat-hoy"    id="scat-hoy"        onclick="selCatStock('hoy')">Hoy</button>
-                <button class="stock-cat-btn cat-ayer"          id="scat-ayer"       onclick="selCatStock('ayer')">Ayer</button>
-                <button class="stock-cat-btn cat-antesayer"     id="scat-antesayer"  onclick="selCatStock('antesayer')">Ant.</button>
-                <button class="stock-cat-btn cat-cuartodia"     id="scat-cuartodia"  onclick="selCatStock('cuartoDia')">4to</button>
+                <button class="stock-cat-btn active cat-hoy"        id="scat-hoy"          onclick="selCatStock('hoy')">Hoy</button>
+                <button class="stock-cat-btn cat-ayer"              id="scat-ayer"         onclick="selCatStock('ayer')">Ayer</button>
+                <button class="stock-cat-btn cat-antesayer"         id="scat-antesayer"    onclick="selCatStock('antesayer')">Ant.</button>
+                <button class="stock-cat-btn cat-cuartodia"         id="scat-cuartodia"    onclick="selCatStock('cuartoDia')">4to</button>
+                <button class="stock-cat-btn cat-ultimaoferta"      id="scat-ultimaoferta" onclick="selCatStock('ultimaOferta')">Últ.</button>
               </div>
             </div>
             <button class="btn-sm" id="btnToggleStock" onclick="toggleMostrarSinStock()"
@@ -534,6 +543,16 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
           <div id="stockListaCuartoDia"><div class="empty">Sin stock de cuarto día</div></div>
         </div>
 
+        <!-- Última oferta -->
+        <div class="card">
+          <div class="stock-cat-header">
+            <div class="stock-cat-titulo cat-ultimaoferta">🏷️ Última oferta</div>
+            <span id="totalUltimaOferta" style="font-size:11px;color:#888"></span>
+          </div>
+          <p style="font-size:11px;color:#888;margin-bottom:8px">Productos listos para oferta final. Cualquiera puede moverlos a Merma; solo el admin puede rescatarlos.</p>
+          <div id="stockListaUltimaOferta"><div class="empty">Sin productos en última oferta</div></div>
+        </div>
+
         <!-- Sin vencimiento -->
         <div class="card">
           <div class="stock-cat-header">
@@ -650,6 +669,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
           <div><label>Precio ayer ($)</label><input type="number" id="prodPrecioAyer" placeholder="0" min="0"/></div>
           <div><label>Precio ant. ($)</label><input type="number" id="prodPrecioAntesayer" placeholder="0" min="0"/></div>
           <div><label>Precio 4to día ($)</label><input type="number" id="prodPrecioCuartoDia" placeholder="0" min="0"/></div>
+          <div><label>Precio últ. oferta ($)</label><input type="number" id="prodPrecioUltimaOferta" placeholder="0" min="0"/></div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 0;border-top:0.5px solid #f0f0f0">
           <div>
@@ -863,6 +883,26 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <div class="modal-btns">
       <button class="btn btn-secondary" style="flex:1" onclick="cerrarModalAnulacion()">Cancelar</button>
       <button class="btn btn-danger" style="flex:2" id="btnConfirmarAnulacion" onclick="confirmarSolicitudAnulacion()">📩 Enviar solicitud</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RESCATAR DE MERMA -->
+<div class="modal-overlay" id="modalRescatar">
+  <div class="modal">
+    <div class="modal-title">↩ Rescatar de Merma</div>
+    <p style="font-size:12px;color:#888;margin-bottom:14px">¿A qué categoría quieres mover este producto?</p>
+    <input type="hidden" id="rescatarProdId"/>
+    <input type="hidden" id="rescatarQty"/>
+    <div style="display:flex;flex-direction:column;gap:8px" id="rescatarOpciones">
+      <button class="btn btn-secondary" onclick="confirmarRescatar('hoy')">📦 Stock del día (Hoy)</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('ayer')">📦 Stock de ayer</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('antesayer')">📦 Antes de ayer</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('cuartoDia')">📦 Cuarto día</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('ultimaOferta')" style="color:#C05621;border-color:#C05621">🏷️ Última oferta</button>
+    </div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalRescatar').classList.remove('open')">Cancelar</button>
     </div>
   </div>
 </div>
@@ -1322,8 +1362,9 @@ function keyToFechaCL(key) {
 // Determina la categoría de stock según la diferencia de días con hoy
 function getCategoriaFecha(dateKey) {
   if (!dateKey) return 'hoy';
-  if (dateKey === 'permanente') return 'permanente'; // clave especial, nunca envejece
-  if (dateKey.startsWith('merma_')) return 'merma';  // desechado manualmente
+  if (dateKey === 'permanente') return 'permanente';
+  if (dateKey.startsWith('merma_')) return 'merma';
+  if (dateKey.startsWith('ultimaoferta_')) return 'ultimaOferta';
   if (dateKey.length !== 8) return 'hoy';
   const hoyISO  = fechaLocalHoy();
   const keyISO  = `${dateKey.slice(0,4)}-${dateKey.slice(4,6)}-${dateKey.slice(6,8)}`;
@@ -1334,7 +1375,7 @@ function getCategoriaFecha(dateKey) {
   if (diff === 1) return 'ayer';
   if (diff === 2) return 'antesayer';
   if (diff === 3) return 'cuartoDia';
-  return 'merma';
+  return 'ultimaOferta'; // 4+ días → última oferta (no merma automática)
 }
 
 // Devuelve la cantidad total para una categoría sumando todas las entradas de esa fecha
@@ -1361,17 +1402,22 @@ function getPrecioProducto(prod, cat) {
     if (prod.excepcionHoraria && hora < 15) return prod.precioHoy || prod.precio || 0;
     return prod.precioAyer || prod.precioHoy || prod.precio || 0;
   }
-  if (cat === 'antesayer') return prod.precioAntesayer || prod.precioAyer || prod.precioHoy || prod.precio || 0;
-  if (cat === 'cuartoDia')  return prod.precioCuartoDia || prod.precioAntesayer || prod.precioAyer || prod.precioHoy || prod.precio || 0;
+  if (cat === 'antesayer')    return prod.precioAntesayer || prod.precioAyer || prod.precioHoy || prod.precio || 0;
+  if (cat === 'cuartoDia')    return prod.precioCuartoDia || prod.precioAntesayer || prod.precioAyer || prod.precioHoy || prod.precio || 0;
+  if (cat === 'ultimaOferta') return prod.precioUltimaOferta || prod.precioCuartoDia || prod.precioAntesayer || prod.precioHoy || prod.precio || 0;
   return prod.precio || 0;
 }
 
 // Cambia la categoría de stock activa en ventas
 window.selCatStock = function(cat) {
   categoriaStockActiva = cat;
-  ['hoy','ayer','antesayer','cuartodia'].forEach(c => {
+  ['hoy','ayer','antesayer','cuartodia','ultimaoferta'].forEach(c => {
     const btn = document.getElementById('scat-' + c);
-    if (btn) btn.classList.toggle('active', c === cat || (c === 'cuartodia' && cat === 'cuartoDia'));
+    if (btn) btn.classList.toggle('active',
+      c === cat ||
+      (c === 'cuartodia'    && cat === 'cuartoDia') ||
+      (c === 'ultimaoferta' && cat === 'ultimaOferta')
+    );
   });
   renderProductos();
 };
@@ -1710,11 +1756,12 @@ window.editarProducto = function(id) {
   document.getElementById('prodArea').value         = normalizarArea(p.area) || 'BOL';
   document.getElementById('prodCategoria').value    = p.categoria || '';
   document.getElementById('prodControlStock').checked   = conControl;
-  document.getElementById('prodPrecioHoy').value        = p.precioHoy || p.precio || '';
-  document.getElementById('prodPrecioAyer').value       = p.precioAyer || '';
-  document.getElementById('prodPrecioAntesayer').value  = p.precioAntesayer || '';
-  document.getElementById('prodPrecioCuartoDia').value  = p.precioCuartoDia || '';
-  document.getElementById('prodPrecioUnico').value      = p.precioHoy || p.precio || '';
+  document.getElementById('prodPrecioHoy').value           = p.precioHoy || p.precio || '';
+  document.getElementById('prodPrecioAyer').value          = p.precioAyer || '';
+  document.getElementById('prodPrecioAntesayer').value     = p.precioAntesayer || '';
+  document.getElementById('prodPrecioCuartoDia').value     = p.precioCuartoDia || '';
+  document.getElementById('prodPrecioUltimaOferta').value  = p.precioUltimaOferta || '';
+  document.getElementById('prodPrecioUnico').value         = p.precioHoy || p.precio || '';
   document.getElementById('prodExcepcion').checked     = !!p.excepcionHoraria;
   document.getElementById('prodAutoEliminar').checked  = p.autoEliminar !== false;
   toggleCamposStock();
@@ -1733,6 +1780,7 @@ window.cancelarEdicion = function() {
   document.getElementById('prodPrecioAyer').value = '';
   document.getElementById('prodPrecioAntesayer').value = '';
   document.getElementById('prodPrecioCuartoDia').value = '';
+  document.getElementById('prodPrecioUltimaOferta').value = '';
   document.getElementById('prodPrecioUnico').value = '';
   document.getElementById('prodExcepcion').checked = false;
   document.getElementById('prodAutoEliminar').checked = true;
@@ -1759,13 +1807,14 @@ window.guardarProducto = async function() {
   const categoria = document.getElementById('prodCategoria').value.trim() || area;
   const controlStock = document.getElementById('prodControlStock').checked;
 
-  let precioHoy, precioAyer, precioAntesayer, precioCuartoDia, excepcionHoraria, autoEliminar;
+  let precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta, excepcionHoraria, autoEliminar;
   if (controlStock) {
-    precioHoy        = parseInt(document.getElementById('prodPrecioHoy').value)        || 0;
-    precioAyer       = parseInt(document.getElementById('prodPrecioAyer').value)       || 0;
-    precioAntesayer  = parseInt(document.getElementById('prodPrecioAntesayer').value)  || 0;
-    precioCuartoDia  = parseInt(document.getElementById('prodPrecioCuartoDia').value)  || 0;
-    excepcionHoraria = document.getElementById('prodExcepcion').checked;
+    precioHoy           = parseInt(document.getElementById('prodPrecioHoy').value)           || 0;
+    precioAyer          = parseInt(document.getElementById('prodPrecioAyer').value)          || 0;
+    precioAntesayer     = parseInt(document.getElementById('prodPrecioAntesayer').value)     || 0;
+    precioCuartoDia     = parseInt(document.getElementById('prodPrecioCuartoDia').value)     || 0;
+    precioUltimaOferta  = parseInt(document.getElementById('prodPrecioUltimaOferta').value)  || 0;
+    excepcionHoraria    = document.getElementById('prodExcepcion').checked;
     autoEliminar     = document.getElementById('prodAutoEliminar').checked;
   } else {
     // Producto sin control de stock: un único precio fijo
@@ -1786,8 +1835,8 @@ window.guardarProducto = async function() {
   btn.disabled = true; btn.textContent = 'Guardando...';
   const data = {
     nombre, emoji, area, categoria, activo: true,
-    precio: precioHoy, // backward compat
-    precioHoy, precioAyer, precioAntesayer, precioCuartoDia,
+    precio: precioHoy,
+    precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta,
     excepcionHoraria, autoEliminar, controlStock
   };
   try {
@@ -3167,10 +3216,11 @@ async function cargarStockPorCategoria() {
   if (esStockViewer) renderResumenVisor();
 
   const CATS = [
-    { key: 'hoy',       listaId: 'stockListaHoy',       totalId: 'totalHoy' },
-    { key: 'ayer',      listaId: 'stockListaAyer',       totalId: 'totalAyer' },
-    { key: 'antesayer', listaId: 'stockListaAntesayer',  totalId: 'totalAntesayer' },
-    { key: 'cuartoDia', listaId: 'stockListaCuartoDia',  totalId: 'totalCuartoDia' },
+    { key: 'hoy',          listaId: 'stockListaHoy',          totalId: 'totalHoy' },
+    { key: 'ayer',         listaId: 'stockListaAyer',         totalId: 'totalAyer' },
+    { key: 'antesayer',    listaId: 'stockListaAntesayer',    totalId: 'totalAntesayer' },
+    { key: 'cuartoDia',    listaId: 'stockListaCuartoDia',    totalId: 'totalCuartoDia' },
+    { key: 'ultimaOferta', listaId: 'stockListaUltimaOferta', totalId: 'totalUltimaOferta' },
   ];
 
   CATS.forEach(({ key, listaId, totalId }) => {
@@ -3220,7 +3270,9 @@ async function cargarStockPorCategoria() {
                 <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
                 <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
               </div>
-              <button onclick="desecharStock('${i.productoId}','${key}','${nombre.replace(/'/g,"\\'")}',${qty})" title="Desechar" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;padding:4px;line-height:1" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='#ccc'">🗑</button>
+              ${key === 'ultimaOferta'
+                ? `<button class="btn-a-merma" onclick="moverAMerma('${i.productoId}','${nombre.replace(/'/g,"\\'")}',${qty})">→ Merma</button>`
+                : `<button onclick="desecharStock('${i.productoId}','${key}','${nombre.replace(/'/g,"\\'")}',${qty})" title="Desechar" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;padding:4px;line-height:1" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='#ccc'">🗑</button>`}
             </div>`}
       </div>`;
     }).join('');
@@ -3296,7 +3348,10 @@ async function cargarStockPorCategoria() {
             <div class="stock-prod-meta">${fechaRef} · ${qty} ud. · pérdida $${(qty*precio).toLocaleString('es-CL')}</div>
           </div>
           ${esAdmin
-            ? `<button class="btn-reg-merma" onclick="registrarMermaItem('${i.productoId}','${nombre.replace(/'/g,"\'")}',${qty},${precio})">✓ Registrar merma</button>`
+            ? `<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+                <button class="btn-reg-merma" onclick="registrarMermaItem('${i.productoId}','${nombre.replace(/'/g,"\'")}',${qty},${precio})">✓ Registrar merma</button>
+                <button class="btn-rescatar" onclick="abrirModalRescatar('${i.productoId}','${nombre.replace(/'/g,"\'")}',${qty})">↩ Rescatar</button>
+               </div>`
             : '<span style="font-size:11px;color:#aaa">Solo admin</span>'}
         </div>`;
       }).join('');
@@ -3397,8 +3452,79 @@ window.ajustarStockPerm = async function(productoId, delta) {
   renderProductos();
 };
 
-// Desecha todo el stock de un producto en una categoría (producto en mal estado)
-// → mueve a Merma para que el admin lo registre luego en Sheets
+// Mueve stock de Última oferta → Merma (disponible para todos los usuarios)
+window.moverAMerma = async function(productoId, nombre, qty) {
+  if (!confirm(`¿Mover ${qty} ud. de "${nombre}" a Merma?`)) return;
+  try {
+    const stockRef  = doc(db, 'stock', `${sucursal}_${productoId}`);
+    const stockSnap = await getDoc(stockRef);
+    if (!stockSnap.exists()) return;
+    const entradas = stockSnap.data().entradas || {};
+    const updates  = {};
+    // Recopilar todas las entradas de ultimaOferta (fechas 4+ días y claves ultimaoferta_)
+    Object.entries(entradas).forEach(([k, q]) => {
+      if (q > 0 && getCategoriaFecha(k) === 'ultimaOferta') {
+        updates[`entradas.${k}`] = 0;
+        const mermaKey = k.startsWith('ultimaoferta_') ? k.replace('ultimaoferta_', 'merma_') : `merma_${k}`;
+        updates[`entradas.${mermaKey}`] = (entradas[mermaKey] || 0) + q;
+      }
+    });
+    if (Object.keys(updates).length) await updateDoc(stockRef, updates);
+    await cargarStockPorCategoria();
+    showToast(`🗑 "${nombre}" movido a Merma`);
+  } catch(e) { alert('Error: ' + e.message); }
+};
+
+// Admin: abre modal para elegir destino al rescatar de Merma
+window.abrirModalRescatar = function(productoId, nombre, qty) {
+  document.getElementById('rescatarProdId').value = productoId;
+  document.getElementById('rescatarQty').value    = qty;
+  document.getElementById('modalRescatar').querySelector('.modal-title').textContent = `↩ Rescatar "${nombre}" (${qty} ud.)`;
+  document.getElementById('modalRescatar').classList.add('open');
+};
+
+// Admin: confirma el rescate y mueve de merma a la categoría elegida
+window.confirmarRescatar = async function(catDestino) {
+  const productoId = document.getElementById('rescatarProdId').value;
+  const qty        = parseInt(document.getElementById('rescatarQty').value) || 0;
+  document.getElementById('modalRescatar').classList.remove('open');
+  try {
+    const stockRef  = doc(db, 'stock', `${sucursal}_${productoId}`);
+    const stockSnap = await getDoc(stockRef);
+    if (!stockSnap.exists()) return;
+    const entradas = stockSnap.data().entradas || {};
+    const updates  = {};
+
+    // Calcular la clave destino según la categoría elegida
+    const hoy = fechaLocalHoy().replace(/-/g, '');
+    const ayer = (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toLocaleDateString('es-CL').split('/').reverse().join('').padStart(8,'0'); })();
+    const antesayer = (() => { const d = new Date(); d.setDate(d.getDate()-2); return d.toLocaleDateString('es-CL').split('/').reverse().join('').padStart(8,'0'); })();
+    const cuartoDia = (() => { const d = new Date(); d.setDate(d.getDate()-3); return d.toLocaleDateString('es-CL').split('/').reverse().join('').padStart(8,'0'); })();
+
+    const claveDestino = {
+      hoy:          hoy,
+      ayer:         ayer,
+      antesayer:    antesayer,
+      cuartoDia:    cuartoDia,
+      ultimaOferta: `ultimaoferta_${hoy}`
+    }[catDestino] || hoy;
+
+    // Limpiar todas las claves merma_ y mover al destino
+    let totalRescatado = 0;
+    Object.entries(entradas).forEach(([k, q]) => {
+      if (k.startsWith('merma_') && q > 0) {
+        updates[`entradas.${k}`] = 0;
+        totalRescatado += q;
+      }
+    });
+    if (totalRescatado > 0) {
+      updates[`entradas.${claveDestino}`] = (entradas[claveDestino] || 0) + totalRescatado;
+    }
+    if (Object.keys(updates).length) await updateDoc(stockRef, updates);
+    await cargarStockPorCategoria();
+    showToast(`✅ Producto rescatado a "${catDestino}"`);
+  } catch(e) { alert('Error: ' + e.message); }
+};
 window.desecharStock = async function(productoId, cat, nombre, qty) {
   if (!confirm(`¿Desechar ${qty} unidades de "${nombre}"?\n\nEl stock pasará a la tarjeta Merma para su registro.`)) return;
   try {
