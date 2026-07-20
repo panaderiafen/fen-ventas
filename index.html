@@ -3264,16 +3264,23 @@ async function cargarStockPorCategoria() {
         </div>
         ${esStockViewer
           ? `<div class="visor-stock-qty">${qty} ud.</div>`
-          : `<div style="display:flex;align-items:center;gap:6px">
-              <div class="stock-qty-ctrl">
-                <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
-                <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
-                <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
-              </div>
-              ${key === 'ultimaOferta'
-                ? `<button class="btn-a-merma" onclick="moverAMerma('${i.productoId}','${nombre.replace(/'/g,"\\'")}',${qty})">→ Merma</button>`
-                : `<button onclick="desecharStock('${i.productoId}','${key}','${nombre.replace(/'/g,"\\'")}',${qty})" title="Desechar" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;padding:4px;line-height:1" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='#ccc'">🗑</button>`}
-            </div>`}
+          : key === 'ultimaOferta'
+            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+                <div class="stock-qty-ctrl">
+                  <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
+                  <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
+                  <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
+                </div>
+                <button class="btn-a-merma" onclick="moverAMerma('${i.productoId}','${nombre.replace(/'/g,"\\'")}',${qty})">→ Merma</button>
+              </div>`
+            : `<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                <div class="stock-qty-ctrl">
+                  <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
+                  <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
+                  <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
+                </div>
+                <button onclick="desecharStock('${i.productoId}','${key}','${nombre.replace(/'/g,"\\'")}',${qty})" title="Desechar" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;padding:4px;line-height:1" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='#ccc'">🗑</button>
+              </div>`}
       </div>`;
     }).join('');
     if (totalEl) totalEl.textContent = `Valor: $${valorTotal.toLocaleString('es-CL')}`;
