@@ -3502,17 +3502,21 @@ window.confirmarRescatar = async function(catDestino) {
     const entradas = stockSnap.data().entradas || {};
     const updates  = {};
 
-    // Calcular la clave destino según la categoría elegida
-    const hoy = fechaLocalHoy().replace(/-/g, '');
-    const ayer = (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toLocaleDateString('es-CL').split('/').reverse().join('').padStart(8,'0'); })();
-    const antesayer = (() => { const d = new Date(); d.setDate(d.getDate()-2); return d.toLocaleDateString('es-CL').split('/').reverse().join('').padStart(8,'0'); })();
-    const cuartoDia = (() => { const d = new Date(); d.setDate(d.getDate()-3); return d.toLocaleDateString('es-CL').split('/').reverse().join('').padStart(8,'0'); })();
-
+    // Calcular clave YYYYMMDD con offset de días (sin usar toLocaleDateString)
+    function keyOffset(dias) {
+      const d = new Date();
+      d.setDate(d.getDate() - dias);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}${m}${day}`;
+    }
+    const hoy = fechaKeyHoy();
     const claveDestino = {
       hoy:          hoy,
-      ayer:         ayer,
-      antesayer:    antesayer,
-      cuartoDia:    cuartoDia,
+      ayer:         keyOffset(1),
+      antesayer:    keyOffset(2),
+      cuartoDia:    keyOffset(3),
       ultimaOferta: `ultimaoferta_${hoy}`
     }[catDestino] || hoy;
 
