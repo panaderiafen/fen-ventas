@@ -731,13 +731,14 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
               <th>$ Ayer</th>
               <th>$ Ant.</th>
               <th>$ 4to</th>
+              <th>$ Últ.of.</th>
               <th>Exc.15h</th>
               <th>Auto-elm</th>
               <th id="thAcciones">Acc.</th>
             </tr>
           </thead>
           <tbody id="prodLista">
-            <tr><td colspan="10" class="empty">Cargando...</td></tr>
+            <tr><td colspan="11" class="empty">Cargando...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1699,7 +1700,7 @@ function renderTablaProductos() {
 
   const tbody = document.getElementById('prodLista');
   if (!tbody) return;
-  if (lista.length === 0) { tbody.innerHTML = `<tr><td colspan="10" class="empty">Sin productos</td></tr>`; return; }
+  if (lista.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="empty">Sin productos</td></tr>`; return; }
 
   tbody.innerHTML = lista.map(p => {
     const areaCode = normalizarArea(p.area);
@@ -1708,6 +1709,7 @@ function renderTablaProductos() {
     const precAyer = parseInt(p.precioAyer || 0).toLocaleString('es-CL');
     const precAnt  = parseInt(p.precioAntesayer || 0).toLocaleString('es-CL');
     const prec4to  = parseInt(p.precioCuartoDia || 0).toLocaleString('es-CL');
+    const precUlt  = parseInt(p.precioUltimaOferta || 0).toLocaleString('es-CL');
     const accs = esAdmin
       ? `<button class="btn-sm btn-edit" onclick="editarProducto('${p.id}')">✏️</button>
          <button class="btn-sm btn-del"  onclick="eliminarProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">🗑️</button>`
@@ -1721,10 +1723,11 @@ function renderTablaProductos() {
         <td>$${precAyer}</td>
         <td>$${precAnt}</td>
         <td>$${prec4to}</td>
+        <td>$${precUlt}</td>
         <td style="text-align:center">${p.excepcionHoraria ? '✅' : '—'}</td>
         <td style="text-align:center">${p.autoEliminar !== false ? '✅' : '—'}</td>
       ` : `
-        <td colspan="5" style="color:#888">Precio único: $${parseInt(p.precioHoy||p.precio||0).toLocaleString('es-CL')}</td>
+        <td colspan="6" style="color:#888">Precio único: $${parseInt(p.precioHoy||p.precio||0).toLocaleString('es-CL')}</td>
       `}
       <td>${accs}</td>
     </tr>`;
