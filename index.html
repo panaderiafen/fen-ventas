@@ -704,6 +704,16 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       </div>
     </div>
 
+    <!-- Gestionar subcategorías -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div class="card-title" style="margin:0">Gestionar subcategorías</div>
+        <button class="btn-sm btn-edit" onclick="renderGestionCategorias()">↻</button>
+      </div>
+      <div style="font-size:11px;color:#888;margin-bottom:10px">Fusiona subcategorías duplicadas o vacía las que ya no uses.</div>
+      <div id="gestionCategoriasLista"></div>
+    </div>
+
     <!-- Lista de productos -->
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -1611,6 +1621,80 @@ window.toggleCategoriaNueva = function() {
   if (!esNueva) nueva.value = '';
 };
 
+// Lista las subcategorías en uso (agrupadas por área) con opción de fusionar o vaciar
+window.renderGestionCategorias = function() {
+  const wrap = document.getElementById('gestionCategoriasLista');
+  if (!wrap) return;
+  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+
+  const grupos = {};
+  fuente.forEach(p => {
+    const area = normalizarArea(p.area);
+    const cat  = (p.categoria || '').trim();
+    if (!cat || cat === area) return; // sin subcategoría propia, nada que gestionar
+    const key = `${area}|||${cat}`;
+    if (!grupos[key]) grupos[key] = { area, categoria: cat, count: 0 };
+    grupos[key].count++;
+  });
+
+  const lista = Object.values(grupos).sort((a, b) =>
+    a.area.localeCompare(b.area) || a.categoria.localeCompare(b.categoria));
+
+  if (!lista.length) {
+    wrap.innerHTML = '<div class="empty">No hay subcategorías creadas todavía</div>';
+    return;
+  }
+
+  wrap.innerHTML = lista.map((g, idx) => {
+    const otras = lista.filter(o => o.area === g.area && o.categoria !== g.categoria);
+    const selId = `fusionSel-${idx}`;
+    return `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:0.5px solid #f0f0f0">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="font-size:13px"><b>${g.categoria}</b> <span style="color:#888;font-size:11px">(${g.area} · ${g.count} producto${g.count === 1 ? '' : 's'})</span></div>
+        <button class="btn-sm btn-del" onclick="vaciarCategoria('${g.area}','${g.categoria.replace(/'/g, "\\'")}')">Vaciar</button>
+      </div>
+      ${otras.length ? `
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="${selId}" style="flex:1;font-size:12px;padding:6px">
+          ${otras.map(o => `<option value="${o.categoria}">${o.categoria} (${o.area})</option>`).join('')}
+        </select>
+        <button class="btn-sm btn-edit" onclick="fusionarCategoria('${g.area}','${g.categoria.replace(/'/g, "\\'")}', document.getElementById('${selId}').value)">Fusionar →</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+};
+
+// Vacía una subcategoría: los productos quedan sin subcategoría propia (usan el área)
+window.vaciarCategoria = async function(area, categoria) {
+  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+  const afectados = fuente.filter(p => normalizarArea(p.area) === area && (p.categoria || '').trim() === categoria);
+  if (!afectados.length) return;
+  if (!confirm(`¿Vaciar la subcategoría "${categoria}" en ${area}? ${afectados.length} producto(s) quedarán sin subcategoría propia (usarán el área por defecto).`)) return;
+  for (const p of afectados) {
+    await updateDoc(doc(db, 'productos', p.id), { categoria: '' });
+  }
+  await cargarProductos();
+  await cargarProdAdmin();
+  renderGestionCategorias();
+  showToast('✅ Subcategoría vaciada');
+};
+
+// Fusiona una subcategoría dentro de otra ya existente en la misma área
+window.fusionarCategoria = async function(area, origen, destino) {
+  if (!destino || destino === origen) return;
+  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+  const afectados = fuente.filter(p => normalizarArea(p.area) === area && (p.categoria || '').trim() === origen);
+  if (!afectados.length) return;
+  if (!confirm(`¿Fusionar "${origen}" en "${destino}"? ${afectados.length} producto(s) pasarán a "${destino}".`)) return;
+  for (const p of afectados) {
+    await updateDoc(doc(db, 'productos', p.id), { categoria: destino });
+  }
+  await cargarProductos();
+  await cargarProdAdmin();
+  renderGestionCategorias();
+  showToast('✅ Subcategorías fusionadas');
+};
+
 // Botones de área en stock ingreso
 function renderStockAreaBtns() {
   const wrap = document.getElementById('stockAreaBtns');
@@ -1738,6 +1822,7 @@ window.cargarProdAdmin = async function() {
   _todosProdsAdmin = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderTablaProductos();
   renderCategoriaSelect();
+  renderGestionCategorias();
 };
 
 function renderTablaProductos() {
