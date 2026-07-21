@@ -649,9 +649,10 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
         <div><label>Emoji</label><input type="text" id="prodEmoji" placeholder="🥐" maxlength="4"/></div>
       </div>
       <label>Área</label>
-      <select id="prodArea"></select>
+      <select id="prodArea" onchange="renderCategoriaSelect()"></select>
       <label>Categoría (subcategoría visible en ventas)</label>
-      <input type="text" id="prodCategoria" placeholder="Ej: Cafés fríos"/>
+      <select id="prodCategoria" onchange="toggleCategoriaNueva()"></select>
+      <input type="text" id="prodCategoriaNueva" placeholder="Escribe el nombre de la nueva categoría..." style="display:none;margin-top:6px"/>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 0;border-top:0.5px solid #f0f0f0">
         <div>
           <div style="font-size:13px;font-weight:600;color:#222">Requiere control de stock</div>
@@ -1564,6 +1565,52 @@ function renderAreaSelect(valorActual) {
   if (prev) sel.value = prev;
 }
 
+const CATEGORIA_NUEVA = '__nueva__';
+
+// Popula <select id="prodCategoria"> con las categorías ya existentes en el área seleccionada,
+// para evitar crear a mano variantes como "Cafés fríos" / "Cafe frio" / "Café Frío"
+function renderCategoriaSelect(valorActual) {
+  const sel = document.getElementById('prodCategoria');
+  if (!sel) return;
+  const prev = valorActual !== undefined ? valorActual : sel.value;
+  const area = document.getElementById('prodArea')?.value;
+  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+  const cats = [...new Set(
+    fuente.filter(p => !area || normalizarArea(p.area) === area)
+          .map(p => p.categoria)
+          .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+
+  sel.innerHTML = [
+    `<option value="">— Sin categoría (usa el área) —</option>`,
+    ...cats.map(c => `<option value="${c}">${c}</option>`),
+    `<option value="${CATEGORIA_NUEVA}">+ Nueva categoría...</option>`
+  ].join('');
+
+  if (prev === CATEGORIA_NUEVA) {
+    sel.value = CATEGORIA_NUEVA;
+  } else if (prev && !cats.includes(prev)) {
+    // Categoría existente que quedó fuera del filtro por área (ej. al editar): la agregamos igual
+    const opt = document.createElement('option');
+    opt.value = prev; opt.textContent = prev;
+    sel.insertBefore(opt, sel.lastElementChild);
+    sel.value = prev;
+  } else {
+    sel.value = prev || '';
+  }
+  toggleCategoriaNueva();
+}
+
+// Muestra/oculta el campo de texto libre cuando se elige "+ Nueva categoría..."
+window.toggleCategoriaNueva = function() {
+  const sel = document.getElementById('prodCategoria');
+  const nueva = document.getElementById('prodCategoriaNueva');
+  if (!sel || !nueva) return;
+  const esNueva = sel.value === CATEGORIA_NUEVA;
+  nueva.style.display = esNueva ? '' : 'none';
+  if (!esNueva) nueva.value = '';
+};
+
 // Botones de área en stock ingreso
 function renderStockAreaBtns() {
   const wrap = document.getElementById('stockAreaBtns');
@@ -1690,6 +1737,7 @@ window.cargarProdAdmin = async function() {
   const snap = await getDocs(collection(db, 'productos'));
   _todosProdsAdmin = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderTablaProductos();
+  renderCategoriaSelect();
 };
 
 function renderTablaProductos() {
@@ -1757,7 +1805,7 @@ window.editarProducto = function(id) {
   document.getElementById('prodNombre').value       = p.nombre || '';
   document.getElementById('prodEmoji').value        = p.emoji  || '';
   document.getElementById('prodArea').value         = normalizarArea(p.area) || 'BOL';
-  document.getElementById('prodCategoria').value    = p.categoria || '';
+  renderCategoriaSelect(p.categoria || '');
   document.getElementById('prodControlStock').checked   = conControl;
   document.getElementById('prodPrecioHoy').value           = p.precioHoy || p.precio || '';
   document.getElementById('prodPrecioAyer').value          = p.precioAyer || '';
@@ -1777,7 +1825,7 @@ window.cancelarEdicion = function() {
   document.getElementById('prodId').value = '';
   document.getElementById('prodNombre').value = '';
   document.getElementById('prodEmoji').value = '';
-  document.getElementById('prodCategoria').value = '';
+  renderCategoriaSelect('');
   document.getElementById('prodControlStock').checked = true;
   document.getElementById('prodPrecioHoy').value = '';
   document.getElementById('prodPrecioAyer').value = '';
@@ -1807,7 +1855,10 @@ window.guardarProducto = async function() {
   const nombre    = document.getElementById('prodNombre').value.trim();
   const emoji     = document.getElementById('prodEmoji').value.trim();
   const area      = document.getElementById('prodArea').value;
-  const categoria = document.getElementById('prodCategoria').value.trim() || area;
+  const catSel     = document.getElementById('prodCategoria').value;
+  const categoria  = catSel === CATEGORIA_NUEVA
+    ? (document.getElementById('prodCategoriaNueva').value.trim() || area)
+    : (catSel || area);
   const controlStock = document.getElementById('prodControlStock').checked;
 
   let precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta, excepcionHoraria, autoEliminar;
