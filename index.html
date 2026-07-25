@@ -150,6 +150,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* COMANDA */
 #comandaPreview { position: fixed; left: -9999px; top: 0; width: 300px; background: white; padding: 20px; font-family: monospace; }
 
+@media print {
+  body * { visibility: hidden; }
+  #comandaPreview, #comandaPreview * { visibility: visible; }
+  #comandaPreview {
+    position: absolute; left: 0; top: 0;
+    width: 100%; padding: 0 2mm;
+  }
+}
+
 /* BADGE */
 .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
 .badge-pendiente { background: #fff3cd; color: #856404; }
@@ -452,6 +461,10 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 
           <div style="display:flex;gap:8px;margin-top:14px;">
             <button class="btn btn-secondary" style="flex:1" onclick="imprimirComanda()">🖨 Comanda</button>
+            <select id="anchoPapelSel" onchange="cambiarAnchoPapel(this.value)" title="Ancho de papel térmico" style="font-size:11px;border-radius:8px;border:1px solid #ddd;padding:0 6px">
+              <option value="80">80mm</option>
+              <option value="58">58mm</option>
+            </select>
             <button class="btn btn-success btn-full" style="flex:2" id="btnPagar" onclick="confirmarPagoBoton()">✓ Registrar pago</button>
           </div>
         </div>
@@ -1033,6 +1046,9 @@ let visorSucursal = 'ainavillo';
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     usuario = user;
+    // Restaurar el ancho de papel térmico elegido en este dispositivo
+    const anchoSel = document.getElementById('anchoPapelSel');
+    if (anchoSel) anchoSel.value = localStorage.getItem('anchoPapelMM') || '80';
     // Verificar si es admin
     const adminDoc = await getDoc(doc(db, 'admins', user.uid));
     esAdmin = adminDoc.exists();
@@ -2613,10 +2629,14 @@ window.cerrarYCobrarMesa = async function() {
 // ═══════════════════════════
 // COMANDA
 // ═══════════════════════════
+window.cambiarAnchoPapel = function(val) {
+  localStorage.setItem('anchoPapelMM', val);
+};
+
 window.imprimirComanda = async function(venta) {
   const lineas = venta ? venta.lineas : pedidoLineas;
   const total = venta ? venta.total : (parseInt(document.getElementById('resumenVenta').dataset.total) || 0);
-  const medio = venta ? venta.medioPago : medioSeleccionado;
+  const medio = venta ? (venta.pagos ? 'Dividido' : venta.medioPago) : (pagoDividido ? 'Dividido' : medioSeleccionado);
   const suc = sucursal === 'ainavillo' ? 'Ainavillo 764' : 'Barros Arana';
   document.getElementById('cmdSucursal').textContent = suc;
   document.getElementById('cmdFecha').textContent = new Date().toLocaleString('es-CL');
@@ -2625,20 +2645,18 @@ window.imprimirComanda = async function(venta) {
   ).join('<br/>');
   document.getElementById('cmdTotal').textContent = `TOTAL: $${total.toLocaleString('es-CL')}`;
   document.getElementById('cmdMedio').textContent = `Medio: ${medio}`;
-  const el = document.getElementById('comandaPreview');
-  el.style.left = '0';
-  await new Promise(r => setTimeout(r, 200));
-  try {
-    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff' });
-    el.style.left = '-9999px';
-    canvas.toBlob(blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `comanda_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.png`;
-      a.click();
-    });
-  } catch(e) { el.style.left = '-9999px'; }
+
+  // Ajusta el tamaño de página impresa al ancho de papel térmico elegido (58mm u 80mm)
+  const anchoMM = localStorage.getItem('anchoPapelMM') || '80';
+  let styleTag = document.getElementById('pageSizeStyle');
+  if (!styleTag) {
+    styleTag = document.createElement('style');
+    styleTag.id = 'pageSizeStyle';
+    document.head.appendChild(styleTag);
+  }
+  styleTag.textContent = `@page { size: ${anchoMM}mm auto; margin: 0; }`;
+
+  window.print();
 };
 
 // ═══════════════════════════
