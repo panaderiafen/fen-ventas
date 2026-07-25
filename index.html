@@ -2225,7 +2225,8 @@ async function persistirMesa() {
   const lineasPlano = pedidoLineas.map(l => ({
     id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
     totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
-    descMonto: l.descMonto, total: l.total, categoriaStock: l.categoriaStock
+    descMonto: l.descMonto, total: l.total, categoriaStock: l.categoriaStock,
+    clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
   }));
   try {
     await updateDoc(doc(db, 'mesas', mesaActivaId), { lineas: lineasPlano, subtotal, descuento, total });
@@ -2274,7 +2275,8 @@ window.agregarAlPedido = function(id) {
     pedidoLineas.push({
       id, nombre: prod.nombre, precio, cantidad: 1,
       totalBruto: precio, descTipo: 'pct', descVal: 0, descMonto: 0, total: precio,
-      categoriaStock: categoriaStockActiva
+      categoriaStock: categoriaStockActiva,
+      clienteNombre: '', tipoLeche: '', nota: ''
     });
   }
   renderPedido();
@@ -2293,7 +2295,11 @@ function renderPedido() {
   const card = document.getElementById('cardPedido');
   if (pedidoLineas.length === 0) { card.style.display = 'none'; return; }
   card.style.display = 'block';
-  document.getElementById('lineasPedido').innerHTML = pedidoLineas.map((l, i) => `
+  document.getElementById('lineasPedido').innerHTML = pedidoLineas.map((l, i) => {
+    const prod = productos.find(p => p.id === l.id);
+    const esCafe = prod && normalizarArea(prod.area) === 'CAF';
+    const tieneNota = l.clienteNombre || l.tipoLeche || l.nota;
+    return `
     <div class="linea-pedido-wrap">
       <div class="linea-pedido">
         <div>
@@ -2321,11 +2327,47 @@ function renderPedido() {
         <span id="desc-result-${i}" class="linea-desc-result" style="${l.descMonto > 0 ? '' : 'display:none'}">
           ${l.descMonto > 0 ? `−$${parseInt(l.descMonto).toLocaleString('es-CL')} → $${parseInt(l.total).toLocaleString('es-CL')}` : ''}
         </span>
+        <button class="btn-sm" id="notaBtn-${i}" onclick="toggleNotaLinea(${i})" style="margin-left:auto;font-size:11px;padding:3px 8px">
+          ${tieneNota ? '📝 Nota ✓' : '📝 + Nota'}
+        </button>
+      </div>
+      <div class="linea-nota-panel" id="notaPanel-${i}" style="display:${tieneNota ? '' : 'none'};margin-top:6px;padding:8px;background:#f7f9fc;border-radius:8px;display:flex;flex-direction:column;gap:6px">
+        <input type="text" placeholder="Nombre cliente (opcional)" value="${l.clienteNombre || ''}"
+               oninput="cambiarNotaLinea(${i}, 'clienteNombre', this.value)" style="font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px"/>
+        ${esCafe ? `
+        <select onchange="cambiarNotaLinea(${i}, 'tipoLeche', this.value)" style="font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px">
+          <option value="">Tipo de leche (opcional)...</option>
+          <option value="Entera" ${l.tipoLeche === 'Entera' ? 'selected' : ''}>Entera</option>
+          <option value="Descremada" ${l.tipoLeche === 'Descremada' ? 'selected' : ''}>Descremada</option>
+          <option value="Sin lactosa" ${l.tipoLeche === 'Sin lactosa' ? 'selected' : ''}>Sin lactosa</option>
+          <option value="Entera sin lactosa" ${l.tipoLeche === 'Entera sin lactosa' ? 'selected' : ''}>Entera sin lactosa</option>
+        </select>` : ''}
+        <input type="text" placeholder="Nota adicional (a mano)" value="${l.nota || ''}"
+               oninput="cambiarNotaLinea(${i}, 'nota', this.value)" style="font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px"/>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
   calcularResumen();
 }
+
+// Muestra/oculta el panel de nota de una línea del pedido
+window.toggleNotaLinea = function(i) {
+  const panel = document.getElementById(`notaPanel-${i}`);
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+};
+
+// Guarda cliente/tipo de leche/nota de una línea sin re-renderizar todo el carrito (evita perder el foco al escribir)
+window.cambiarNotaLinea = function(i, campo, valor) {
+  if (!pedidoLineas[i]) return;
+  pedidoLineas[i][campo] = valor;
+  const btn = document.getElementById(`notaBtn-${i}`);
+  if (btn) {
+    const l = pedidoLineas[i];
+    btn.textContent = (l.clienteNombre || l.tipoLeche || l.nota) ? '📝 Nota ✓' : '📝 + Nota';
+  }
+  if (modoVenta === 'mesa-detail') persistirMesa();
+};
 
 // Calcula descMonto y total neto de una línea (muta el objeto)
 function calcularDescLinea(linea) {
@@ -2532,7 +2574,8 @@ window.registrarVenta = async function() {
     lineas: pedidoLineas.map(l => ({
       id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
       totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
-      descMonto: l.descMonto, total: l.total
+      descMonto: l.descMonto, total: l.total,
+      clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
     })),
     subtotal, descuento, total,
     ...pagoData,
@@ -2611,7 +2654,8 @@ window.cerrarYCobrarMesa = async function() {
     lineas: pedidoLineas.map(l => ({
       id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
       totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
-      descMonto: l.descMonto, total: l.total
+      descMonto: l.descMonto, total: l.total,
+      clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
     })),
     subtotal, descuento, total,
     ...pagoData,
@@ -2667,9 +2711,11 @@ window.imprimirComanda = async function(venta) {
   // Actualiza siempre la vista previa (se usa en el camino "navegador/RawBT")
   document.getElementById('cmdSucursal').textContent = suc;
   document.getElementById('cmdFecha').textContent = fecha;
-  document.getElementById('cmdLineas').innerHTML = lineas.map(l =>
-    `${l.nombre} x${l.cantidad} ........ $${parseInt(l.total).toLocaleString('es-CL')}`
-  ).join('<br/>');
+  document.getElementById('cmdLineas').innerHTML = lineas.map(l => {
+    const extra = [l.clienteNombre, l.tipoLeche, l.nota].filter(Boolean).join(' · ');
+    return `${l.nombre} x${l.cantidad} ........ $${parseInt(l.total).toLocaleString('es-CL')}` +
+      (extra ? `<br/><span style="font-size:11px;color:#555">&nbsp;&nbsp;📝 ${extra}</span>` : '');
+  }).join('<br/>');
   document.getElementById('cmdTotal').textContent = `TOTAL: $${total.toLocaleString('es-CL')}`;
   document.getElementById('cmdMedio').textContent = `Medio: ${medio}`;
 
@@ -2717,6 +2763,8 @@ async function imprimirConQZ({ suc, fecha, lineas, total, medio }) {
     cmd += '--------------------------------\n';
     lineas.forEach(l => {
       cmd += `${l.nombre} x${l.cantidad} ........ $${parseInt(l.total).toLocaleString('es-CL')}\n`;
+      const extra = [l.clienteNombre, l.tipoLeche, l.nota].filter(Boolean).join(' - ');
+      if (extra) cmd += `  * ${extra}\n`;
     });
     cmd += '--------------------------------\n';
     cmd += `TOTAL: $${total.toLocaleString('es-CL')}\n`;
@@ -4591,6 +4639,7 @@ window.generarReporte = async function() {
   const porMedio = {};
   const porArea = {};
   const porProducto = {};
+  const porTipoLeche = {};
   ventas.forEach(v => {
     if (v.pagos) {
       v.pagos.forEach(p => { porMedio[p.medio] = (porMedio[p.medio] || 0) + p.monto; });
@@ -4605,6 +4654,9 @@ window.generarReporte = async function() {
       if (!porProducto[l.nombre]) porProducto[l.nombre] = { cantidad: 0, total: 0 };
       porProducto[l.nombre].cantidad += l.cantidad;
       porProducto[l.nombre].total += l.total;
+      if (l.tipoLeche) {
+        porTipoLeche[l.tipoLeche] = (porTipoLeche[l.tipoLeche] || 0) + l.cantidad;
+      }
     });
   });
 
@@ -4633,6 +4685,13 @@ window.generarReporte = async function() {
         `<div class="resumen-row"><span>${n} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`
       ).join('')}
     </div>
+    ${Object.keys(porTipoLeche).length > 0 ? `
+    <div class="card">
+      <div class="card-title">☕ Por tipo de leche</div>
+      ${Object.entries(porTipoLeche).sort((a,b)=>b[1]-a[1]).map(([tipo,cant]) => 
+        `<div class="resumen-row"><span>${tipo}</span><span>${cant} u.</span></div>`
+      ).join('')}
+    </div>` : ''}
   `;
 };
 </script>
