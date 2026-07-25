@@ -1036,6 +1036,8 @@ let pedidoLineas = [];
 let modoVenta = 'directa'; // 'directa' | 'mesas' | 'mesa-detail'
 let mesaActivaId = null;
 let mesaActivaNombre = '';
+// Última venta registrada — permite reimprimir la comanda con "🖨 Comanda" aunque el carrito ya esté vacío
+let ultimaVentaRegistrada = null;
 // ── Pago dividido ──
 let pagoDividido = false;
 let medioSeleccionado = 'efectivo';
@@ -2569,7 +2571,7 @@ window.registrarVenta = async function() {
         }
       }
     }
-    await imprimirComanda(venta);
+    ultimaVentaRegistrada = venta;
     pedidoLineas = [];
     resetPagoDividido();
     renderPedido();
@@ -2621,7 +2623,7 @@ window.cerrarYCobrarMesa = async function() {
     await incrementarTotalesCaja(pagoData, total);
     // El stock NO se vuelve a descontar acá — ya se descontó al agregar cada producto a la mesa.
     await updateDoc(doc(db, 'mesas', mesaActivaId), { estado: 'cerrada', cierre: Timestamp.now(), total });
-    await imprimirComanda(venta);
+    ultimaVentaRegistrada = venta;
     showToast(`✅ Mesa cobrada · $${total.toLocaleString('es-CL')}`);
     pedidoLineas = [];
     resetPagoDividido();
@@ -2645,9 +2647,20 @@ window.cambiarMetodoImpresion = function(val) {
 };
 
 window.imprimirComanda = async function(venta) {
-  const lineas = venta ? venta.lineas : pedidoLineas;
-  const total = venta ? venta.total : (parseInt(document.getElementById('resumenVenta').dataset.total) || 0);
-  const medio = venta ? (venta.pagos ? 'Dividido' : venta.medioPago) : (pagoDividido ? 'Dividido' : medioSeleccionado);
+  // Si no se pasa una venta explícita: usa el carrito actual si tiene productos,
+  // o si ya está vacío (por ejemplo, después de "Registrar pago"), reimprime la última venta registrada.
+  const fuente = venta || (pedidoLineas.length > 0
+    ? { lineas: pedidoLineas, total: parseInt(document.getElementById('resumenVenta').dataset.total) || 0, medioPago: medioSeleccionado, pagos: pagoDividido ? obtenerDatosPago().pagos : null }
+    : ultimaVentaRegistrada);
+
+  if (!fuente || !fuente.lineas || fuente.lineas.length === 0) {
+    alert('No hay ningún pedido para imprimir todavía.');
+    return;
+  }
+
+  const lineas = fuente.lineas;
+  const total = fuente.total;
+  const medio = fuente.pagos ? 'Dividido' : fuente.medioPago;
   const suc = sucursal === 'ainavillo' ? 'Ainavillo 764' : 'Barros Arana';
   const fecha = new Date().toLocaleString('es-CL');
 
@@ -2708,8 +2721,7 @@ async function imprimirConQZ({ suc, fecha, lineas, total, medio }) {
     cmd += '--------------------------------\n';
     cmd += `TOTAL: $${total.toLocaleString('es-CL')}\n`;
     cmd += `Medio: ${medio}\n`;
-    cmd += '\n\n\n';
-    cmd += GS + 'V' + '\x00';         // corte total automático
+    cmd += GS + 'V' + '\x42' + '\x05'; // avanza 5 líneas de papel y luego corta (más margen antes del corte)
 
     await qz.print(config, [{ type: 'raw', format: 'command', flavor: 'plain', data: cmd }]);
   } catch(e) {
