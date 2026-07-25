@@ -816,6 +816,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <div id="mermaResult"></div>
     </div>
     <div id="repCaja" style="display:none">
+      <div id="cajasSinCerrarWrap"></div>
       <div class="card">
         <div class="card-title">💵 Evaluación de cierre de caja</div>
         <p style="font-size:12px;color:#888;margin-bottom:10px">Comparación entre el conteo manual del cajero y los totales del sistema.</p>
@@ -858,9 +859,31 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <input type="number" id="cierrRetirado" placeholder="0" min="0"/>
       <p style="font-size:11px;color:#aaa;margin-top:4px">El saldo restante se sugerirá como monto inicial del turno siguiente.</p>
     </div>
+    <input type="hidden" id="cierreTargetCajaId"/>
     <div class="modal-btns">
       <button class="btn btn-secondary" style="flex:1" onclick="cerrarModalCierre()">Cancelar</button>
       <button class="btn btn-danger" style="flex:2" id="btnConfirmarCierre" onclick="confirmarCierreCiego()">🔒 Confirmar cierre</button>
+    </div>
+  </div>
+</div>
+
+<!-- CORREGIR EVALUACIÓN DE CAJA -->
+<div class="modal-overlay" id="modalCorregirEval">
+  <div class="modal">
+    <div class="modal-title">✏️ Corregir cierre de caja</div>
+    <p style="font-size:12px;color:#888;margin-bottom:14px">Usa esto solo si el cierre quedó mal registrado (ej. error de tipeo del cajero). Los totales del sistema no se modifican, solo el conteo manual.</p>
+    <input type="hidden" id="editEvalId"/>
+    <label>💵 Efectivo contado ($) — incluye monto inicial</label>
+    <input type="number" id="editEvalEfectivo" placeholder="0" min="0"/>
+    <label>💳 Débito ($)</label>
+    <input type="number" id="editEvalDebito" placeholder="0" min="0"/>
+    <label>💳 Crédito ($)</label>
+    <input type="number" id="editEvalCredito" placeholder="0" min="0"/>
+    <label>📲 Transferencia ($)</label>
+    <input type="number" id="editEvalTransfer" placeholder="0" min="0"/>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalCorregirEval').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-primary" style="flex:2" id="btnGuardarCorreccion" onclick="guardarCorreccionEval()">Guardar corrección</button>
     </div>
   </div>
 </div>
@@ -2579,12 +2602,15 @@ window.actualizarArqueo = async function() {
 };
 
 // Abre el modal de cierre ciego (NO muestra totales del sistema)
-window.cerrarCaja = function() {
+// targetCajaId opcional: permite reutilizar el mismo modal para cerrar retroactivamente
+// una caja de otro día desde el panel admin (Reportes > Eval. caja > Cajas sin cerrar)
+window.cerrarCaja = function(targetCajaId) {
   document.getElementById('cierrEfectivo').value  = '';
   document.getElementById('cierrDebito').value    = '';
   document.getElementById('cierrCredito').value   = '';
   document.getElementById('cierrTransfer').value  = '';
   document.getElementById('cierrRetirado').value  = '';
+  document.getElementById('cierreTargetCajaId').value = targetCajaId || cajaId || '';
   document.getElementById('modalCierreCiego').classList.add('open');
 };
 
@@ -2599,12 +2625,27 @@ window.confirmarCierreCiego = async function() {
   const manCredito   = parseInt(document.getElementById('cierrCredito').value)   || 0;
   const manTransfer  = parseInt(document.getElementById('cierrTransfer').value)  || 0;
   const montoRetirado = parseInt(document.getElementById('cierrRetirado').value) || 0;
+  const targetCajaId  = document.getElementById('cierreTargetCajaId').value || cajaId;
+
+  // Confirmación reforzada: se muestra un resumen de lo ingresado y se pide confirmar explícitamente,
+  // para evitar cierres accidentales con un solo clic.
+  const totalIngresado = manEfectivo + manDebito + manCredito + manTransfer;
+  const confirmado = confirm(
+    `¿Confirmas el cierre de caja con estos montos?\n\n` +
+    `Efectivo: $${manEfectivo.toLocaleString('es-CL')}\n` +
+    `Débito: $${manDebito.toLocaleString('es-CL')}\n` +
+    `Crédito: $${manCredito.toLocaleString('es-CL')}\n` +
+    `Transferencia: $${manTransfer.toLocaleString('es-CL')}\n` +
+    `Total contado: $${totalIngresado.toLocaleString('es-CL')}\n\n` +
+    `Esta acción no se puede deshacer directamente (aunque un admin podrá corregirla después desde Reportes).`
+  );
+  if (!confirmado) return;
 
   btn.disabled = true; btn.textContent = 'Cerrando...';
   try {
-    const cajaSnap = await getDoc(doc(db, 'cajas', cajaId));
+    const cajaSnap = await getDoc(doc(db, 'cajas', targetCajaId));
     const cajaData = cajaSnap.data();
-    const cajaDocId = cajaId;
+    const cajaDocId = targetCajaId;
     const t = cajaData.totales || {};
     const montoInicial = parseInt(cajaData.montoInicial) || 0;
 
@@ -2638,8 +2679,8 @@ window.confirmarCierreCiego = async function() {
 
     // Guardar evaluación de cierre ciego
     await addDoc(collection(db, 'evaluacion_caja'), {
-      cajaId: cajaDocId, sucursal, usuario: cajaData.usuario || usuario.email,
-      fecha: new Date().toLocaleDateString('es-CL'),
+      cajaId: cajaDocId, sucursal: cajaData.sucursal || sucursal, usuario: cajaData.usuario || usuario.email,
+      fecha: cajaData.fecha || new Date().toLocaleDateString('es-CL'),
       nVentas: cajaData.nVentas || 0,
       montoInicial,
       apertura: cajaData.apertura,
@@ -2655,10 +2696,17 @@ window.confirmarCierreCiego = async function() {
       ...(montoRetirado > 0 ? { montoRetirado, saldoSiguiente } : {})
     });
 
-    cajaId = null;
     document.getElementById('modalCierreCiego').classList.remove('open');
-    document.getElementById('cardAbrirCaja').classList.remove('hidden');
-    document.getElementById('cardCajaAbierta').classList.add('hidden');
+
+    // Si se estaba cerrando la caja de la sesión activa, se limpia el estado de la pantalla de ventas.
+    // Si en cambio era una caja atrasada de otro día (cerrada desde el panel admin), la sesión activa no se toca.
+    if (targetCajaId === cajaId) {
+      cajaId = null;
+      document.getElementById('cardAbrirCaja').classList.remove('hidden');
+      document.getElementById('cardCajaAbierta').classList.add('hidden');
+    } else {
+      renderCajasSinCerrar();
+    }
     showToast('✅ Caja cerrada correctamente');
 
     // Exportar a Sheets
@@ -2689,7 +2737,7 @@ window.selRepTab = function(btn, id) {
   }
   if (id === 'repStock')       cargarValorStock();
   if (id === 'repMerma')       cargarMerma();
-  if (id === 'repCaja')        cargarEvaluacionesCaja();
+  if (id === 'repCaja') { cargarEvaluacionesCaja(); renderCajasSinCerrar(); }
   if (id === 'repSolicitudes') cargarSolicitudesAnulacion();
 };
 
@@ -2870,7 +2918,7 @@ window.cargarEvaluacionesCaja = async function() {
     const snap = await getDocs(query(collection(db, 'evaluacion_caja'), where('sucursal', '==', sucursal)));
     if (snap.empty) { el.innerHTML = '<div class="empty">Sin evaluaciones de caja</div>'; btn.disabled = false; btn.textContent = 'Cargar evaluaciones'; return; }
 
-    const evals = snap.docs.map(d => d.data())
+    const evals = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.cierre?.seconds || 0) - (a.cierre?.seconds || 0)); // más reciente primero
     const difColor = d => d === 0 ? '#1D9E75' : (d > 0 ? '#003a79' : '#e74c3c');
     const difLabel = d => d === 0 ? '✅ Exacto' : (d > 0 ? '+' : '') + '$' + Math.abs(d).toLocaleString('es-CL');
@@ -2879,20 +2927,27 @@ window.cargarEvaluacionesCaja = async function() {
       <div class="card" style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;margin-bottom:10px">
           <div>
-            <div style="font-size:14px;font-weight:700;color:#003a79">${e.fecha||'?'}</div>
-            <div style="font-size:11px;color:#888">${e.usuario||''} · ${e.nVentas||0} ventas</div>
+            <div style="font-size:14px;font-weight:700;color:#003a79">${e.fecha||'?'} ${e.sinArqueo ? '<span style="font-size:10px;font-weight:600;color:#e07b00;background:#fff3e0;padding:2px 6px;border-radius:4px;margin-left:4px">sin arqueo</span>' : ''}</div>
+            <div style="font-size:11px;color:#888">${e.usuario||''} · ${e.nVentas||0} ventas${e.corregido ? ' · ✏️ corregido' : ''}</div>
           </div>
-          <div style="text-align:right">
-            <div style="font-size:11px;color:#888">Diferencia total</div>
-            <div style="font-size:16px;font-weight:700;color:${difColor(e.difTotal||0)}">${difLabel(e.difTotal||0)}</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            ${!e.sinArqueo ? `
+            <div style="text-align:right">
+              <div style="font-size:11px;color:#888">Diferencia total</div>
+              <div style="font-size:16px;font-weight:700;color:${difColor(e.difTotal||0)}">${difLabel(e.difTotal||0)}</div>
+            </div>` : ''}
+            <button class="btn-sm btn-edit" onclick="abrirEditarEvaluacion('${e.id}')">✏️ Corregir</button>
           </div>
         </div>
+        ${e.sinArqueo ? `
+        <p style="font-size:12px;color:#e07b00;background:#fff8f0;padding:8px;border-radius:6px;margin-bottom:10px">
+          Esta caja se cerró sin conteo manual (no se pudo contar el efectivo físico de ese turno). Solo se muestran los totales del sistema.
+        </p>` : ''}
         <table style="width:100%;font-size:12px;border-collapse:collapse">
           <tr style="color:#888;font-size:10px;text-transform:uppercase">
             <th style="text-align:left;padding:4px 0">Medio</th>
             <th style="text-align:right;padding:4px">Sistema</th>
-            <th style="text-align:right;padding:4px">Cajero</th>
-            <th style="text-align:right;padding:4px">Dif.</th>
+            ${!e.sinArqueo ? `<th style="text-align:right;padding:4px">Cajero</th><th style="text-align:right;padding:4px">Dif.</th>` : ''}
           </tr>
           ${[
             ['💵 Efectivo', e.sistEfectivo, e.manEfectivoNeto ?? e.manEfectivo, e.difEfectivo],
@@ -2903,8 +2958,9 @@ window.cargarEvaluacionesCaja = async function() {
             <tr style="border-top:0.5px solid #f0f0f0">
               <td style="padding:5px 0">${lbl}</td>
               <td style="text-align:right;padding:5px">$${parseInt(s||0).toLocaleString('es-CL')}</td>
+              ${!e.sinArqueo ? `
               <td style="text-align:right;padding:5px">$${parseInt(m||0).toLocaleString('es-CL')}</td>
-              <td style="text-align:right;padding:5px;font-weight:600;color:${difColor(d||0)}">${difLabel(d||0)}</td>
+              <td style="text-align:right;padding:5px;font-weight:600;color:${difColor(d||0)}">${difLabel(d||0)}</td>` : ''}
             </tr>`).join('')}
           ${e.montoInicial ? `
           <tr style="border-top:0.5px solid #f0f0f0;color:#888">
@@ -2922,13 +2978,142 @@ window.cargarEvaluacionesCaja = async function() {
           <tr style="border-top:1px solid #ddd;font-weight:700">
             <td style="padding:6px 0">TOTAL VENTAS</td>
             <td style="text-align:right;padding:5px">$${parseInt(e.sistTotal||0).toLocaleString('es-CL')}</td>
+            ${!e.sinArqueo ? `
             <td style="text-align:right;padding:5px">$${parseInt(e.manTotal||0).toLocaleString('es-CL')}</td>
-            <td style="text-align:right;padding:5px;color:${difColor(e.difTotal||0)}">${difLabel(e.difTotal||0)}</td>
+            <td style="text-align:right;padding:5px;color:${difColor(e.difTotal||0)}">${difLabel(e.difTotal||0)}</td>` : ''}
           </tr>
         </table>
       </div>`).join('');
   } catch(e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
   btn.disabled = false; btn.textContent = 'Cargar evaluaciones';
+};
+
+// Detecta cajas que quedaron abiertas de días anteriores (nunca se cerraron formalmente).
+// Por eso sus ventas sí aparecen en Reportes > Ventas, pero no en Evaluación de caja:
+// esa evaluación solo se crea en el momento del cierre.
+window.renderCajasSinCerrar = async function() {
+  const wrap = document.getElementById('cajasSinCerrarWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="empty">Buscando cajas sin cerrar...</div>';
+  try {
+    const hoy = fechaLocalHoy();
+    const snap = await getDocs(query(collection(db, 'cajas'), where('estado', '==', 'abierta')));
+    const pendientes = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => c.fecha !== hoy); // abiertas de días anteriores al de hoy
+
+    if (!pendientes.length) { wrap.innerHTML = ''; return; }
+
+    wrap.innerHTML = `
+    <div class="card" style="border:1px solid #f0ad4e;background:#fffaf0">
+      <div class="card-title" style="color:#8a6416">⚠️ Cajas sin cerrar</div>
+      <p style="font-size:12px;color:#8a6416;margin-bottom:10px">
+        Estas cajas quedaron abiertas de un día anterior. Sus ventas ya están contabilizadas en Reportes,
+        pero no tendrán evaluación de arqueo hasta que se cierren.
+      </p>
+      ${pendientes.map(c => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:0.5px solid #f0d9a0">
+          <div style="font-size:13px">
+            <b>${c.fecha}</b> <span style="color:#888;font-size:11px">(${c.sucursal} · ${c.usuario||''} · $${parseInt(c.totalVentas||0).toLocaleString('es-CL')} vendidos)</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn-sm btn-edit" onclick="cerrarCaja('${c.id}')">Cerrar con arqueo</button>
+            <button class="btn-sm btn-del" onclick="cerrarCajaSinArqueo('${c.id}')">Cerrar sin arqueo</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+  } catch(e) {
+    wrap.innerHTML = `<div class="empty">Error buscando cajas sin cerrar: ${e.message}</div>`;
+  }
+};
+
+// Cierre rápido para una caja atrasada cuando ya no es posible contar el efectivo físicamente
+// (ej. el cajero de ese turno ya no está). Se registra igual la evaluación, pero solo con los
+// totales del sistema — sin comparación contra un conteo manual — y queda marcada como "sin arqueo".
+window.cerrarCajaSinArqueo = async function(cajaDocId) {
+  if (!confirm('¿Cerrar esta caja SIN arqueo manual?\n\nSe usarán solo los totales del sistema (no habrá conteo físico de comparación). Úsalo solo cuando ya no sea posible contar el efectivo de ese turno.')) return;
+  try {
+    const cajaSnap = await getDoc(doc(db, 'cajas', cajaDocId));
+    const cajaData = cajaSnap.data();
+    const t = cajaData.totales || {};
+    const sistEfectivo = parseInt(t.efectivo)        || 0;
+    const sistDebito   = parseInt(t.debito)          || 0;
+    const sistCredito  = parseInt(t.credito)         || 0;
+    const sistTransfer = parseInt(t.transferencia)   || 0;
+    const sistTotal    = parseInt(cajaData.totalVentas) || 0;
+
+    await updateDoc(doc(db, 'cajas', cajaDocId), { estado: 'cerrada', cierre: Timestamp.now() });
+
+    await addDoc(collection(db, 'evaluacion_caja'), {
+      cajaId: cajaDocId, sucursal: cajaData.sucursal || sucursal, usuario: cajaData.usuario || usuario.email,
+      fecha: cajaData.fecha || new Date().toLocaleDateString('es-CL'),
+      nVentas: cajaData.nVentas || 0,
+      montoInicial: parseInt(cajaData.montoInicial) || 0,
+      apertura: cajaData.apertura,
+      cierre: Timestamp.now(),
+      sistEfectivo, sistDebito, sistCredito, sistTransfer, sistTotal,
+      sinArqueo: true, // marca que este cierre no tuvo conteo manual de comparación
+      cerradoPor: usuario.email
+    });
+
+    renderCajasSinCerrar();
+    cargarEvaluacionesCaja();
+    showToast('✅ Caja cerrada sin arqueo');
+  } catch(e) { alert('Error al cerrar caja: ' + e.message); }
+};
+
+// Abre el modal de corrección con los valores actuales del cierre (por si el cajero se equivocó al tipear)
+window.abrirEditarEvaluacion = async function(evalId) {
+  const snap = await getDoc(doc(db, 'evaluacion_caja', evalId));
+  if (!snap.exists()) { alert('No se encontró esa evaluación'); return; }
+  const e = snap.data();
+  document.getElementById('editEvalId').value = evalId;
+  document.getElementById('editEvalEfectivo').value = e.manEfectivo || 0;
+  document.getElementById('editEvalDebito').value   = e.manDebito || 0;
+  document.getElementById('editEvalCredito').value  = e.manCredito || 0;
+  document.getElementById('editEvalTransfer').value = e.manTransfer || 0;
+  document.getElementById('modalCorregirEval').classList.add('open');
+};
+
+// Recalcula diferencias con los montos corregidos y guarda, dejando registro de que fue editado
+window.guardarCorreccionEval = async function() {
+  const btn = document.getElementById('btnGuardarCorreccion');
+  const evalId = document.getElementById('editEvalId').value;
+  const manEfectivo = parseInt(document.getElementById('editEvalEfectivo').value) || 0;
+  const manDebito   = parseInt(document.getElementById('editEvalDebito').value)   || 0;
+  const manCredito  = parseInt(document.getElementById('editEvalCredito').value)  || 0;
+  const manTransfer = parseInt(document.getElementById('editEvalTransfer').value) || 0;
+
+  if (!confirm('¿Guardar esta corrección? Quedará marcada como corregida en el historial.')) return;
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const snap = await getDoc(doc(db, 'evaluacion_caja', evalId));
+    const e = snap.data();
+    const montoInicial = parseInt(e.montoInicial) || 0;
+    const manEfectivoNeto = manEfectivo - montoInicial;
+    const manTotal = manEfectivoNeto + manDebito + manCredito + manTransfer;
+    const difEfectivo = manEfectivoNeto - (parseInt(e.sistEfectivo) || 0);
+    const difDebito   = manDebito       - (parseInt(e.sistDebito)   || 0);
+    const difCredito  = manCredito      - (parseInt(e.sistCredito)  || 0);
+    const difTransfer = manTransfer     - (parseInt(e.sistTransfer) || 0);
+    const difTotal    = manTotal        - (parseInt(e.sistTotal)    || 0);
+
+    await updateDoc(doc(db, 'evaluacion_caja', evalId), {
+      manEfectivo, manEfectivoNeto, manDebito, manCredito, manTransfer, manTotal,
+      difEfectivo, difDebito, difCredito, difTransfer, difTotal,
+      sinArqueo: false, // si tenía "sin arqueo", ahora ya cuenta con conteo manual
+      corregido: true, fechaCorreccion: Timestamp.now(), corregidoPor: usuario.email
+    });
+
+    document.getElementById('modalCorregirEval').classList.remove('open');
+    cargarEvaluacionesCaja();
+    showToast('✅ Corrección guardada');
+  } catch(e) {
+    alert('Error al guardar corrección: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = 'Guardar corrección';
 };
 
 // ══════════════════════════════════
