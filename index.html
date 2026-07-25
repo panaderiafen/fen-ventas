@@ -360,12 +360,27 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
   <!-- VENTA -->
   <div class="section active" id="sec-venta">
 
-    <div class="venta-layout">
+    <!-- Tabs: Nueva venta / Mesas -->
+    <div class="rep-tabs" id="ventaModoTabs" style="margin-bottom:10px">
+      <button class="rep-tab active" onclick="selModoVenta(this,'directa')">🛒 Nueva venta</button>
+      <button class="rep-tab" onclick="selModoVenta(this,'mesas')">🍽️ Mesas</button>
+    </div>
+
+    <!-- Barra de mesa activa (solo visible dentro de una mesa) -->
+    <div id="mesaHeaderBar" style="display:none;align-items:center;justify-content:space-between;background:#eef4fb;border-radius:10px;padding:10px 14px;margin-bottom:10px">
+      <button class="btn-sm" onclick="volverAMesas()">← Mesas</button>
+      <div id="mesaHeaderNombre" style="font-weight:700;color:#003a79"></div>
+    </div>
+
+    <!-- Listado de mesas abiertas -->
+    <div id="mesasListado" style="display:none"></div>
+
+    <div class="venta-layout" id="ventaLayoutMain">
 
       <!-- COLUMNA IZQUIERDA: grilla de productos + últimas ventas -->
       <div class="venta-left">
         <div class="card">
-          <div class="card-title">🛒 Nueva venta</div>
+          <div class="card-title" id="ventaCardTitle">🛒 Nueva venta</div>
 
           <!-- Categoría de stock activa + toggle visibilidad -->
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -407,7 +422,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <!-- COLUMNA DERECHA: pedido actual -->
       <div class="venta-right">
         <div class="card" id="cardPedido" style="display:none">
-          <div class="card-title">Pedido actual</div>
+          <div class="card-title" id="pedidoCardTitle">Pedido actual</div>
           <div id="lineasPedido"></div>
 
           <!-- Resumen -->
@@ -422,11 +437,21 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
               <button class="medio-btn" id="mp-credito" onclick="selMedio('credito')">💳 Crédito</button>
               <button class="medio-btn" id="mp-transferencia" onclick="selMedio('transferencia')">📲 Transferencia</button>
             </div>
+            <button class="btn-sm" id="btnTogglePagoDividido" onclick="togglePagoDividido()" style="width:100%;margin-top:8px">+ Dividir pago</button>
+            <div id="pagoDivididoWrap" style="display:none;margin-top:10px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div><label style="font-size:11px">💵 Efectivo</label><input type="number" id="divEfectivo" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
+                <div><label style="font-size:11px">💳 Débito</label><input type="number" id="divDebito" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
+                <div><label style="font-size:11px">💳 Crédito</label><input type="number" id="divCredito" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
+                <div><label style="font-size:11px">📲 Transferencia</label><input type="number" id="divTransfer" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
+              </div>
+              <div id="divRestante" style="font-size:11px;margin-top:6px"></div>
+            </div>
           </div>
 
           <div style="display:flex;gap:8px;margin-top:14px;">
             <button class="btn btn-secondary" style="flex:1" onclick="imprimirComanda()">🖨 Comanda</button>
-            <button class="btn btn-success btn-full" style="flex:2" id="btnPagar" onclick="registrarVenta()">✓ Registrar pago</button>
+            <button class="btn btn-success btn-full" style="flex:2" id="btnPagar" onclick="confirmarPagoBoton()">✓ Registrar pago</button>
           </div>
         </div>
       </div>
@@ -988,6 +1013,12 @@ let sucursal = null;
 let productos = [];
 let catActiva = 'TODOS';
 let pedidoLineas = [];
+// ── Mesas ──
+let modoVenta = 'directa'; // 'directa' | 'mesas' | 'mesa-detail'
+let mesaActivaId = null;
+let mesaActivaNombre = '';
+// ── Pago dividido ──
+let pagoDividido = false;
 let medioSeleccionado = 'efectivo';
 let descTipo = 'pct';
 let cajaId = null;
@@ -2019,6 +2050,131 @@ window.guardarProducto = async function() {
 };
 
 // ═══════════════════════════
+// MESAS
+// ═══════════════════════════
+
+// Cambia entre "Nueva venta" directa y "Mesas"
+window.selModoVenta = function(btn, modo) {
+  document.querySelectorAll('#ventaModoTabs .rep-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('mesaHeaderBar').style.display = 'none';
+
+  if (modo === 'directa') {
+    modoVenta = 'directa';
+    mesaActivaId = null;
+    document.getElementById('mesasListado').style.display = 'none';
+    document.getElementById('ventaLayoutMain').style.display = '';
+    document.getElementById('ventaCardTitle').textContent = '🛒 Nueva venta';
+    document.getElementById('pedidoCardTitle').textContent = 'Pedido actual';
+    document.getElementById('btnPagar').textContent = '✓ Registrar pago';
+    pedidoLineas = [];
+    resetPagoDividido();
+    renderPedido();
+  } else {
+    modoVenta = 'mesas';
+    mesaActivaId = null;
+    document.getElementById('ventaLayoutMain').style.display = 'none';
+    document.getElementById('mesasListado').style.display = '';
+    cargarMesas();
+  }
+};
+
+// Lista las mesas abiertas de la sucursal (visibles para todos los dispositivos)
+window.cargarMesas = async function() {
+  const wrap = document.getElementById('mesasListado');
+  wrap.innerHTML = '<div class="empty">Cargando mesas...</div>';
+  try {
+    const snap = await getDocs(query(collection(db, 'mesas'), where('sucursal', '==', sucursal), where('estado', '==', 'abierta')));
+    const mesas = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.numero || 0) - (b.numero || 0));
+    wrap.innerHTML = `
+      <div class="card">
+        <div class="card-title">🍽️ Mesas abiertas</div>
+        <button class="btn btn-primary btn-full" style="margin-bottom:12px" onclick="crearMesa()">+ Nueva mesa</button>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+          ${mesas.length ? mesas.map(m => `
+            <button onclick="abrirMesa('${m.id}')" style="text-align:left;padding:12px;border:0.5px solid #ddd;border-radius:10px;background:#fff;cursor:pointer">
+              <div style="font-weight:700;font-size:14px;color:#222">${m.nombre}</div>
+              <div style="font-size:12px;color:#888;margin-top:4px">${(m.lineas || []).length} línea(s)</div>
+              <div style="font-size:15px;font-weight:700;color:#003a79;margin-top:6px">$${parseInt(m.total || 0).toLocaleString('es-CL')}</div>
+            </button>
+          `).join('') : '<div class="empty" style="grid-column:1/-1">Sin mesas abiertas</div>'}
+        </div>
+      </div>`;
+  } catch(e) {
+    wrap.innerHTML = `<div class="empty">Error cargando mesas: ${e.message}</div>`;
+  }
+};
+
+// Crea una mesa nueva: numeración automática por sucursal, con nombre opcional
+window.crearMesa = async function() {
+  if (!cajaId) { alert('⚠️ Debes abrir la caja antes de crear una mesa'); return; }
+  const nombreInput = prompt('Nombre de la mesa (opcional). Deja vacío para usar el número automático:');
+  if (nombreInput === null) return; // canceló
+  try {
+    const snap = await getDocs(query(collection(db, 'mesas'), where('sucursal', '==', sucursal)));
+    const maxNum = snap.docs.reduce((max, d) => Math.max(max, d.data().numero || 0), 0);
+    const numero = maxNum + 1;
+    const nombre = nombreInput.trim() ? nombreInput.trim() : `Mesa ${numero}`;
+    const ref = await addDoc(collection(db, 'mesas'), {
+      sucursal, numero, nombre, estado: 'abierta',
+      lineas: [], subtotal: 0, descuento: 0, total: 0,
+      apertura: Timestamp.now(), usuario: usuario.email
+    });
+    await abrirMesa(ref.id);
+  } catch(e) { alert('Error al crear mesa: ' + e.message); }
+};
+
+// Abre una mesa: carga sus líneas actuales en el carrito compartido (misma grilla y pedido de "Nueva venta")
+window.abrirMesa = async function(mesaId) {
+  try {
+    const snap = await getDoc(doc(db, 'mesas', mesaId));
+    if (!snap.exists()) { alert('Mesa no encontrada'); return; }
+    const m = snap.data();
+    mesaActivaId = mesaId;
+    mesaActivaNombre = m.nombre;
+    modoVenta = 'mesa-detail';
+    pedidoLineas = (m.lineas || []).map(l => ({ ...l }));
+    resetPagoDividido();
+
+    document.getElementById('mesasListado').style.display = 'none';
+    document.getElementById('ventaLayoutMain').style.display = '';
+    document.getElementById('mesaHeaderBar').style.display = 'flex';
+    document.getElementById('mesaHeaderNombre').textContent = `🍽️ ${m.nombre}`;
+    document.getElementById('ventaCardTitle').textContent = `🍽️ ${m.nombre}`;
+    document.getElementById('pedidoCardTitle').textContent = `Pedido — ${m.nombre}`;
+    document.getElementById('btnPagar').textContent = '💳 Cobrar y cerrar mesa';
+    renderPedido();
+  } catch(e) { alert('Error al abrir mesa: ' + e.message); }
+};
+
+// Vuelve al listado de mesas (los cambios ya quedaron guardados en cada agregar/quitar)
+window.volverAMesas = function() {
+  mesaActivaId = null;
+  pedidoLineas = [];
+  modoVenta = 'mesas';
+  document.getElementById('ventaLayoutMain').style.display = 'none';
+  document.getElementById('mesaHeaderBar').style.display = 'none';
+  document.getElementById('mesasListado').style.display = '';
+  cargarMesas();
+};
+
+// Guarda el estado actual del carrito (líneas + totales) en el documento de la mesa activa
+async function persistirMesa() {
+  if (!mesaActivaId) return;
+  const subtotal  = pedidoLineas.reduce((a, l) => a + (l.totalBruto || 0), 0);
+  const descuento = pedidoLineas.reduce((a, l) => a + (l.descMonto  || 0), 0);
+  const total     = pedidoLineas.reduce((a, l) => a + (l.total      || 0), 0);
+  const lineasPlano = pedidoLineas.map(l => ({
+    id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
+    totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
+    descMonto: l.descMonto, total: l.total, categoriaStock: l.categoriaStock
+  }));
+  try {
+    await updateDoc(doc(db, 'mesas', mesaActivaId), { lineas: lineasPlano, subtotal, descuento, total });
+  } catch(e) { console.error('Error guardando mesa:', e); }
+}
+
+// ═══════════════════════════
 // PEDIDO
 // ═══════════════════════════
 window.agregarAlPedido = function(id) {
@@ -2064,6 +2220,15 @@ window.agregarAlPedido = function(id) {
     });
   }
   renderPedido();
+
+  // En modo mesa: el stock se descuenta al agregar (no al cobrar), y se guarda de inmediato en Firestore
+  if (modoVenta === 'mesa-detail') {
+    if (conControl) {
+      const cat = esPermanente ? 'permanente' : categoriaStockActiva;
+      ajustarStock(id, cat, -1);
+    }
+    persistirMesa();
+  }
 };
 
 function renderPedido() {
@@ -2154,9 +2319,9 @@ window.selDescTipoLinea = function(i, tipo) {
 
 window.cambiarQty = function(i, delta) {
   const linea = pedidoLineas[i];
+  const prod = productos.find(p => p.id === linea.id);
+  const conControl = prod ? prod.controlStock !== false : true;
   if (delta > 0) {
-    const prod = productos.find(p => p.id === linea.id);
-    const conControl = prod ? prod.controlStock !== false : true;
     if (conControl) {
       const stockKey   = sucursal + '_' + linea.id;
       const stockItem  = window._stockMap ? window._stockMap[stockKey] : null;
@@ -2174,11 +2339,32 @@ window.cambiarQty = function(i, delta) {
   pedidoLineas[i].totalBruto = pedidoLineas[i].cantidad * linea.precio;
   calcularDescLinea(pedidoLineas[i]);
   renderPedido();
+
+  if (modoVenta === 'mesa-detail') {
+    if (conControl) {
+      const esPermanente = prod && prod.autoEliminar === false;
+      const cat = esPermanente ? 'permanente' : linea.categoriaStock;
+      ajustarStock(linea.id, cat, -delta); // delta>0 (agregó) descuenta; delta<0 (quitó) devuelve
+    }
+    persistirMesa();
+  }
 };
 
 window.eliminarLinea = function(i) {
+  const linea = pedidoLineas[i];
   pedidoLineas.splice(i, 1);
   renderPedido();
+
+  if (modoVenta === 'mesa-detail' && linea) {
+    const prod = productos.find(p => p.id === linea.id);
+    const conControl = prod ? prod.controlStock !== false : true;
+    if (conControl) {
+      const esPermanente = prod && prod.autoEliminar === false;
+      const cat = esPermanente ? 'permanente' : linea.categoriaStock;
+      ajustarStock(linea.id, cat, linea.cantidad); // devuelve toda la cantidad de esa línea
+    }
+    persistirMesa();
+  }
 };
 
 window.calcularResumen = function() {
@@ -2200,19 +2386,87 @@ window.selMedio = function(medio) {
   document.getElementById('mp-' + medio).classList.add('selected');
 };
 
+// ── Pago dividido (opcional, normalmente no se usa) ──
+window.togglePagoDividido = function() {
+  pagoDividido = !pagoDividido;
+  document.getElementById('pagoDivididoWrap').style.display = pagoDividido ? '' : 'none';
+  document.getElementById('btnTogglePagoDividido').textContent = pagoDividido ? '− Un solo medio de pago' : '+ Dividir pago';
+  document.querySelector('.medio-grid').style.display = pagoDividido ? 'none' : '';
+  if (pagoDividido) actualizarRestanteDividido();
+};
+
+function resetPagoDividido() {
+  pagoDividido = false;
+  const wrap = document.getElementById('pagoDivididoWrap');
+  const btn  = document.getElementById('btnTogglePagoDividido');
+  const grid = document.querySelector('.medio-grid');
+  if (wrap) wrap.style.display = 'none';
+  if (btn)  btn.textContent = '+ Dividir pago';
+  if (grid) grid.style.display = '';
+  ['divEfectivo','divDebito','divCredito','divTransfer'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
+window.actualizarRestanteDividido = function() {
+  const total = parseInt(document.getElementById('resumenVenta').dataset.total) || 0;
+  const suma = ['divEfectivo','divDebito','divCredito','divTransfer']
+    .reduce((a, id) => a + (parseInt(document.getElementById(id).value) || 0), 0);
+  const restante = total - suma;
+  const el = document.getElementById('divRestante');
+  el.textContent = restante === 0 ? '✅ Cuadra con el total' : `Diferencia: $${Math.abs(restante).toLocaleString('es-CL')} ${restante > 0 ? 'faltan' : 'de más'}`;
+  el.style.color = restante === 0 ? '#1D9E75' : '#e74c3c';
+};
+
+// Devuelve { medioPago } o { pagos: [...] } según si el pago está dividido
+function obtenerDatosPago() {
+  if (!pagoDividido) return { medioPago: medioSeleccionado };
+  const mapa = [['efectivo','divEfectivo'], ['debito','divDebito'], ['credito','divCredito'], ['transferencia','divTransfer']];
+  const pagos = mapa
+    .map(([medio, elId]) => ({ medio, monto: parseInt(document.getElementById(elId).value) || 0 }))
+    .filter(p => p.monto > 0);
+  return { pagos };
+}
+
+// Aplica los incrementos correspondientes a la caja según el tipo de pago
+async function incrementarTotalesCaja(pagoData, total) {
+  if (pagoData.pagos) {
+    const incrementos = {};
+    pagoData.pagos.forEach(p => { incrementos[`totales.${p.medio}`] = increment(p.monto); });
+    await updateDoc(doc(db, 'cajas', cajaId), { ...incrementos, totalVentas: increment(total), nVentas: increment(1) });
+  } else {
+    await updateDoc(doc(db, 'cajas', cajaId), {
+      [`totales.${pagoData.medioPago}`]: increment(total),
+      totalVentas: increment(total), nVentas: increment(1)
+    });
+  }
+}
+
+// Enruta el botón "Registrar pago / Cobrar" según el modo activo
+window.confirmarPagoBoton = function() {
+  if (modoVenta === 'mesa-detail') { cerrarYCobrarMesa(); }
+  else { registrarVenta(); }
+};
+
 // ═══════════════════════════
 // REGISTRAR VENTA
 // ═══════════════════════════
 window.registrarVenta = async function() {
   if (pedidoLineas.length === 0) return;
   if (!cajaId) { alert('Debes abrir la caja primero'); return; }
-  const btn = document.getElementById('btnPagar');
-  btn.disabled = true;
-  btn.textContent = 'Registrando...';
   const resumen = document.getElementById('resumenVenta');
   const total    = parseInt(resumen.dataset.total)    || 0;
   const subtotal = parseInt(resumen.dataset.subtotal) || 0;
   const descuento = parseInt(resumen.dataset.descuento) || 0;
+  const pagoData = obtenerDatosPago();
+  if (pagoData.pagos) {
+    const suma = pagoData.pagos.reduce((a, p) => a + p.monto, 0);
+    if (suma !== total) { alert(`La suma de los medios de pago ($${suma.toLocaleString('es-CL')}) no coincide con el total ($${total.toLocaleString('es-CL')})`); return; }
+  }
+  const btn = document.getElementById('btnPagar');
+  btn.disabled = true;
+  btn.textContent = 'Registrando...';
   const venta = {
     sucursal,
     usuario: usuario.email,
@@ -2223,17 +2477,13 @@ window.registrarVenta = async function() {
       descMonto: l.descMonto, total: l.total
     })),
     subtotal, descuento, total,
-    medioPago: medioSeleccionado,
+    ...pagoData,
     cajaId
   };
   try {
     await addDoc(collection(db, 'ventas'), venta);
     // Actualizar caja
-    await updateDoc(doc(db, 'cajas', cajaId), {
-      [`totales.${medioSeleccionado}`]: increment(total),
-      totalVentas: increment(total),
-      nVentas: increment(1)
-    });
+    await incrementarTotalesCaja(pagoData, total);
     // Descontar stock — FIFO por fechas (más antiguo primero dentro de la categoría)
     for (const l of pedidoLineas) {
       const prod = productos.find(p => p.id === l.id);
@@ -2265,6 +2515,7 @@ window.registrarVenta = async function() {
     }
     await imprimirComanda(venta);
     pedidoLineas = [];
+    resetPagoDividido();
     renderPedido();
     await cargarUltimasVentas();
     showToast(`✅ Venta registrada · $${total.toLocaleString('es-CL')}`);
@@ -2273,6 +2524,57 @@ window.registrarVenta = async function() {
   }
   btn.disabled = false;
   btn.textContent = '✓ Registrar pago';
+};
+
+// ═══════════════════════════
+// CERRAR Y COBRAR MESA
+// ═══════════════════════════
+// El stock de los productos de la mesa ya fue descontado al momento de agregarlos,
+// así que acá solo se registra la venta, se actualiza la caja y se cierra la mesa.
+window.cerrarYCobrarMesa = async function() {
+  if (pedidoLineas.length === 0) { alert('La mesa no tiene productos todavía'); return; }
+  if (!cajaId) { alert('Debes abrir la caja primero'); return; }
+  const resumen = document.getElementById('resumenVenta');
+  const total    = parseInt(resumen.dataset.total)    || 0;
+  const subtotal = parseInt(resumen.dataset.subtotal) || 0;
+  const descuento = parseInt(resumen.dataset.descuento) || 0;
+  const pagoData = obtenerDatosPago();
+  if (pagoData.pagos) {
+    const suma = pagoData.pagos.reduce((a, p) => a + p.monto, 0);
+    if (suma !== total) { alert(`La suma de los medios de pago ($${suma.toLocaleString('es-CL')}) no coincide con el total ($${total.toLocaleString('es-CL')})`); return; }
+  }
+  const btn = document.getElementById('btnPagar');
+  btn.disabled = true;
+  btn.textContent = 'Cobrando...';
+  const venta = {
+    sucursal,
+    usuario: usuario.email,
+    fecha: Timestamp.now(),
+    lineas: pedidoLineas.map(l => ({
+      id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
+      totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
+      descMonto: l.descMonto, total: l.total
+    })),
+    subtotal, descuento, total,
+    ...pagoData,
+    cajaId,
+    origenMesa: mesaActivaId, mesaNombre: mesaActivaNombre
+  };
+  try {
+    await addDoc(collection(db, 'ventas'), venta);
+    await incrementarTotalesCaja(pagoData, total);
+    // El stock NO se vuelve a descontar acá — ya se descontó al agregar cada producto a la mesa.
+    await updateDoc(doc(db, 'mesas', mesaActivaId), { estado: 'cerrada', cierre: Timestamp.now(), total });
+    await imprimirComanda(venta);
+    showToast(`✅ Mesa cobrada · $${total.toLocaleString('es-CL')}`);
+    pedidoLineas = [];
+    resetPagoDividido();
+    volverAMesas();
+  } catch(e) {
+    alert('Error al cobrar mesa: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '💳 Cobrar y cerrar mesa';
 };
 
 // ═══════════════════════════
@@ -2348,9 +2650,11 @@ async function cargarUltimasVentas() {
       const esAnulada = v.anulada === true;
       const tienePendiente = v.solicitudAnulacionPendiente === true;
 
-      const medioBadge = esAnulada
-        ? `<span class="ultimas-venta-medio anulada-badge">${medioLabel[v.medioPago] || v.medioPago}</span>`
-        : `<button class="ultimas-venta-medio" onclick="abrirModalEditarMedio('${v.id}','${v.medioPago}')" title="Cambiar medio de pago">${medioLabel[v.medioPago] || v.medioPago} ✏️</button>`;
+      const medioBadge = v.pagos
+        ? `<span class="ultimas-venta-medio" title="${v.pagos.map(p => `${medioLabel[p.medio]||p.medio}: $${p.monto.toLocaleString('es-CL')}`).join(' · ')}">🔀 Dividido</span>`
+        : esAnulada
+          ? `<span class="ultimas-venta-medio anulada-badge">${medioLabel[v.medioPago] || v.medioPago}</span>`
+          : `<button class="ultimas-venta-medio" onclick="abrirModalEditarMedio('${v.id}','${v.medioPago}')" title="Cambiar medio de pago">${medioLabel[v.medioPago] || v.medioPago} ✏️</button>`;
 
       const acciones = esAnulada
         ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-anulada-tag">🚫 Venta anulada${v.motivoAnulacion ? ': ' + v.motivoAnulacion : ''}</span></div>`
@@ -4167,7 +4471,11 @@ window.generarReporte = async function() {
   const porArea = {};
   const porProducto = {};
   ventas.forEach(v => {
-    porMedio[v.medioPago] = (porMedio[v.medioPago] || 0) + v.total;
+    if (v.pagos) {
+      v.pagos.forEach(p => { porMedio[p.medio] = (porMedio[p.medio] || 0) + p.monto; });
+    } else {
+      porMedio[v.medioPago] = (porMedio[v.medioPago] || 0) + v.total;
+    }
     v.lineas.forEach(l => {
       const area = idToArea[l.id] || 'Otros';
       if (!porArea[area]) porArea[area] = { cantidad: 0, total: 0 };
