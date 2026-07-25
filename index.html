@@ -747,6 +747,17 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       </div>
     </div>
 
+    <!-- Tipos de leche (nota de café) -->
+    <div class="card">
+      <div class="card-title">☕ Tipos de leche (nota de café)</div>
+      <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen en la nota de café al armar un pedido.</div>
+      <div id="tiposLecheLista"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input type="text" id="nuevoTipoLeche" placeholder="Nuevo tipo de leche..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
+        <button class="btn-sm btn-edit" onclick="agregarTipoLeche()">+ Agregar</button>
+      </div>
+    </div>
+
     <!-- Gestionar subcategorías -->
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -1038,6 +1049,14 @@ let mesaActivaId = null;
 let mesaActivaNombre = '';
 // Última venta registrada — permite reimprimir la comanda con "🖨 Comanda" aunque el carrito ya esté vacío
 let ultimaVentaRegistrada = null;
+// Caché de las ventas del turno visible (id → datos completos), para poder reimprimir cualquiera de ellas
+let ventasTurnoCache = {};
+
+window.reimprimirVentaTurno = function(ventaId) {
+  const v = ventasTurnoCache[ventaId];
+  if (!v) { alert('No se encontró esa venta para reimprimir'); return; }
+  imprimirComanda(v);
+};
 // ── Pago dividido ──
 let pagoDividido = false;
 let medioSeleccionado = 'efectivo';
@@ -1062,6 +1081,7 @@ onAuthStateChanged(auth, async (user) => {
     const adminDoc = await getDoc(doc(db, 'admins', user.uid));
     esAdmin = adminDoc.exists();
     if (esAdmin) document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+    await cargarTiposLeche();
     // Verificar si es visor de stock
     const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
     esStockViewer = viewerDoc.exists() && !esAdmin; // admin siempre tiene prioridad
@@ -1333,6 +1353,65 @@ window.showSection = function(id, el) {
 
 // ── Definición de áreas ──
 let AREAS = []; // cargado desde Firestore colección 'areas'
+let TIPOS_LECHE = ['Entera', 'Descremada', 'Sin lactosa', 'Entera sin lactosa']; // default hasta cargar desde Firestore
+
+async function cargarTiposLeche() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'tiposLeche'));
+    if (snap.exists() && Array.isArray(snap.data().lista) && snap.data().lista.length > 0) {
+      TIPOS_LECHE = snap.data().lista;
+    } else {
+      // Primera vez: sembrar con los valores por defecto
+      await setDoc(doc(db, 'config', 'tiposLeche'), { lista: TIPOS_LECHE });
+    }
+  } catch(e) { console.error('Error cargando tipos de leche:', e); }
+  renderTiposLecheAdmin();
+}
+
+async function guardarTiposLeche() {
+  try {
+    await setDoc(doc(db, 'config', 'tiposLeche'), { lista: TIPOS_LECHE });
+  } catch(e) { console.error('Error guardando tipos de leche:', e); }
+  renderPedido(); // refresca el desplegable en cualquier línea de café que esté abierta
+}
+
+// Pinta la lista editable de tipos de leche en el panel de administración
+function renderTiposLecheAdmin() {
+  const wrap = document.getElementById('tiposLecheLista');
+  if (!wrap) return;
+  wrap.innerHTML = TIPOS_LECHE.map((t, i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+      <input type="text" value="${t}" onchange="editarTipoLeche(${i}, this.value)"
+             style="flex:1;font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px"/>
+      <button class="btn-sm btn-del" onclick="eliminarTipoLeche(${i})">🗑️</button>
+    </div>
+  `).join('');
+}
+
+window.agregarTipoLeche = function() {
+  const input = document.getElementById('nuevoTipoLeche');
+  const val = input.value.trim();
+  if (!val) return;
+  if (TIPOS_LECHE.includes(val)) { alert('Ese tipo de leche ya existe en la lista'); return; }
+  TIPOS_LECHE.push(val);
+  input.value = '';
+  renderTiposLecheAdmin();
+  guardarTiposLeche();
+};
+
+window.editarTipoLeche = function(i, val) {
+  const nuevo = val.trim();
+  if (!nuevo) { renderTiposLecheAdmin(); return; } // no permite dejarlo vacío
+  TIPOS_LECHE[i] = nuevo;
+  guardarTiposLeche();
+};
+
+window.eliminarTipoLeche = function(i) {
+  if (!confirm(`¿Eliminar "${TIPOS_LECHE[i]}" de la lista? (los pedidos ya impresos con este tipo no se ven afectados)`)) return;
+  TIPOS_LECHE.splice(i, 1);
+  renderTiposLecheAdmin();
+  guardarTiposLeche();
+};
 // Compatibilidad con productos guardados con nombre de área antiguo
 const AREA_COMPAT = { 'Panadería':'PAN','Bollería':'BOL','Sándwiches':'PAN','Cafetería':'CAF','Pastelería':'PAS','Chocolatería':'PAS' };
 function normalizarArea(a) { return AREAS.find(x=>x.id===a) ? a : (AREA_COMPAT[a] || (AREAS[0]?.id || 'GEN')); }
@@ -2337,10 +2416,7 @@ function renderPedido() {
         ${esCafe ? `
         <select onchange="cambiarNotaLinea(${i}, 'tipoLeche', this.value)" style="font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px">
           <option value="">Tipo de leche (opcional)...</option>
-          <option value="Entera" ${l.tipoLeche === 'Entera' ? 'selected' : ''}>Entera</option>
-          <option value="Descremada" ${l.tipoLeche === 'Descremada' ? 'selected' : ''}>Descremada</option>
-          <option value="Sin lactosa" ${l.tipoLeche === 'Sin lactosa' ? 'selected' : ''}>Sin lactosa</option>
-          <option value="Entera sin lactosa" ${l.tipoLeche === 'Entera sin lactosa' ? 'selected' : ''}>Entera sin lactosa</option>
+          ${TIPOS_LECHE.map(t => `<option value="${t}" ${l.tipoLeche === t ? 'selected' : ''}>${t}</option>`).join('')}
         </select>` : ''}
         <input type="text" placeholder="Nota adicional (a mano)" value="${l.nota || ''}"
                oninput="cambiarNotaLinea(${i}, 'nota', this.value)" style="font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px"/>
@@ -2813,7 +2889,10 @@ async function cargarUltimasVentas() {
 
     const medioLabel = { efectivo: '💵 Efectivo', debito: '💳 Débito', credito: '💳 Crédito', transferencia: '📲 Transfer.' };
 
+    ventasTurnoCache = {}; // se refresca cada vez que se recarga la lista
+
     list.innerHTML = ventas.map(v => {
+      ventasTurnoCache[v.id] = v;
       const fecha = v.fecha?.toDate ? v.fecha.toDate() : new Date();
       const fechaStr = fecha.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       const esAnulada = v.anulada === true;
@@ -2825,11 +2904,14 @@ async function cargarUltimasVentas() {
           ? `<span class="ultimas-venta-medio anulada-badge">${medioLabel[v.medioPago] || v.medioPago}</span>`
           : `<button class="ultimas-venta-medio" onclick="abrirModalEditarMedio('${v.id}','${v.medioPago}')" title="Cambiar medio de pago">${medioLabel[v.medioPago] || v.medioPago} ✏️</button>`;
 
+      const btnComanda = `<button onclick="reimprimirVentaTurno('${v.id}')" title="Reimprimir comanda">🖨 Comanda</button>`;
+
       const acciones = esAnulada
-        ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-anulada-tag">🚫 Venta anulada${v.motivoAnulacion ? ': ' + v.motivoAnulacion : ''}</span></div>`
+        ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-anulada-tag">🚫 Venta anulada${v.motivoAnulacion ? ': ' + v.motivoAnulacion : ''}</span>${btnComanda}</div>`
         : tienePendiente
-          ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-pendiente-tag">⏳ Anulación pendiente de aprobación</span></div>`
+          ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-pendiente-tag">⏳ Anulación pendiente de aprobación</span>${btnComanda}</div>`
           : `<div class="ultimas-venta-acciones">
+              ${btnComanda}
               <button class="btn-anular" onclick="abrirModalAnulacion('${v.id}')">🗑️ Solicitar anulación</button>
             </div>`;
 
