@@ -459,8 +459,12 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
             </div>
           </div>
 
-          <div style="display:flex;gap:8px;margin-top:14px;">
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
             <button class="btn btn-secondary" style="flex:1" onclick="imprimirComanda()">🖨 Comanda</button>
+            <select id="metodoImpresionSel" onchange="cambiarMetodoImpresion(this.value)" title="Método de impresión" style="font-size:11px;border-radius:8px;border:1px solid #ddd;padding:0 6px">
+              <option value="navegador">Navegador / RawBT</option>
+              <option value="qz">QZ Tray (PC)</option>
+            </select>
             <select id="anchoPapelSel" onchange="cambiarAnchoPapel(this.value)" title="Ancho de papel térmico" style="font-size:11px;border-radius:8px;border:1px solid #ddd;padding:0 6px">
               <option value="80">80mm</option>
               <option value="58">58mm</option>
@@ -996,6 +1000,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 <div id="toastMsg"></div>
 
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.6/qz-tray.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -1046,9 +1051,11 @@ let visorSucursal = 'ainavillo';
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     usuario = user;
-    // Restaurar el ancho de papel térmico elegido en este dispositivo
+    // Restaurar el ancho de papel térmico y método de impresión elegidos en este dispositivo
     const anchoSel = document.getElementById('anchoPapelSel');
     if (anchoSel) anchoSel.value = localStorage.getItem('anchoPapelMM') || '80';
+    const metodoSel = document.getElementById('metodoImpresionSel');
+    if (metodoSel) metodoSel.value = localStorage.getItem('metodoImpresion') || (navigator.userAgent.includes('Android') ? 'navegador' : 'qz');
     // Verificar si es admin
     const adminDoc = await getDoc(doc(db, 'admins', user.uid));
     esAdmin = adminDoc.exists();
@@ -2633,18 +2640,33 @@ window.cambiarAnchoPapel = function(val) {
   localStorage.setItem('anchoPapelMM', val);
 };
 
+window.cambiarMetodoImpresion = function(val) {
+  localStorage.setItem('metodoImpresion', val);
+};
+
 window.imprimirComanda = async function(venta) {
   const lineas = venta ? venta.lineas : pedidoLineas;
   const total = venta ? venta.total : (parseInt(document.getElementById('resumenVenta').dataset.total) || 0);
   const medio = venta ? (venta.pagos ? 'Dividido' : venta.medioPago) : (pagoDividido ? 'Dividido' : medioSeleccionado);
   const suc = sucursal === 'ainavillo' ? 'Ainavillo 764' : 'Barros Arana';
+  const fecha = new Date().toLocaleString('es-CL');
+
+  // Actualiza siempre la vista previa (se usa en el camino "navegador/RawBT")
   document.getElementById('cmdSucursal').textContent = suc;
-  document.getElementById('cmdFecha').textContent = new Date().toLocaleString('es-CL');
+  document.getElementById('cmdFecha').textContent = fecha;
   document.getElementById('cmdLineas').innerHTML = lineas.map(l =>
     `${l.nombre} x${l.cantidad} ........ $${parseInt(l.total).toLocaleString('es-CL')}`
   ).join('<br/>');
   document.getElementById('cmdTotal').textContent = `TOTAL: $${total.toLocaleString('es-CL')}`;
   document.getElementById('cmdMedio').textContent = `Medio: ${medio}`;
+
+  // Método por defecto: RawBT/navegador en Android, QZ Tray en PC (se puede cambiar y queda guardado en el dispositivo)
+  const metodo = localStorage.getItem('metodoImpresion') || (navigator.userAgent.includes('Android') ? 'navegador' : 'qz');
+
+  if (metodo === 'qz') {
+    await imprimirConQZ({ suc, fecha, lineas, total, medio });
+    return;
+  }
 
   // Ajusta el tamaño de página impresa al ancho de papel térmico elegido (58mm u 80mm)
   const anchoMM = localStorage.getItem('anchoPapelMM') || '80';
@@ -2658,6 +2680,42 @@ window.imprimirComanda = async function(venta) {
 
   window.print();
 };
+
+// Imprime directo a la impresora térmica vía QZ Tray (texto plano ESC/POS + corte automático),
+// evitando el driver de Windows por completo. Requiere QZ Tray abierto en el PC (ícono en la bandeja).
+async function imprimirConQZ({ suc, fecha, lineas, total, medio }) {
+  if (typeof qz === 'undefined') {
+    alert('No se pudo cargar la librería de QZ Tray (revisa la conexión a internet).');
+    return;
+  }
+  try {
+    if (!qz.websocket.isActive()) {
+      await qz.websocket.connect();
+    }
+    const printer = await qz.printers.getDefault();
+    const config = qz.configs.create(printer);
+
+    const ESC = '\x1B', GS = '\x1D';
+    let cmd = ESC + '@';             // reset impresora
+    cmd += ESC + 'a' + '\x01';        // centrado
+    cmd += 'PANADERIA FEN\n';
+    cmd += ESC + 'a' + '\x00';        // alinear izquierda
+    cmd += suc + '\n' + fecha + '\n';
+    cmd += '--------------------------------\n';
+    lineas.forEach(l => {
+      cmd += `${l.nombre} x${l.cantidad} ........ $${parseInt(l.total).toLocaleString('es-CL')}\n`;
+    });
+    cmd += '--------------------------------\n';
+    cmd += `TOTAL: $${total.toLocaleString('es-CL')}\n`;
+    cmd += `Medio: ${medio}\n`;
+    cmd += '\n\n\n';
+    cmd += GS + 'V' + '\x00';         // corte total automático
+
+    await qz.print(config, [{ type: 'raw', format: 'command', flavor: 'plain', data: cmd }]);
+  } catch(e) {
+    alert('Error al imprimir con QZ Tray: ' + e.message + '\n\nVerifica que QZ Tray esté abierto (ícono en la bandeja del sistema, junto al reloj).');
+  }
+}
 
 // ═══════════════════════════
 // CAJA
