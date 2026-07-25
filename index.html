@@ -370,6 +370,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <div id="mesaHeaderBar" style="display:none;align-items:center;justify-content:space-between;background:#eef4fb;border-radius:10px;padding:10px 14px;margin-bottom:10px">
       <button class="btn-sm" onclick="volverAMesas()">← Mesas</button>
       <div id="mesaHeaderNombre" style="font-weight:700;color:#003a79"></div>
+      <button class="btn-sm btn-del" onclick="cancelarMesa()">🗑️ Cancelar mesa</button>
     </div>
 
     <!-- Listado de mesas abiertas -->
@@ -2156,6 +2157,38 @@ window.volverAMesas = function() {
   document.getElementById('mesaHeaderBar').style.display = 'none';
   document.getElementById('mesasListado').style.display = '';
   cargarMesas();
+};
+
+// Cancela una mesa (por error al crearla, cliente que se fue sin pedir, etc.).
+// Si tenía productos cargados, se devuelve el stock de cada uno antes de cerrarla.
+window.cancelarMesa = async function() {
+  if (!mesaActivaId) return;
+  const nLineas = pedidoLineas.length;
+  const msg = nLineas > 0
+    ? `Esta mesa tiene ${nLineas} línea(s) cargada(s) por un total de $${pedidoLineas.reduce((a,l)=>a+l.total,0).toLocaleString('es-CL')}. Al cancelar se devolverá todo el stock y NO se registrará ninguna venta. ¿Confirmas?`
+    : '¿Cancelar esta mesa vacía?';
+  if (!confirm(msg)) return;
+
+  try {
+    // Devolver stock de cada línea (si la mesa tenía productos cargados)
+    for (const l of pedidoLineas) {
+      const prod = productos.find(p => p.id === l.id);
+      const conControl = prod ? prod.controlStock !== false : true;
+      if (!conControl) continue;
+      const esPermanente = prod && prod.autoEliminar === false;
+      const cat = esPermanente ? 'permanente' : l.categoriaStock;
+      await ajustarStock(l.id, cat, l.cantidad);
+    }
+    await updateDoc(doc(db, 'mesas', mesaActivaId), {
+      estado: 'cancelada', cierre: Timestamp.now(), canceladoPor: usuario.email
+    });
+    showToast('🗑️ Mesa cancelada');
+    pedidoLineas = [];
+    resetPagoDividido();
+    volverAMesas();
+  } catch(e) {
+    alert('Error al cancelar mesa: ' + e.message);
+  }
 };
 
 // Guarda el estado actual del carrito (líneas + totales) en el documento de la mesa activa
