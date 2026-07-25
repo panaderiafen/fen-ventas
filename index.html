@@ -3970,17 +3970,32 @@ window.generarReporte = async function() {
   let ventas = snap.docs.map(d => d.data());
   if (suc) ventas = ventas.filter(v => v.sucursal === suc);
   ventas = ventas.filter(v => v.anulada !== true); // excluir ventas anuladas del reporte
+
+  // Mapa id producto → área, para poder agrupar líneas de venta por área
+  // (se busca en todos los productos, incluidos inactivos, para no perder históricos)
+  const prodSnap = await getDocs(collection(db, 'productos'));
+  const idToArea = {};
+  prodSnap.docs.forEach(d => { idToArea[d.id] = normalizarArea(d.data().area) || 'Otros'; });
+
   const totalGeneral = ventas.reduce((a, v) => a + v.total, 0);
   const porMedio = {};
+  const porArea = {};
   const porProducto = {};
   ventas.forEach(v => {
     porMedio[v.medioPago] = (porMedio[v.medioPago] || 0) + v.total;
     v.lineas.forEach(l => {
+      const area = idToArea[l.id] || 'Otros';
+      if (!porArea[area]) porArea[area] = { cantidad: 0, total: 0 };
+      porArea[area].cantidad += l.cantidad;
+      porArea[area].total += l.total;
       if (!porProducto[l.nombre]) porProducto[l.nombre] = { cantidad: 0, total: 0 };
       porProducto[l.nombre].cantidad += l.cantidad;
       porProducto[l.nombre].total += l.total;
     });
   });
+
+  const areaInfo = a => AREAS.find(x => x.id === a) || { id: a, nombre: a, emoji: '📦' };
+
   document.getElementById('reporteResultado').innerHTML = `
     <div class="card">
       <div class="card-title">Resumen ${desde} → ${hasta}</div>
@@ -3990,6 +4005,13 @@ window.generarReporte = async function() {
     <div class="card">
       <div class="card-title">Por medio de pago</div>
       ${Object.entries(porMedio).map(([m,t]) => `<div class="resumen-row"><span>${m}</span><span>$${t.toLocaleString('es-CL')}</span></div>`).join('')}
+    </div>
+    <div class="card">
+      <div class="card-title">Por área</div>
+      ${Object.entries(porArea).sort((a,b)=>b[1].total-a[1].total).map(([a,d]) => {
+        const info = areaInfo(a);
+        return `<div class="resumen-row"><span>${info.emoji} ${info.id} — ${info.nombre} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`;
+      }).join('')}
     </div>
     <div class="card">
       <div class="card-title">Por producto</div>
