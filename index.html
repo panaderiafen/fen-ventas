@@ -3456,7 +3456,10 @@ window.cargarMerma = async function() {
       const totalDia = items.reduce((a, m) => a + (m.monto || 0), 0);
       return `<div class="card" style="margin-bottom:10px">
         <div class="stock-cat-titulo cat-antesayer" style="margin-bottom:8px">🗑️ ${fecha}</div>
-        ${items.map(m => `<div class="resumen-row"><span>${m.nombreProducto} (${m.cantidad} u.)</span><span style="color:#e74c3c">−$${parseInt(m.monto||0).toLocaleString('es-CL')}</span></div>`).join('')}
+        ${items.map(m => {
+          const hora = m.fecha?.toDate ? m.fecha.toDate().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}) : '';
+          return `<div class="resumen-row"><span>${m.nombreProducto} (${m.cantidad} u.)${hora ? ` <span style="color:#aaa;font-size:11px">· ${hora}${m.usuario ? ' · ' + m.usuario : ''}</span>` : ''}</span><span style="color:#e74c3c">−$${parseInt(m.monto||0).toLocaleString('es-CL')}</span></div>`;
+        }).join('')}
         <div class="resumen-row total"><span>Pérdida del día</span><span style="color:#e74c3c">−$${parseInt(totalDia).toLocaleString('es-CL')}</span></div>
       </div>`;
     }).join('') + `<div class="card"><div class="resumen-row total"><span>💸 Total merma acumulada</span><span style="color:#e74c3c">−$${parseInt(totalMerma).toLocaleString('es-CL')}</span></div></div>`;
@@ -4291,6 +4294,14 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
         precioOriginal, monto: cantidad * precioOriginal,
         fechaIngreso, fechaMerma: new Date().toLocaleDateString('es-CL')
       })
+    });
+
+    // 1.b Guardar también en Firestore, para poder verla y verificarla desde Reportes > Merma
+    await addDoc(collection(db, 'merma'), {
+      sucursal, productoId, nombreProducto: nombre, cantidad,
+      precioOriginal, monto: cantidad * precioOriginal,
+      fechaIngreso, fechaMerma: new Date().toLocaleDateString('es-CL'),
+      fecha: Timestamp.now(), usuario: usuario.email
     });
 
     // 2. Eliminar de Firestore — borrar entradas de merma y campo legacy
