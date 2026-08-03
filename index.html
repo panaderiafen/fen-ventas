@@ -758,6 +758,17 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       </div>
     </div>
 
+    <!-- Motivos de merma -->
+    <div class="card">
+      <div class="card-title">🗑️ Motivos de merma</div>
+      <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen al enviar un producto a Merma.</div>
+      <div id="motivosMermaLista"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input type="text" id="nuevoMotivoMerma" placeholder="Nuevo motivo..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
+        <button class="btn-sm btn-edit" onclick="agregarMotivoMerma()">+ Agregar</button>
+      </div>
+    </div>
+
     <!-- Gestionar subcategorías -->
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -987,6 +998,8 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <select id="moverMermaFecha" onchange="actualizarMaxMoverMerma()"></select>
     <label>Cantidad a enviar a merma</label>
     <input type="number" id="moverMermaCantidad" min="1"/>
+    <label>Motivo</label>
+    <select id="moverMermaMotivo"></select>
     <div class="modal-btns" style="margin-top:14px">
       <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalMoverMerma').classList.remove('open')">Cancelar</button>
       <button class="btn btn-danger" style="flex:2" onclick="confirmarMoverMerma()">🗑️ Enviar a Merma</button>
@@ -1099,6 +1112,7 @@ onAuthStateChanged(auth, async (user) => {
     esAdmin = adminDoc.exists();
     if (esAdmin) document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
     await cargarTiposLeche();
+    await cargarMotivosMerma();
     // Verificar si es visor de stock
     const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
     esStockViewer = viewerDoc.exists() && !esAdmin; // admin siempre tiene prioridad
@@ -1371,6 +1385,62 @@ window.showSection = function(id, el) {
 // ── Definición de áreas ──
 let AREAS = []; // cargado desde Firestore colección 'areas'
 let TIPOS_LECHE = ['Entera', 'Descremada', 'Sin lactosa', 'Entera sin lactosa']; // default hasta cargar desde Firestore
+let MOTIVOS_MERMA = ['Llegó dañado', 'Se cayó', 'Vencido / pasado de fecha', 'Error de producción', 'Quemado', 'Otro']; // default hasta cargar desde Firestore
+
+async function cargarMotivosMerma() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'motivosMerma'));
+    if (snap.exists() && Array.isArray(snap.data().lista) && snap.data().lista.length > 0) {
+      MOTIVOS_MERMA = snap.data().lista;
+    } else {
+      await setDoc(doc(db, 'config', 'motivosMerma'), { lista: MOTIVOS_MERMA });
+    }
+  } catch(e) { console.error('Error cargando motivos de merma:', e); }
+  renderMotivosMermaAdmin();
+}
+
+async function guardarMotivosMerma() {
+  try {
+    await setDoc(doc(db, 'config', 'motivosMerma'), { lista: MOTIVOS_MERMA });
+  } catch(e) { console.error('Error guardando motivos de merma:', e); }
+}
+
+function renderMotivosMermaAdmin() {
+  const wrap = document.getElementById('motivosMermaLista');
+  if (!wrap) return;
+  wrap.innerHTML = MOTIVOS_MERMA.map((t, i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+      <input type="text" value="${t}" onchange="editarMotivoMerma(${i}, this.value)"
+             style="flex:1;font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px"/>
+      <button class="btn-sm btn-del" onclick="eliminarMotivoMerma(${i})">🗑️</button>
+    </div>
+  `).join('');
+}
+
+window.agregarMotivoMerma = function() {
+  const input = document.getElementById('nuevoMotivoMerma');
+  const val = input.value.trim();
+  if (!val) return;
+  if (MOTIVOS_MERMA.includes(val)) { alert('Ese motivo ya existe en la lista'); return; }
+  MOTIVOS_MERMA.push(val);
+  input.value = '';
+  renderMotivosMermaAdmin();
+  guardarMotivosMerma();
+};
+
+window.editarMotivoMerma = function(i, val) {
+  const nuevo = val.trim();
+  if (!nuevo) { renderMotivosMermaAdmin(); return; }
+  MOTIVOS_MERMA[i] = nuevo;
+  guardarMotivosMerma();
+};
+
+window.eliminarMotivoMerma = function(i) {
+  if (!confirm(`¿Eliminar "${MOTIVOS_MERMA[i]}" de la lista? (las mermas ya registradas con este motivo no se ven afectadas)`)) return;
+  MOTIVOS_MERMA.splice(i, 1);
+  renderMotivosMermaAdmin();
+  guardarMotivosMerma();
+};
 
 async function cargarTiposLeche() {
   try {
@@ -3468,6 +3538,11 @@ window.cargarMerma = async function() {
     const porFecha = {};
     mermas.forEach(m => { const f = m.fechaMerma || '?'; if (!porFecha[f]) porFecha[f] = []; porFecha[f].push(m); });
     const totalMerma = mermas.reduce((a, m) => a + (m.monto || 0), 0);
+    const porMotivo = {};
+    mermas.forEach(m => {
+      const arr = (m.motivos && m.motivos.length) ? m.motivos : (m.motivo ? [{ motivo: m.motivo, cantidad: m.cantidad }] : []);
+      arr.forEach(({ motivo, cantidad }) => { porMotivo[motivo] = (porMotivo[motivo] || 0) + (cantidad || 0); });
+    });
 
     el.innerHTML = Object.entries(porFecha).map(([fecha, items]) => {
       const totalDia = items.reduce((a, m) => a + (m.monto || 0), 0);
@@ -3475,11 +3550,19 @@ window.cargarMerma = async function() {
         <div class="stock-cat-titulo cat-antesayer" style="margin-bottom:8px">🗑️ ${fecha}</div>
         ${items.map(m => {
           const hora = m.fecha?.toDate ? m.fecha.toDate().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}) : '';
-          return `<div class="resumen-row"><span>${m.nombreProducto} (${m.cantidad} u.)${hora ? ` <span style="color:#aaa;font-size:11px">· ${hora}${m.usuario ? ' · ' + m.usuario : ''}</span>` : ''}</span><span style="color:#e74c3c">−$${parseInt(m.monto||0).toLocaleString('es-CL')}</span></div>`;
+          const meta = [hora, m.usuario, m.motivo].filter(Boolean).join(' · ');
+          return `<div class="resumen-row"><span>${m.nombreProducto} (${m.cantidad} u.)${meta ? ` <span style="color:#aaa;font-size:11px">· ${meta}</span>` : ''}</span><span style="color:#e74c3c">−$${parseInt(m.monto||0).toLocaleString('es-CL')}</span></div>`;
         }).join('')}
         <div class="resumen-row total"><span>Pérdida del día</span><span style="color:#e74c3c">−$${parseInt(totalDia).toLocaleString('es-CL')}</span></div>
       </div>`;
-    }).join('') + `<div class="card"><div class="resumen-row total"><span>💸 Total merma acumulada</span><span style="color:#e74c3c">−$${parseInt(totalMerma).toLocaleString('es-CL')}</span></div></div>`;
+    }).join('')
+      + (Object.keys(porMotivo).length ? `<div class="card" style="margin-bottom:10px">
+          <div class="card-title">📋 Por motivo</div>
+          ${Object.entries(porMotivo).sort((a,b)=>b[1]-a[1]).map(([mot,cant]) =>
+            `<div class="resumen-row"><span>${mot}</span><span>${cant} u.</span></div>`
+          ).join('')}
+        </div>` : '')
+      + `<div class="card"><div class="resumen-row total"><span>💸 Total merma acumulada</span><span style="color:#e74c3c">−$${parseInt(totalMerma).toLocaleString('es-CL')}</span></div></div>`;
   } catch(e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
   btn.disabled = false; btn.textContent = 'Cargar registros';
 };
@@ -4293,6 +4376,13 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
       ? keyToFechaCL(entradasMerma.sort()[0][0])
       : (data.merma?.fecha || '');
 
+    // Armar un resumen de motivos a partir de lo registrado al momento de mover a Merma
+    const mermaLog = data.mermaLog || [];
+    const motivosArr = mermaLog.filter(m => m.motivo).map(m => ({ motivo: m.motivo, cantidad: m.cantidad }));
+    const motivo = motivosArr.length
+      ? motivosArr.map(m => `${m.motivo} (${m.cantidad})`).join(' · ')
+      : '';
+
     // 1. Exportar a Sheets
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
@@ -4300,7 +4390,7 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
       body: JSON.stringify({
         tipo: 'merma', sucursal, producto: nombre, cantidad,
         precioOriginal, monto: cantidad * precioOriginal,
-        fechaIngreso, fechaMerma: new Date().toLocaleDateString('es-CL')
+        fechaIngreso, fechaMerma: new Date().toLocaleDateString('es-CL'), motivo
       })
     });
 
@@ -4309,11 +4399,11 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
       sucursal, productoId, nombreProducto: nombre, cantidad,
       precioOriginal, monto: cantidad * precioOriginal,
       fechaIngreso, fechaMerma: new Date().toLocaleDateString('es-CL'),
-      fecha: Timestamp.now(), usuario: usuario.email
+      fecha: Timestamp.now(), usuario: usuario.email, motivo, motivos: motivosArr
     });
 
-    // 2. Eliminar de Firestore — borrar entradas de merma y campo legacy
-    const updates = { merma: null };
+    // 2. Eliminar de Firestore — borrar entradas de merma, campo legacy, y limpiar el log de motivos ya registrados
+    const updates = { merma: null, mermaLog: [] };
     entradasMerma.forEach(([k]) => { updates[`entradas.${k}`] = 0; });
     await updateDoc(stockRef, updates);
     await cargarStockPorCategoria();
@@ -4389,6 +4479,9 @@ window.abrirModalMoverMerma = function(productoId, nombre, categoria) {
   ).join('');
 
   actualizarMaxMoverMerma();
+  document.getElementById('moverMermaMotivo').innerHTML =
+    `<option value="">Selecciona un motivo...</option>` +
+    MOTIVOS_MERMA.map(m => `<option value="${m}">${m}</option>`).join('');
   document.getElementById('modalMoverMerma').classList.add('open');
 };
 
@@ -4411,10 +4504,12 @@ window.confirmarMoverMerma = async function() {
   const opt         = sel.options[sel.selectedIndex];
   const max         = opt ? parseInt(opt.dataset.qty) || 0 : 0;
   const cantidad    = parseInt(document.getElementById('moverMermaCantidad').value) || 0;
+  const motivo      = document.getElementById('moverMermaMotivo').value;
 
   if (cantidad <= 0) { alert('Ingresa una cantidad válida'); return; }
   if (cantidad > max) { alert(`Solo hay ${max} ud. disponibles en esa fecha`); return; }
-  if (!confirm(`¿Enviar ${cantidad} de ${max} ud. de "${nombre}" (${keyToFechaCL(fechaKey)}) a Merma?`)) return;
+  if (!motivo) { alert('Selecciona un motivo antes de continuar'); return; }
+  if (!confirm(`¿Enviar ${cantidad} de ${max} ud. de "${nombre}" (${keyToFechaCL(fechaKey)}) a Merma?\n\nMotivo: ${motivo}`)) return;
 
   document.getElementById('modalMoverMerma').classList.remove('open');
 
@@ -4429,7 +4524,11 @@ window.confirmarMoverMerma = async function() {
     const mermaKey = fechaKey.startsWith('ultimaoferta_') ? fechaKey.replace('ultimaoferta_', 'merma_') : `merma_${fechaKey}`;
     await updateDoc(stockRef, {
       [`entradas.${fechaKey}`]: qtyActual - cantidad,
-      [`entradas.${mermaKey}`]: (entradas[mermaKey] || 0) + cantidad
+      [`entradas.${mermaKey}`]: (entradas[mermaKey] || 0) + cantidad,
+      mermaLog: arrayUnion({
+        fechaKey, cantidad, motivo: motivo || '',
+        fecha: Timestamp.now(), usuario: usuario.email
+      })
     });
 
     await cargarStockPorCategoria();
