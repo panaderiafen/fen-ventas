@@ -977,6 +977,23 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 </div>
 
 <!-- MODAL RESCATAR DE MERMA -->
+<div class="modal-overlay" id="modalMoverMerma">
+  <div class="modal">
+    <div class="modal-title" id="moverMermaTitulo">🗑️ Enviar a Merma</div>
+    <p style="font-size:12px;color:#888;margin-bottom:14px">Elige de qué fecha es el lote y cuánta cantidad enviar — el resto queda disponible.</p>
+    <input type="hidden" id="moverMermaProdId"/>
+    <input type="hidden" id="moverMermaNombre"/>
+    <label>Fecha del lote</label>
+    <select id="moverMermaFecha" onchange="actualizarMaxMoverMerma()"></select>
+    <label>Cantidad a enviar a merma</label>
+    <input type="number" id="moverMermaCantidad" min="1"/>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalMoverMerma').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-danger" style="flex:2" onclick="confirmarMoverMerma()">🗑️ Enviar a Merma</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalRescatar">
   <div class="modal">
     <div class="modal-title">↩ Rescatar de Merma</div>
@@ -4160,22 +4177,13 @@ async function cargarStockPorCategoria() {
         </div>
         ${esStockViewer
           ? `<div class="visor-stock-qty">${qty} ud.</div>`
-          : key === 'ultimaOferta'
-            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+          : `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
                 <div class="stock-qty-ctrl">
                   <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
                   <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
                   <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
                 </div>
-                <button class="btn-a-merma" onclick="moverAMerma('${i.productoId}','${nombre.replace(/'/g,"\\'")}',${qty})">→ Merma</button>
-              </div>`
-            : `<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-                <div class="stock-qty-ctrl">
-                  <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',-1)">−</button>
-                  <div class="stock-qty-num" id="sqty-${key}-${i.productoId}">${qty}</div>
-                  <button class="stock-qty-btn" onclick="ajustarStock('${i.productoId}','${key}',1)">+</button>
-                </div>
-                <button onclick="desecharStock('${i.productoId}','${key}','${nombre.replace(/'/g,"\\'")}',${qty})" title="Desechar" style="background:none;border:none;cursor:pointer;font-size:16px;color:#ccc;padding:4px;line-height:1" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='#ccc'">🗑</button>
+                <button class="btn-a-merma" onclick="abrirModalMoverMerma('${i.productoId}','${nombre.replace(/'/g,"\\'")}','${key}')">→ Merma</button>
               </div>`}
       </div>`;
     }).join('');
@@ -4364,25 +4372,68 @@ window.ajustarStockPerm = async function(productoId, delta) {
 };
 
 // Mueve stock de Última oferta → Merma (disponible para todos los usuarios)
-window.moverAMerma = async function(productoId, nombre, qty) {
-  if (!confirm(`¿Mover ${qty} ud. de "${nombre}" a Merma?`)) return;
+// Abre el modal para enviar a Merma desde cualquier categoría (Hoy/Ayer/Antesayer/Cuarto día/Última oferta),
+// permitiendo elegir de qué fecha exacta es el lote (si hay más de una) y cuánta cantidad
+window.abrirModalMoverMerma = function(productoId, nombre, categoria) {
+  const stockItem = window._stockMap ? window._stockMap[`${sucursal}_${productoId}`] : null;
+  const entradas = getEntradasPorCategoria(stockItem, categoria);
+  if (!entradas.length) { alert('No hay stock disponible en esa categoría'); return; }
+
+  document.getElementById('moverMermaProdId').value = productoId;
+  document.getElementById('moverMermaNombre').value = nombre;
+  document.getElementById('moverMermaTitulo').textContent = `🗑️ Enviar "${nombre}" a Merma`;
+
+  const sel = document.getElementById('moverMermaFecha');
+  sel.innerHTML = entradas.map(e =>
+    `<option value="${e.key}" data-qty="${e.qty}">${keyToFechaCL(e.key)} (${e.qty} disponibles)</option>`
+  ).join('');
+
+  actualizarMaxMoverMerma();
+  document.getElementById('modalMoverMerma').classList.add('open');
+};
+
+// Ajusta el máximo permitido de cantidad según la fecha elegida en el selector
+window.actualizarMaxMoverMerma = function() {
+  const sel = document.getElementById('moverMermaFecha');
+  const opt = sel.options[sel.selectedIndex];
+  const max = opt ? parseInt(opt.dataset.qty) || 0 : 0;
+  const input = document.getElementById('moverMermaCantidad');
+  input.max = max;
+  input.value = max; // por defecto, todo el lote de esa fecha (se puede editar)
+};
+
+// Mueve la cantidad elegida a Merma, desde la fecha exacta elegida por la persona
+window.confirmarMoverMerma = async function() {
+  const productoId = document.getElementById('moverMermaProdId').value;
+  const nombre      = document.getElementById('moverMermaNombre').value;
+  const sel         = document.getElementById('moverMermaFecha');
+  const fechaKey    = sel.value;
+  const opt         = sel.options[sel.selectedIndex];
+  const max         = opt ? parseInt(opt.dataset.qty) || 0 : 0;
+  const cantidad    = parseInt(document.getElementById('moverMermaCantidad').value) || 0;
+
+  if (cantidad <= 0) { alert('Ingresa una cantidad válida'); return; }
+  if (cantidad > max) { alert(`Solo hay ${max} ud. disponibles en esa fecha`); return; }
+  if (!confirm(`¿Enviar ${cantidad} de ${max} ud. de "${nombre}" (${keyToFechaCL(fechaKey)}) a Merma?`)) return;
+
+  document.getElementById('modalMoverMerma').classList.remove('open');
+
   try {
     const stockRef  = doc(db, 'stock', `${sucursal}_${productoId}`);
     const stockSnap = await getDoc(stockRef);
     if (!stockSnap.exists()) return;
     const entradas = stockSnap.data().entradas || {};
-    const updates  = {};
-    // Recopilar todas las entradas de ultimaOferta (fechas 4+ días y claves ultimaoferta_)
-    Object.entries(entradas).forEach(([k, q]) => {
-      if (q > 0 && getCategoriaFecha(k) === 'ultimaOferta') {
-        updates[`entradas.${k}`] = 0;
-        const mermaKey = k.startsWith('ultimaoferta_') ? k.replace('ultimaoferta_', 'merma_') : `merma_${k}`;
-        updates[`entradas.${mermaKey}`] = (entradas[mermaKey] || 0) + q;
-      }
+    const qtyActual = entradas[fechaKey] || 0;
+    if (qtyActual < cantidad) { alert('El stock cambió, vuelve a intentarlo'); await cargarStockPorCategoria(); return; }
+
+    const mermaKey = fechaKey.startsWith('ultimaoferta_') ? fechaKey.replace('ultimaoferta_', 'merma_') : `merma_${fechaKey}`;
+    await updateDoc(stockRef, {
+      [`entradas.${fechaKey}`]: qtyActual - cantidad,
+      [`entradas.${mermaKey}`]: (entradas[mermaKey] || 0) + cantidad
     });
-    if (Object.keys(updates).length) await updateDoc(stockRef, updates);
+
     await cargarStockPorCategoria();
-    showToast(`🗑 "${nombre}" movido a Merma`);
+    showToast(`🗑 ${cantidad} ud. de "${nombre}" movidas a Merma`);
   } catch(e) { alert('Error: ' + e.message); }
 };
 
@@ -4439,38 +4490,6 @@ window.confirmarRescatar = async function(catDestino) {
     await cargarStockPorCategoria();
     showToast(`✅ Producto rescatado a "${catDestino}"`);
   } catch(e) { alert('Error: ' + e.message); }
-};
-window.desecharStock = async function(productoId, cat, nombre, qty) {
-  if (!confirm(`¿Desechar ${qty} unidades de "${nombre}"?\n\nEl stock pasará a la tarjeta Merma para su registro.`)) return;
-  try {
-    const stockRef  = doc(db, 'stock', `${sucursal}_${productoId}`);
-    const stockSnap = await getDoc(stockRef);
-    if (!stockSnap.exists()) return;
-    const entradas = stockSnap.data().entradas || {};
-    const updates  = {};
-
-    // Buscar la fecha más antigua de esta categoría (para registrar en merma)
-    const entradasCat = Object.entries(entradas)
-      .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
-      .sort(([a], [b]) => a.localeCompare(b));
-
-    if (!entradasCat.length) return;
-    const fechaMermaKey = entradasCat[0][0]; // fecha más antigua
-
-    // Poner a 0 todas las entradas de esta categoría
-    entradasCat.forEach(([k]) => { updates[`entradas.${k}`] = 0; });
-
-    // Mover a clave "merma_YYYYMMDD" usando la fecha más antigua como referencia
-    // Se acumula con merma existente si ya había
-    const qtyMermaActual = entradas[`merma_${fechaMermaKey}`] || 0;
-    updates[`entradas.merma_${fechaMermaKey}`] = qtyMermaActual + qty;
-
-    await updateDoc(stockRef, updates);
-    await cargarStockPorCategoria();
-    showToast(`🗑 ${qty} ud. de "${nombre}" movidas a Merma`);
-  } catch(e) {
-    alert('Error al desechar: ' + e.message);
-  }
 };
 function determinarCatPorFecha(fechaISO) {
   if (!fechaISO) return 'hoy';
