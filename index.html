@@ -5072,7 +5072,9 @@ window.generarReporte = async function() {
     <div class="card">
       <div class="card-title">Resumen ${desde} → ${hasta}</div>
       <div class="resumen-row"><span>Total ventas</span><span>${ventas.length}</span></div>
-      <div class="resumen-row total"><span>Total $</span><span>$${totalGeneral.toLocaleString('es-CL')}</span></div>
+      <div class="resumen-row total"><span>Total $ (bruto)</span><span>$${totalGeneral.toLocaleString('es-CL')}</span></div>
+      <div class="resumen-row"><span>Neto (sin IVA)</span><span>$${Math.round(totalGeneral / 1.19).toLocaleString('es-CL')}</span></div>
+      <div class="resumen-row"><span>IVA (19%)</span><span>$${Math.round(totalGeneral - totalGeneral / 1.19).toLocaleString('es-CL')}</span></div>
     </div>
     <div class="card">
       <div class="card-title">Por medio de pago</div>
