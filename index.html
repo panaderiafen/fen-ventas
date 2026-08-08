@@ -3533,6 +3533,26 @@ window.cargarValorStock = async function() {
   btn.disabled = false; btn.textContent = 'Calcular valor actual';
 };
 
+// Alterna visibilidad de un mes en el árbol Mes → Día → Registros (Merma)
+window.toggleMesMerma = function(mesKey) {
+  const el = document.getElementById(`mesMerma-${mesKey}`);
+  const icon = document.getElementById(`mesMermaIcon-${mesKey}`);
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  el.style.display = abierto ? 'none' : '';
+  if (icon) icon.textContent = abierto ? '▸' : '▾';
+};
+
+// Alterna visibilidad de un día dentro de un mes (Merma)
+window.toggleDiaMerma = function(diaKey) {
+  const el = document.getElementById(`diaMerma-${diaKey}`);
+  const icon = document.getElementById(`diaMermaIcon-${diaKey}`);
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  el.style.display = abierto ? 'none' : '';
+  if (icon) icon.textContent = abierto ? '▸' : '▾';
+};
+
 window.cargarMerma = async function() {
   const btn = document.getElementById('btnCargarMerma');
   const el  = document.getElementById('mermaResult');
@@ -3542,27 +3562,91 @@ window.cargarMerma = async function() {
     const snap = await getDocs(query(collection(db, 'merma'), where('sucursal', '==', sucursal)));
     if (snap.empty) { el.innerHTML = '<div class="empty">Sin registros de merma</div>'; btn.disabled = false; btn.textContent = 'Cargar registros'; return; }
 
-    const mermas = snap.docs.map(d => d.data())
-      .sort((a, b) => (b.fechaMerma || '').localeCompare(a.fechaMerma || ''));
-    const porFecha = {};
-    mermas.forEach(m => { const f = m.fechaMerma || '?'; if (!porFecha[f]) porFecha[f] = []; porFecha[f].push(m); });
-    const totalMerma = mermas.reduce((a, m) => a + (m.monto || 0), 0);
+    const mermas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Mapa productoId → área, para poder mostrar el resumen "PAN $X · BOL $Y" por día y por mes
+    const prodSnap = await getDocs(collection(db, 'productos'));
+    const idToArea = {};
+    prodSnap.docs.forEach(d => { idToArea[d.id] = normalizarArea(d.data().area) || 'Otros'; });
+    const areaInfo = a => AREAS.find(x => x.id === a) || { id: a, nombre: a, emoji: '📦' };
+
+    function resumenPorArea(items) {
+      const porArea = {};
+      let total = 0;
+      items.forEach(m => {
+        const area = m.area || idToArea[m.productoId] || 'Otros';
+        porArea[area] = (porArea[area] || 0) + (m.monto || 0);
+        total += (m.monto || 0);
+      });
+      return { porArea, total };
+    }
+    function lineaResumen(porArea) {
+      return Object.entries(porArea).sort((a, b) => b[1] - a[1])
+        .map(([a, t]) => `${areaInfo(a).id} $${t.toLocaleString('es-CL')}`).join(' · ');
+    }
+
+    // Agrupar por mes → día, usando fechaEnvio (cuándo se mandó a merma desde Stock).
+    // fechaRegistro (cuándo se confirmó en el panel) queda en segundo plano, no se usa para agrupar.
+    const meses = {};
+    mermas.forEach(m => {
+      const fecha = normalizarFechaCaja(m.fechaEnvio) || normalizarFechaCaja(m.fechaMerma) || 'otras';
+      const mesKey = fecha !== 'otras' ? fecha.slice(0, 7) : 'otras';
+      if (!meses[mesKey]) meses[mesKey] = {};
+      if (!meses[mesKey][fecha]) meses[mesKey][fecha] = [];
+      meses[mesKey][fecha].push(m);
+    });
+    const mesesKeys = Object.keys(meses).sort((a, b) => b.localeCompare(a));
+
+    const totalGeneral = mermas.reduce((a, m) => a + (m.monto || 0), 0);
     const porMotivo = {};
     mermas.forEach(m => {
       const arr = (m.motivos && m.motivos.length) ? m.motivos : (m.motivo ? [{ motivo: m.motivo, cantidad: m.cantidad }] : []);
       arr.forEach(({ motivo, cantidad }) => { porMotivo[motivo] = (porMotivo[motivo] || 0) + (cantidad || 0); });
     });
 
-    el.innerHTML = Object.entries(porFecha).map(([fecha, items]) => {
-      const totalDia = items.reduce((a, m) => a + (m.monto || 0), 0);
-      return `<div class="card" style="margin-bottom:10px">
-        <div class="stock-cat-titulo cat-antesayer" style="margin-bottom:8px">🗑️ ${fecha}</div>
-        ${items.map(m => {
-          const hora = m.fecha?.toDate ? m.fecha.toDate().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}) : '';
-          const meta = [hora, m.usuario, m.motivo].filter(Boolean).join(' · ');
-          return `<div class="resumen-row"><span>${m.nombreProducto} (${m.cantidad} u.)${meta ? ` <span style="color:#aaa;font-size:11px">· ${meta}</span>` : ''}</span><span style="color:#e74c3c">−$${parseInt(m.monto||0).toLocaleString('es-CL')}</span></div>`;
-        }).join('')}
-        <div class="resumen-row total"><span>Pérdida del día</span><span style="color:#e74c3c">−$${parseInt(totalDia).toLocaleString('es-CL')}</span></div>
+    el.innerHTML = mesesKeys.map((mesKey, mi) => {
+      const dias = meses[mesKey];
+      const diasKeys = Object.keys(dias).sort((a, b) => b.localeCompare(a));
+      const itemsMes = diasKeys.flatMap(dk => dias[dk]);
+      const { porArea: paMes, total: totalMes } = resumenPorArea(itemsMes);
+      const mesAbierto = mi === 0;
+
+      return `
+      <div style="margin-bottom:10px">
+        <button onclick="toggleMesMerma('${mesKey}')" style="width:100%;display:flex;flex-direction:column;gap:3px;padding:10px 12px;background:#fdf1ec;border:none;border-radius:8px;cursor:pointer;text-align:left">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:14px;font-weight:700;color:#a84a24"><span id="mesMermaIcon-${mesKey}">${mesAbierto ? '▾' : '▸'}</span> ${nombreMesCaja(mesKey)}</span>
+            <span style="font-size:13px;font-weight:700;color:#e74c3c">−$${totalMes.toLocaleString('es-CL')}</span>
+          </div>
+          <div style="font-size:11px;color:#a84a24">${lineaResumen(paMes)}</div>
+        </button>
+        <div id="mesMerma-${mesKey}" style="display:${mesAbierto ? '' : 'none'};padding-top:8px">
+          ${diasKeys.map((diaKey, di) => {
+            const items = dias[diaKey];
+            const { porArea: paDia, total: totalDia } = resumenPorArea(items);
+            const diaAbierto = mesAbierto && di === 0;
+            const diaKeySafe = diaKey.replace(/[^0-9a-zA-Z]/g, '') || 'sf';
+
+            return `
+            <div style="margin-bottom:8px">
+              <button onclick="toggleDiaMerma('${diaKeySafe}')" style="width:100%;display:flex;flex-direction:column;gap:3px;padding:8px 12px;background:#fafbfc;border:0.5px solid #e5e5e5;border-radius:8px;cursor:pointer;text-align:left">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-size:13px"><span id="diaMermaIcon-${diaKeySafe}">${diaAbierto ? '▾' : '▸'}</span> ${diaKey}</span>
+                  <span style="font-size:12px;font-weight:700;color:#e74c3c">−$${totalDia.toLocaleString('es-CL')}</span>
+                </div>
+                <div style="font-size:11px;color:#888">${lineaResumen(paDia)}</div>
+              </button>
+              <div id="diaMerma-${diaKeySafe}" style="display:${diaAbierto ? '' : 'none'};padding:8px 2px 0">
+                ${items.map(m => {
+                  const hora = m.fecha?.toDate ? m.fecha.toDate().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}) : '';
+                  const area = m.area || idToArea[m.productoId] || 'Otros';
+                  const meta = [areaInfo(area).id, hora, m.usuario, m.motivo].filter(Boolean).join(' · ');
+                  return `<div class="resumen-row"><span>${m.nombreProducto} (${m.cantidad} u.)${meta ? ` <span style="color:#aaa;font-size:11px">· ${meta}</span>` : ''}</span><span style="color:#e74c3c">−$${parseInt(m.monto||0).toLocaleString('es-CL')}</span></div>`;
+                }).join('')}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
       </div>`;
     }).join('')
       + (Object.keys(porMotivo).length ? `<div class="card" style="margin-bottom:10px">
@@ -3571,7 +3655,7 @@ window.cargarMerma = async function() {
             `<div class="resumen-row"><span>${mot}</span><span>${cant} u.</span></div>`
           ).join('')}
         </div>` : '')
-      + `<div class="card"><div class="resumen-row total"><span>💸 Total merma acumulada</span><span style="color:#e74c3c">−$${parseInt(totalMerma).toLocaleString('es-CL')}</span></div></div>`;
+      + `<div class="card"><div class="resumen-row total"><span>💸 Total merma acumulada</span><span style="color:#e74c3c">−$${parseInt(totalGeneral).toLocaleString('es-CL')}</span></div></div>`;
   } catch(e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
   btn.disabled = false; btn.textContent = 'Cargar registros';
 };
@@ -4542,33 +4626,51 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
       ? keyToFechaCL(entradasMerma.sort()[0][0])
       : (data.merma?.fecha || '');
 
-    // Armar un resumen de motivos a partir de lo registrado al momento de mover a Merma
+    const fechaRegistro = fechaLocalHoy();
     const mermaLog = data.mermaLog || [];
-    const motivosArr = mermaLog.filter(m => m.motivo).map(m => ({ motivo: m.motivo, cantidad: m.cantidad }));
-    const motivo = motivosArr.length
-      ? motivosArr.map(m => `${m.motivo} (${m.cantidad})`).join(' · ')
-      : '';
 
-    // 1. Exportar a Sheets
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        tipo: 'merma', sucursal, producto: nombre, cantidad,
-        precioOriginal, monto: cantidad * precioOriginal,
-        fechaIngreso, fechaMerma: new Date().toLocaleDateString('es-CL'), motivo
-      })
+    // Agrupar el log por la fecha REAL en que se envió a merma desde Stock (no la fecha de registro de hoy).
+    // Si el mismo producto se envió a merma en más de un día distinto antes de registrarlo,
+    // se crea un registro separado por cada día, para que el análisis por fecha sea preciso.
+    const porFechaEnvio = {};
+    mermaLog.forEach(m => {
+      const fEnvio = m.fecha?.toDate ? fechaStr(m.fecha.toDate()) : fechaRegistro;
+      if (!porFechaEnvio[fEnvio]) porFechaEnvio[fEnvio] = { cantidad: 0, motivos: [], usuario: m.usuario };
+      porFechaEnvio[fEnvio].cantidad += m.cantidad;
+      if (m.motivo) porFechaEnvio[fEnvio].motivos.push({ motivo: m.motivo, cantidad: m.cantidad });
     });
+    // Respaldo por si no hay log (ej. stock de antes de este cambio): usa la fecha de hoy
+    if (!Object.keys(porFechaEnvio).length) {
+      porFechaEnvio[fechaRegistro] = { cantidad, motivos: [], usuario: usuario.email };
+    }
 
-    // 1.b Guardar también en Firestore, para poder verla y verificarla desde Reportes > Merma
-    await addDoc(collection(db, 'merma'), {
-      sucursal, productoId, nombreProducto: nombre, cantidad,
-      precioOriginal, monto: cantidad * precioOriginal,
-      fechaIngreso, fechaMerma: new Date().toLocaleDateString('es-CL'),
-      fecha: Timestamp.now(), usuario: usuario.email, motivo, motivos: motivosArr
-    });
+    for (const [fEnvio, info] of Object.entries(porFechaEnvio)) {
+      const motivo = info.motivos.map(m => `${m.motivo} (${m.cantidad})`).join(' · ');
+      const area = normalizarArea(productos.find(p => p.id === productoId)?.area) || '';
 
-    // 2. Eliminar de Firestore — borrar entradas de merma, campo legacy, y limpiar el log de motivos ya registrados
+      // Exportar a Sheets
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          tipo: 'merma', sucursal, producto: nombre, area, cantidad: info.cantidad,
+          precioOriginal, monto: info.cantidad * precioOriginal,
+          fechaIngreso, fechaMerma: fEnvio, fechaRegistro, motivo
+        })
+      });
+
+      // Guardar también en Firestore, para verla y analizarla desde Reportes > Merma.
+      // fechaEnvio = cuándo se mandó a merma desde Stock (lo relevante para análisis).
+      // fechaRegistro = cuándo se confirmó acá (queda en segundo plano, solo de referencia).
+      await addDoc(collection(db, 'merma'), {
+        sucursal, productoId, nombreProducto: nombre, area, cantidad: info.cantidad,
+        precioOriginal, monto: info.cantidad * precioOriginal,
+        fechaIngreso, fechaEnvio: fEnvio, fechaRegistro,
+        fecha: Timestamp.now(), usuario: info.usuario || usuario.email, motivo, motivos: info.motivos
+      });
+    }
+
+    // Eliminar de Firestore — borrar entradas de merma, campo legacy, y limpiar el log ya procesado
     const updates = { merma: null, mermaLog: [] };
     entradasMerma.forEach(([k]) => { updates[`entradas.${k}`] = 0; });
     await updateDoc(stockRef, updates);
