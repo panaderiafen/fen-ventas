@@ -2532,7 +2532,7 @@ function renderPedido() {
       <div class="linea-pedido">
         <div>
           <div class="linea-prod-nombre">${l.nombre}</div>
-          <div class="linea-prod-precio">$${parseInt(l.precio).toLocaleString('es-CL')} c/u <span class="cat-badge cat-${l.categoriaStock||'hoy'}">${({hoy:'Hoy',ayer:'Ayer',antesayer:'Ant.'})[l.categoriaStock||'hoy']}</span></div>
+          <div class="linea-prod-precio">$${parseInt(l.precio).toLocaleString('es-CL')} c/u <span class="cat-badge cat-${l.categoriaStock||'hoy'}">${l.loteFecha ? `UO ${keyToFechaCL(l.loteFecha).slice(0,5)}` : (({hoy:'Hoy',ayer:'Ayer',antesayer:'Ant.',cuartoDia:'4to',ultimaOferta:'Últ.'})[l.categoriaStock||'hoy'] || l.categoriaStock)}</span></div>
         </div>
         <div class="qty-control">
           <button class="qty-btn" onclick="cambiarQty(${i}, -1)">−</button>
