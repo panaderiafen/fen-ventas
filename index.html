@@ -3383,7 +3383,15 @@ window.selRepTab = function(btn, id) {
   if (id === 'repSolicitudes') cargarSolicitudesAnulacion();
 };
 
-function fechaStr(d) { return d.toISOString().split('T')[0]; }
+// Devuelve YYYY-MM-DD en fecha LOCAL (no UTC). toISOString() convierte a UTC y en Chile
+// (UTC-3/UTC-4) eso hacía que "Hoy" mostrara a veces la fecha de mañana — mismo problema
+// que ya se había resuelto en fechaLocalHoy(), aplicado acá para cualquier fecha.
+function fechaStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dia}`;
+}
 
 // Devuelve la fecha local (no UTC) en formato YYYY-MM-DD.
 // Crítico para la rotación de stock: evita que la diferencia de zona
