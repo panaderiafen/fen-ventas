@@ -3771,6 +3771,32 @@ window.cargarEvaluacionesCaja = async function() {
               </button>
               <div id="diaCaja-${diaKeySafe}" style="display:${diaAbierto ? '' : 'none'};padding:8px 2px 0">
                 <div style="background:#f7f9fc;border-radius:8px;padding:10px;margin-bottom:10px">
+                  ${hayArqueo ? (() => {
+                    const sistTotalDia = r.sistEfectivo + r.sistDebito + r.sistCredito + r.sistTransfer;
+                    const manTotalDia  = r.manEfectivo + r.manDebito + r.manCredito + r.manTransfer;
+                    const difTotalDia  = manTotalDia - sistTotalDia;
+                    const colorDif = difTotalDia === 0 ? '#1D9E75' : (difTotalDia > 0 ? '#1D9E75' : '#e74c3c');
+                    const labelDif = difTotalDia === 0 ? '✅ Cuadrado' : (difTotalDia > 0 ? 'Saldo a favor +$' : 'Saldo en contra −$') + Math.abs(difTotalDia).toLocaleString('es-CL');
+                    return `
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid #ddd">
+                    <div>
+                      <div style="font-size:10px;color:#888;text-transform:uppercase">Sistema</div>
+                      <div style="font-size:15px;font-weight:700;color:#222">$${sistTotalDia.toLocaleString('es-CL')}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px;color:#888;text-transform:uppercase">Cajero</div>
+                      <div style="font-size:15px;font-weight:700;color:#222">$${manTotalDia.toLocaleString('es-CL')}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px;color:#888;text-transform:uppercase">Diferencia</div>
+                      <div style="font-size:13px;font-weight:700;color:${colorDif}">${labelDif}</div>
+                    </div>
+                  </div>`;
+                  })() : `
+                  <div style="text-align:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid #ddd">
+                    <div style="font-size:10px;color:#888;text-transform:uppercase">Total sistema (sin arqueo del cajero ese día)</div>
+                    <div style="font-size:15px;font-weight:700;color:#222">$${(r.sistEfectivo + r.sistDebito + r.sistCredito + r.sistTransfer).toLocaleString('es-CL')}</div>
+                  </div>`}
                   <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:4px;margin-bottom:4px">
                     <div></div>
                     <div style="font-size:10px;color:#888;text-transform:uppercase;text-align:center">Sistema</div>
