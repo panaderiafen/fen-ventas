@@ -5095,7 +5095,7 @@ window.generarReporte = async function() {
       <div class="card-title">🏆 Top 5 más vendidos por área</div>
       ${Object.entries(porArea).sort((a,b)=>b[1].total-a[1].total).map(([a]) => {
         const info = areaInfo(a);
-        const top5 = Object.entries(porProductoEnArea[a] || {}).sort((x,y)=>y[1].cantidad-x[1].cantidad).slice(0,5);
+        const top5 = Object.entries(porProductoEnArea[a] || {}).sort((x,y)=>y[1].total-x[1].total).slice(0,5);
         const medallas = ['🥇','🥈','🥉','4°','5°'];
         return `
         <div style="margin-bottom:12px">
