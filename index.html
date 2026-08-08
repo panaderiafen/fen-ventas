@@ -1042,6 +1042,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.6/qz-tray.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -5030,6 +5031,7 @@ window.generarReporte = async function() {
   const porArea = {};
   const porProducto = {};
   const porTipoLeche = {};
+  const porProductoEnArea = {}; // { area: { nombreProducto: {cantidad, total} } } — para el ranking por área
   ventas.forEach(v => {
     if (v.pagos) {
       v.pagos.forEach(p => { porMedio[p.medio] = (porMedio[p.medio] || 0) + p.monto; });
@@ -5047,10 +5049,15 @@ window.generarReporte = async function() {
       if (l.tipoLeche) {
         porTipoLeche[l.tipoLeche] = (porTipoLeche[l.tipoLeche] || 0) + l.cantidad;
       }
+      if (!porProductoEnArea[area]) porProductoEnArea[area] = {};
+      if (!porProductoEnArea[area][l.nombre]) porProductoEnArea[area][l.nombre] = { cantidad: 0, total: 0 };
+      porProductoEnArea[area][l.nombre].cantidad += l.cantidad;
+      porProductoEnArea[area][l.nombre].total += l.total;
     });
   });
 
   const areaInfo = a => AREAS.find(x => x.id === a) || { id: a, nombre: a, emoji: '📦' };
+  const paletaColores = ['#003a79', '#1D9E75', '#D85A30', '#7F77DD', '#D4537E', '#BA7517', '#5DCAA5', '#888780'];
 
   document.getElementById('reporteResultado').innerHTML = `
     <div class="card">
@@ -5060,13 +5067,15 @@ window.generarReporte = async function() {
     </div>
     <div class="card">
       <div class="card-title">Por medio de pago</div>
-      ${Object.entries(porMedio).map(([m,t]) => `<div class="resumen-row"><span>${m}</span><span>$${t.toLocaleString('es-CL')}</span></div>`).join('')}
+      <div style="max-width:220px;margin:0 auto 12px"><canvas id="chartMedio"></canvas></div>
+      ${Object.entries(porMedio).map(([m,t]) => `<div class="resumen-row"><span>${m}</span><span>$${t.toLocaleString('es-CL')} <span style="color:#aaa;font-size:11px">(${totalGeneral ? Math.round(t/totalGeneral*100) : 0}%)</span></span></div>`).join('')}
     </div>
     <div class="card">
       <div class="card-title">Por área</div>
+      <div style="max-width:220px;margin:0 auto 12px"><canvas id="chartArea"></canvas></div>
       ${Object.entries(porArea).sort((a,b)=>b[1].total-a[1].total).map(([a,d]) => {
         const info = areaInfo(a);
-        return `<div class="resumen-row"><span>${info.emoji} ${info.id} — ${info.nombre} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`;
+        return `<div class="resumen-row"><span>${info.emoji} ${info.id} — ${info.nombre} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')} <span style="color:#aaa;font-size:11px">(${totalGeneral ? Math.round(d.total/totalGeneral*100) : 0}%)</span></span></div>`;
       }).join('')}
     </div>
     <div class="card">
@@ -5082,7 +5091,52 @@ window.generarReporte = async function() {
         `<div class="resumen-row"><span>${tipo}</span><span>${cant} u.</span></div>`
       ).join('')}
     </div>` : ''}
+    <div class="card">
+      <div class="card-title">🏆 Top 5 más vendidos por área</div>
+      ${Object.entries(porArea).sort((a,b)=>b[1].total-a[1].total).map(([a]) => {
+        const info = areaInfo(a);
+        const top5 = Object.entries(porProductoEnArea[a] || {}).sort((x,y)=>y[1].cantidad-x[1].cantidad).slice(0,5);
+        const medallas = ['🥇','🥈','🥉','4°','5°'];
+        return `
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:4px">${info.emoji} ${info.id} — ${info.nombre}</div>
+          ${top5.map(([n,d],i) => `<div class="resumen-row"><span>${medallas[i]} ${n}</span><span>${d.cantidad} u. · $${d.total.toLocaleString('es-CL')}</span></div>`).join('')}
+        </div>`;
+      }).join('')}
+    </div>
   `;
+
+  // Destruir gráficos anteriores para evitar que Chart.js dibuje encima de instancias previas
+  if (window._chartMedio) window._chartMedio.destroy();
+  if (window._chartArea) window._chartArea.destroy();
+
+  window._chartMedio = new Chart(document.getElementById('chartMedio'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(porMedio),
+      datasets: [{ data: Object.values(porMedio), backgroundColor: paletaColores, borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10 } },
+        tooltip: { callbacks: { label: ctx => `$${ctx.parsed.toLocaleString('es-CL')}` } }
+      }
+    }
+  });
+
+  window._chartArea = new Chart(document.getElementById('chartArea'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(porArea).map(a => areaInfo(a).id),
+      datasets: [{ data: Object.values(porArea).map(d => d.total), backgroundColor: paletaColores, borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10 } },
+        tooltip: { callbacks: { label: ctx => `$${ctx.parsed.toLocaleString('es-CL')}` } }
+      }
+    }
+  });
 };
 </script>
 </body>
