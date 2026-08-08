@@ -5007,6 +5007,15 @@ window.forzarRotacionManual = async function() {
 // ═══════════════════════════
 // REPORTES
 // ═══════════════════════════
+window.toggleReportePorProducto = function() {
+  const el = document.getElementById('repProdLista');
+  const icon = document.getElementById('repProdIcon');
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  el.style.display = abierto ? 'none' : '';
+  if (icon) icon.textContent = abierto ? '▸' : '▾';
+};
+
 window.generarReporte = async function() {
   const desde = document.getElementById('repDesde').value;
   const hasta = document.getElementById('repHasta').value;
@@ -5078,12 +5087,6 @@ window.generarReporte = async function() {
         return `<div class="resumen-row"><span>${info.emoji} ${info.id} — ${info.nombre} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')} <span style="color:#aaa;font-size:11px">(${totalGeneral ? Math.round(d.total/totalGeneral*100) : 0}%)</span></span></div>`;
       }).join('')}
     </div>
-    <div class="card">
-      <div class="card-title">Por producto</div>
-      ${Object.entries(porProducto).sort((a,b)=>b[1].total-a[1].total).map(([n,d]) => 
-        `<div class="resumen-row"><span>${n} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`
-      ).join('')}
-    </div>
     ${Object.keys(porTipoLeche).length > 0 ? `
     <div class="card">
       <div class="card-title">☕ Por tipo de leche</div>
@@ -5122,6 +5125,16 @@ window.generarReporte = async function() {
         }).join('')}
       </div>
     </div>
+    <div class="card">
+      <button onclick="toggleReportePorProducto()" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer">
+        <span class="card-title" style="margin:0"><span id="repProdIcon">▸</span> Por producto</span>
+        <span style="font-size:11px;color:#888">${Object.keys(porProducto).length} productos</span>
+      </button>
+      <div id="repProdLista" style="display:none;margin-top:10px">
+        ${Object.entries(porProducto).sort((a,b)=>b[1].total-a[1].total).map(([n,d]) => 
+          `<div class="resumen-row"><span>${n} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`
+        ).join('')}
+      </div>
     </div>
   `;
 
