@@ -988,6 +988,17 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 </div>
 
 <!-- MODAL RESCATAR DE MERMA -->
+<div class="modal-overlay" id="modalElegirLote">
+  <div class="modal">
+    <div class="modal-title" id="elegirLoteTitulo">📦 Elegir lote</div>
+    <p style="font-size:12px;color:#888;margin-bottom:14px">Este producto tiene más de un lote en Última oferta. Elige de cuál estás vendiendo.</p>
+    <div id="elegirLoteOpciones" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalElegirLote').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalMoverMerma">
   <div class="modal">
     <div class="modal-title" id="moverMermaTitulo">🗑️ Enviar a Merma</div>
@@ -1616,6 +1627,15 @@ function fechaKeyHoy() { return fechaLocalHoy().replace(/-/g, ''); }
 function keyToFechaCL(key) {
   if (!key || key.length !== 8) return '';
   return `${key.slice(6,8)}-${key.slice(4,6)}-${key.slice(0,4)}`;
+}
+
+// Fecha en que un lote (por su fecha de ingreso) llega a la categoría "Última oferta" (ingreso + 4 días)
+function fechaLlegadaUltimaOferta(dateKey) {
+  if (!dateKey || dateKey.length !== 8) return '';
+  const y = dateKey.slice(0, 4), m = dateKey.slice(4, 6), d = dateKey.slice(6, 8);
+  const fecha = new Date(`${y}-${m}-${d}T00:00:00`);
+  fecha.setDate(fecha.getDate() + 4);
+  return fechaStr(fecha).split('-').reverse().join('-'); // DD-MM-YYYY, mismo estilo que keyToFechaCL
 }
 
 // Determina la categoría de stock según la diferencia de días con hoy
@@ -2392,7 +2412,7 @@ async function persistirMesa() {
   const lineasPlano = pedidoLineas.map(l => ({
     id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
     totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
-    descMonto: l.descMonto, total: l.total, categoriaStock: l.categoriaStock,
+    descMonto: l.descMonto, total: l.total, categoriaStock: l.categoriaStock, loteFecha: l.loteFecha || '',
     clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
   }));
   try {
@@ -2407,33 +2427,54 @@ window.agregarAlPedido = function(id) {
   if (!cajaId) { alert('⚠️ Debes abrir la caja antes de realizar ventas'); return; }
   const prod = productos.find(p => p.id === id);
   if (!prod) return;
-  const conControl  = prod.controlStock !== false;
+  const conControl   = prod.controlStock !== false;
+  const esPermanente = prod.autoEliminar === false;
+
+  // Última oferta con más de un lote: hay que elegir cuál vender antes de agregarlo al pedido
+  if (conControl && !esPermanente && categoriaStockActiva === 'ultimaOferta') {
+    const stockKey  = sucursal + '_' + id;
+    const stockItem = window._stockMap ? window._stockMap[stockKey] : null;
+    const lotes = getEntradasPorCategoria(stockItem, 'ultimaOferta');
+    if (lotes.length > 1) {
+      abrirModalElegirLote(id, prod.nombre, lotes);
+      return;
+    }
+  }
+  agregarAlPedidoConLote(id, null);
+};
+
+// Agrega el producto al pedido. Si loteFecha viene con valor, descuenta ESE lote específico
+// (elegido por el cajero) en vez del FIFO automático — para Última oferta con varios lotes.
+window.agregarAlPedidoConLote = function(id, loteFecha) {
+  const prod = productos.find(p => p.id === id);
+  if (!prod) return;
+  const conControl   = prod.controlStock !== false;
   const esPermanente = prod.autoEliminar === false;
 
   if (conControl) {
     const stockKey   = sucursal + '_' + id;
     const stockItem  = window._stockMap ? window._stockMap[stockKey] : null;
-    const disponible = stockItem
-      ? (esPermanente
-          ? (stockItem.entradas?.['permanente'] || 0)
-          : getQtyCategoria(stockItem, categoriaStockActiva))
-      : 0;
+    const disponible = esPermanente
+      ? (stockItem?.entradas?.['permanente'] || 0)
+      : loteFecha
+        ? (stockItem?.entradas?.[loteFecha] || 0)
+        : (stockItem ? getQtyCategoria(stockItem, categoriaStockActiva) : 0);
     if (disponible <= 0) {
       alert(`⚠️ Sin stock${esPermanente ? '' : ` en categoría "${categoriaStockActiva}"`} para ${prod.nombre}`);
       return;
     }
     const cantEnPedido = pedidoLineas
-      .filter(l => l.id === id && l.categoriaStock === categoriaStockActiva)
+      .filter(l => l.id === id && l.categoriaStock === categoriaStockActiva && (l.loteFecha || '') === (loteFecha || ''))
       .reduce((a, l) => a + l.cantidad, 0);
     if (cantEnPedido >= disponible) {
-      alert(`⚠️ Solo hay ${disponible} unidad(es) de ${prod.nombre} en stock (${categoriaStockActiva})`);
+      alert(`⚠️ Solo hay ${disponible} unidad(es) de ${prod.nombre}${loteFecha ? ` en el lote del ${keyToFechaCL(loteFecha)}` : ` en stock (${categoriaStockActiva})`}`);
       return;
     }
   }
 
   const precio = getPrecioProducto(prod, categoriaStockActiva);
-  // Buscar línea existente del mismo producto Y misma categoría
-  const existente = pedidoLineas.find(l => l.id === id && l.categoriaStock === categoriaStockActiva);
+  // Buscar línea existente del mismo producto, misma categoría Y mismo lote
+  const existente = pedidoLineas.find(l => l.id === id && l.categoriaStock === categoriaStockActiva && (l.loteFecha || '') === (loteFecha || ''));
   if (existente) {
     existente.cantidad++;
     existente.totalBruto = existente.cantidad * existente.precio;
@@ -2442,7 +2483,7 @@ window.agregarAlPedido = function(id) {
     pedidoLineas.push({
       id, nombre: prod.nombre, precio, cantidad: 1,
       totalBruto: precio, descTipo: 'pct', descVal: 0, descMonto: 0, total: precio,
-      categoriaStock: categoriaStockActiva,
+      categoriaStock: categoriaStockActiva, loteFecha: loteFecha || '',
       clienteNombre: '', tipoLeche: '', nota: ''
     });
   }
@@ -2451,11 +2492,31 @@ window.agregarAlPedido = function(id) {
   // En modo mesa: el stock se descuenta al agregar (no al cobrar), y se guarda de inmediato en Firestore
   if (modoVenta === 'mesa-detail') {
     if (conControl) {
-      const cat = esPermanente ? 'permanente' : categoriaStockActiva;
-      ajustarStock(id, cat, -1);
+      if (loteFecha) {
+        ajustarStockLote(id, loteFecha, -1);
+      } else {
+        const cat = esPermanente ? 'permanente' : categoriaStockActiva;
+        ajustarStock(id, cat, -1);
+      }
     }
     persistirMesa();
   }
+};
+
+// Abre el selector de lote cuando un producto de Última oferta tiene más de un lote disponible
+window.abrirModalElegirLote = function(productoId, nombre, lotes) {
+  document.getElementById('elegirLoteTitulo').textContent = `📦 ${nombre} — elige el lote`;
+  document.getElementById('elegirLoteOpciones').innerHTML = lotes.map(l => `
+    <button onclick="elegirLoteYAgregar('${productoId}','${l.key}')" style="text-align:left;padding:12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer">
+      <div style="font-weight:600;font-size:13px">Ingreso ${keyToFechaCL(l.key)} → lleg. Últ.of. ${fechaLlegadaUltimaOferta(l.key)}</div>
+      <div style="font-size:12px;color:#888;margin-top:2px">${l.qty} unidad(es) disponibles</div>
+    </button>`).join('');
+  document.getElementById('modalElegirLote').classList.add('open');
+};
+
+window.elegirLoteYAgregar = function(productoId, fechaKey) {
+  document.getElementById('modalElegirLote').classList.remove('open');
+  agregarAlPedidoConLote(productoId, fechaKey);
 };
 
 function renderPedido() {
@@ -2589,9 +2650,11 @@ window.cambiarQty = function(i, delta) {
     if (conControl) {
       const stockKey   = sucursal + '_' + linea.id;
       const stockItem  = window._stockMap ? window._stockMap[stockKey] : null;
-      const disponible = stockItem ? getQtyCategoria(stockItem, linea.categoriaStock) : 0;
+      const disponible = linea.loteFecha
+        ? (stockItem?.entradas?.[linea.loteFecha] || 0)
+        : (stockItem ? getQtyCategoria(stockItem, linea.categoriaStock) : 0);
       const totalEnPedido = pedidoLineas
-        .filter(l => l.id === linea.id && l.categoriaStock === linea.categoriaStock)
+        .filter(l => l.id === linea.id && l.categoriaStock === linea.categoriaStock && (l.loteFecha || '') === (linea.loteFecha || ''))
         .reduce((a, l) => a + l.cantidad, 0);
       if (totalEnPedido >= disponible) {
         showToast(`⚠️ Stock máximo: ${disponible} ud. de ${linea.nombre}`, 'error');
@@ -2606,9 +2669,13 @@ window.cambiarQty = function(i, delta) {
 
   if (modoVenta === 'mesa-detail') {
     if (conControl) {
-      const esPermanente = prod && prod.autoEliminar === false;
-      const cat = esPermanente ? 'permanente' : linea.categoriaStock;
-      ajustarStock(linea.id, cat, -delta); // delta>0 (agregó) descuenta; delta<0 (quitó) devuelve
+      if (linea.loteFecha) {
+        ajustarStockLote(linea.id, linea.loteFecha, -delta);
+      } else {
+        const esPermanente = prod && prod.autoEliminar === false;
+        const cat = esPermanente ? 'permanente' : linea.categoriaStock;
+        ajustarStock(linea.id, cat, -delta); // delta>0 (agregó) descuenta; delta<0 (quitó) devuelve
+      }
     }
     persistirMesa();
   }
@@ -2623,9 +2690,13 @@ window.eliminarLinea = function(i) {
     const prod = productos.find(p => p.id === linea.id);
     const conControl = prod ? prod.controlStock !== false : true;
     if (conControl) {
-      const esPermanente = prod && prod.autoEliminar === false;
-      const cat = esPermanente ? 'permanente' : linea.categoriaStock;
-      ajustarStock(linea.id, cat, linea.cantidad); // devuelve toda la cantidad de esa línea
+      if (linea.loteFecha) {
+        ajustarStockLote(linea.id, linea.loteFecha, linea.cantidad);
+      } else {
+        const esPermanente = prod && prod.autoEliminar === false;
+        const cat = esPermanente ? 'permanente' : linea.categoriaStock;
+        ajustarStock(linea.id, cat, linea.cantidad); // devuelve toda la cantidad de esa línea
+      }
     }
     persistirMesa();
   }
@@ -2738,7 +2809,7 @@ window.registrarVenta = async function() {
     lineas: pedidoLineas.map(l => ({
       id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
       totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
-      descMonto: l.descMonto, total: l.total,
+      descMonto: l.descMonto, total: l.total, loteFecha: l.loteFecha || '',
       clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
     })),
     subtotal, descuento, total,
@@ -2763,6 +2834,10 @@ window.registrarVenta = async function() {
         // Producto permanente: descontar siempre de la clave "permanente"
         const qtyActual = entradas['permanente'] || 0;
         await updateDoc(stockRef, { 'entradas.permanente': Math.max(0, qtyActual - l.cantidad) });
+      } else if (l.loteFecha) {
+        // Lote específico elegido por el cajero (Última oferta con más de un lote): descuenta ESE lote, no FIFO
+        const qtyActual = entradas[l.loteFecha] || 0;
+        await updateDoc(stockRef, { [`entradas.${l.loteFecha}`]: Math.max(0, qtyActual - l.cantidad) });
       } else {
         // Producto perecedero: FIFO dentro de la categoría
         const cat = l.categoriaStock || 'hoy';
@@ -2818,7 +2893,7 @@ window.cerrarYCobrarMesa = async function() {
     lineas: pedidoLineas.map(l => ({
       id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
       totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
-      descMonto: l.descMonto, total: l.total,
+      descMonto: l.descMonto, total: l.total, loteFecha: l.loteFecha || '',
       clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
     })),
     subtotal, descuento, total,
@@ -4503,10 +4578,21 @@ async function cargarStockPorCategoria() {
         ? logCat.map(l => `${l.cantidad} ud. ${l.hora}`).join('&nbsp;&nbsp;')
         : '';
 
+      // Última oferta con más de un lote: mostrar el desglose completo por lote
+      // (fecha de ingreso + hora, fecha en que llegó a Última oferta, cantidad de ese lote)
+      const metaHTML = (key === 'ultimaOferta' && entradas.length > 1)
+        ? `<div style="font-size:11px;color:#888;margin-top:2px;line-height:1.5">
+            ${entradas.map(e => {
+              const hora = (i.entradasLog || []).find(l => l.fechaKey === e.key)?.hora || '';
+              return `<div>📦 Ingreso ${keyToFechaCL(e.key)}${hora ? ` ${hora}` : ''} → lleg. Últ.of. ${fechaLlegadaUltimaOferta(e.key)} · <b>${e.qty} ud.</b></div>`;
+            }).join('')}
+          </div>`
+        : `<div class="stock-prod-meta">${fechaRef}${logStr ? `&nbsp;&nbsp;${logStr}` : ''}</div>`;
+
       return `<div class="stock-row">
         <div style="flex:1;min-width:0">
           <div class="stock-prod-nombre">${nombre}</div>
-          <div class="stock-prod-meta">${fechaRef}${logStr ? `&nbsp;&nbsp;${logStr}` : ''}</div>
+          ${metaHTML}
         </div>
         ${esStockViewer
           ? `<div class="visor-stock-qty">${qty} ud.</div>`
@@ -4679,6 +4765,21 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
   } catch(e) {
     alert('Error al registrar merma: ' + e.message);
   }
+};
+
+// Ajusta el stock de un lote específico (fecha exacta elegida por el cajero), sin FIFO —
+// se usa cuando el producto viene de Última oferta con más de un lote y se eligió cuál vender.
+window.ajustarStockLote = async function(productoId, fechaKey, delta) {
+  const stockKey = `${sucursal}_${productoId}`;
+  const ref = doc(db, 'stock', stockKey);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const entradas = snap.data().entradas || {};
+  const qtyActual = entradas[fechaKey] || 0;
+  const nuevaQty = Math.max(0, qtyActual + delta);
+  await updateDoc(ref, { [`entradas.${fechaKey}`]: nuevaQty });
+  if (window._stockMap[stockKey]?.entradas) window._stockMap[stockKey].entradas[fechaKey] = nuevaQty;
+  renderProductos();
 };
 
 window.ajustarStock = async function(productoId, cat, delta) {
