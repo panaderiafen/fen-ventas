@@ -3575,21 +3575,20 @@ window.cargarMerma = async function() {
   btn.disabled = false; btn.textContent = 'Cargar registros';
 };
 
-window.cargarEvaluacionesCaja = async function() {
-  const btn = document.getElementById('btnCargarEvalCaja');
-  const el  = document.getElementById('evalCajaResult');
-  btn.disabled = true; btn.textContent = 'Cargando...';
-  el.innerHTML = '';
-  try {
-    const snap = await getDocs(query(collection(db, 'evaluacion_caja'), where('sucursal', '==', sucursal)));
-    if (snap.empty) { el.innerHTML = '<div class="empty">Sin evaluaciones de caja</div>'; btn.disabled = false; btn.textContent = 'Cargar evaluaciones'; return; }
+function difColorCaja(d) { return d === 0 ? '#1D9E75' : (d > 0 ? '#003a79' : '#e74c3c'); }
+function difLabelCaja(d) { return d === 0 ? '✅ Exacto' : (d > 0 ? '+' : '') + '$' + Math.abs(d).toLocaleString('es-CL'); }
 
-    const evals = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.cierre?.seconds || 0) - (a.cierre?.seconds || 0)); // más reciente primero
-    const difColor = d => d === 0 ? '#1D9E75' : (d > 0 ? '#003a79' : '#e74c3c');
-    const difLabel = d => d === 0 ? '✅ Exacto' : (d > 0 ? '+' : '') + '$' + Math.abs(d).toLocaleString('es-CL');
+function nombreMesCaja(mesKey) {
+  if (mesKey === 'otras') return 'Otras fechas';
+  const [y, m] = mesKey.split('-');
+  const nombres = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return `${nombres[parseInt(m) - 1] || '?'} ${y}`;
+}
 
-    el.innerHTML = evals.map(e => `
+// Card de detalle completo de una caja individual (misma info de siempre, ahora reutilizable)
+function renderEvalCajaCardHTML(e) {
+  const difColor = difColorCaja, difLabel = difLabelCaja;
+  return `
       <div class="card" style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;margin-bottom:10px">
           <div>
@@ -3671,7 +3670,119 @@ window.cargarEvaluacionesCaja = async function() {
             <td style="text-align:right;padding:5px;color:${difColor(e.difTotal||0)}">${difLabel(e.difTotal||0)}</td>` : ''}
           </tr>
         </table>
-      </div>`).join('');
+      </div>`;
+}
+
+// Alterna visibilidad de un mes en el árbol Mes → Día → Cajas
+window.toggleMesCaja = function(mesKey) {
+  const el = document.getElementById(`mesCaja-${mesKey}`);
+  const icon = document.getElementById(`mesCajaIcon-${mesKey}`);
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  el.style.display = abierto ? 'none' : '';
+  if (icon) icon.textContent = abierto ? '▸' : '▾';
+};
+
+// Alterna visibilidad de un día (resumen + cajas individuales) dentro de un mes
+window.toggleDiaCaja = function(diaKey) {
+  const el = document.getElementById(`diaCaja-${diaKey}`);
+  const icon = document.getElementById(`diaCajaIcon-${diaKey}`);
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  el.style.display = abierto ? 'none' : '';
+  if (icon) icon.textContent = abierto ? '▸' : '▾';
+};
+
+window.cargarEvaluacionesCaja = async function() {
+  const btn = document.getElementById('btnCargarEvalCaja');
+  const el  = document.getElementById('evalCajaResult');
+  btn.disabled = true; btn.textContent = 'Cargando...';
+  el.innerHTML = '';
+  try {
+    const snap = await getDocs(query(collection(db, 'evaluacion_caja'), where('sucursal', '==', sucursal)));
+    if (snap.empty) { el.innerHTML = '<div class="empty">Sin evaluaciones de caja</div>'; btn.disabled = false; btn.textContent = 'Cargar evaluaciones'; return; }
+
+    const evals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Agrupar por mes → día (a partir de e.fecha en formato YYYY-MM-DD)
+    const meses = {};
+    evals.forEach(e => {
+      const fecha = e.fecha || '';
+      const mesKey = /^\d{4}-\d{2}/.test(fecha) ? fecha.slice(0, 7) : 'otras';
+      if (!meses[mesKey]) meses[mesKey] = {};
+      if (!meses[mesKey][fecha]) meses[mesKey][fecha] = [];
+      meses[mesKey][fecha].push(e);
+    });
+    const mesesKeys = Object.keys(meses).sort((a, b) => b.localeCompare(a));
+
+    el.innerHTML = mesesKeys.map((mesKey, mi) => {
+      const dias = meses[mesKey];
+      const diasKeys = Object.keys(dias).sort((a, b) => b.localeCompare(a));
+      const totalMes = diasKeys.reduce((a, dk) => a + dias[dk].reduce((s, e) => s + (parseInt(e.sistTotal) || 0), 0), 0);
+      const cantCajasMes = diasKeys.reduce((a, dk) => a + dias[dk].length, 0);
+      const mesAbierto = mi === 0; // el mes más reciente, abierto por defecto
+
+      return `
+      <div style="margin-bottom:10px">
+        <button onclick="toggleMesCaja('${mesKey}')" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#eef4fb;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;color:#003a79">
+          <span><span id="mesCajaIcon-${mesKey}">${mesAbierto ? '▾' : '▸'}</span> ${nombreMesCaja(mesKey)}</span>
+          <span style="font-size:12px;font-weight:600;color:#666">${cantCajasMes} caja${cantCajasMes === 1 ? '' : 's'} · $${totalMes.toLocaleString('es-CL')}</span>
+        </button>
+        <div id="mesCaja-${mesKey}" style="display:${mesAbierto ? '' : 'none'};padding-top:8px">
+          ${diasKeys.map((diaKey, di) => {
+            const items = dias[diaKey];
+            const totalDia = items.reduce((s, e) => s + (parseInt(e.sistTotal) || 0), 0);
+            const diaAbierto = mesAbierto && di === 0;
+            const diaKeySafe = diaKey.replace(/[^0-9a-zA-Z]/g, '') || 'sf';
+
+            const r = { sistEfectivo: 0, sistDebito: 0, sistCredito: 0, sistTransfer: 0, manEfectivo: 0, manDebito: 0, manCredito: 0, manTransfer: 0 };
+            let hayArqueo = false;
+            items.forEach(e => {
+              r.sistEfectivo += parseInt(e.sistEfectivo) || 0;
+              r.sistDebito   += parseInt(e.sistDebito)   || 0;
+              r.sistCredito  += parseInt(e.sistCredito)  || 0;
+              r.sistTransfer += parseInt(e.sistTransfer) || 0;
+              if (!e.sinArqueo) {
+                hayArqueo = true;
+                r.manEfectivo += parseInt(e.manEfectivoNeto ?? e.manEfectivo ?? 0) || 0;
+                r.manDebito   += parseInt(e.manDebito)   || 0;
+                r.manCredito  += parseInt(e.manCredito)  || 0;
+                r.manTransfer += parseInt(e.manTransfer) || 0;
+              }
+            });
+
+            return `
+            <div style="margin-bottom:8px">
+              <button onclick="toggleDiaCaja('${diaKeySafe}')" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fafbfc;border:0.5px solid #e5e5e5;border-radius:8px;cursor:pointer;font-size:13px">
+                <span><span id="diaCajaIcon-${diaKeySafe}">${diaAbierto ? '▾' : '▸'}</span> ${diaKey}</span>
+                <span style="font-size:12px;color:#666">${items.length} caja${items.length === 1 ? '' : 's'} · $${totalDia.toLocaleString('es-CL')}</span>
+              </button>
+              <div id="diaCaja-${diaKeySafe}" style="display:${diaAbierto ? '' : 'none'};padding:8px 2px 0">
+                <div style="background:#f7f9fc;border-radius:8px;padding:10px;margin-bottom:10px">
+                  <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:4px;margin-bottom:4px">
+                    <div></div>
+                    <div style="font-size:10px;color:#888;text-transform:uppercase;text-align:center">Sistema</div>
+                    <div style="font-size:10px;color:#888;text-transform:uppercase;text-align:center">Cajero</div>
+                  </div>
+                  ${[
+                    ['💵 Efectivo', r.sistEfectivo, r.manEfectivo],
+                    ['💳 Débito',   r.sistDebito,   r.manDebito],
+                    ['💳 Crédito',  r.sistCredito,  r.manCredito],
+                    ['📲 Transfer.',r.sistTransfer, r.manTransfer]
+                  ].map(([lbl, s, m]) => `
+                  <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:4px;align-items:center;padding:3px 0">
+                    <div style="font-size:12px;color:#555">${lbl}</div>
+                    <div style="font-size:13px;font-weight:600;text-align:center">$${s.toLocaleString('es-CL')}</div>
+                    <div style="font-size:13px;font-weight:600;text-align:center">${hayArqueo ? '$' + m.toLocaleString('es-CL') : '—'}</div>
+                  </div>`).join('')}
+                </div>
+                ${items.map(e => renderEvalCajaCardHTML(e)).join('')}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('');
   } catch(e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
   btn.disabled = false; btn.textContent = 'Cargar evaluaciones';
 };
