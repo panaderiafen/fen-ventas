@@ -3322,7 +3322,7 @@ window.confirmarCierreCiego = async function() {
     // Guardar evaluación de cierre ciego
     await addDoc(collection(db, 'evaluacion_caja'), {
       cajaId: cajaDocId, sucursal: cajaData.sucursal || sucursal, usuario: cajaData.usuario || usuario.email,
-      fecha: cajaData.fecha || new Date().toLocaleDateString('es-CL'),
+      fecha: cajaData.fecha || fechaLocalHoy(),
       nVentas: cajaData.nVentas || 0,
       montoInicial,
       apertura: cajaData.apertura,
@@ -3578,6 +3578,17 @@ window.cargarMerma = async function() {
 function difColorCaja(d) { return d === 0 ? '#1D9E75' : (d > 0 ? '#003a79' : '#e74c3c'); }
 function difLabelCaja(d) { return d === 0 ? '✅ Exacto' : (d > 0 ? '+' : '') + '$' + Math.abs(d).toLocaleString('es-CL'); }
 
+// Normaliza la fecha de una evaluación a YYYY-MM-DD. Algunas evaluaciones antiguas quedaron
+// guardadas en formato DD-MM-YYYY (por un fallback que ya se corrigió) — esto las reconoce
+// y las convierte, para que se agrupen en su mes real en vez de caer en "Otras fechas".
+function normalizarFechaCaja(fecha) {
+  if (!fecha) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return fecha; // ya viene bien
+  const m = fecha.match(/^(\d{2})-(\d{2})-(\d{4})$/); // DD-MM-YYYY (formato legado)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return null;
+}
+
 function nombreMesCaja(mesKey) {
   if (mesKey === 'otras') return 'Otras fechas';
   const [y, m] = mesKey.split('-');
@@ -3588,11 +3599,12 @@ function nombreMesCaja(mesKey) {
 // Card de detalle completo de una caja individual (misma info de siempre, ahora reutilizable)
 function renderEvalCajaCardHTML(e) {
   const difColor = difColorCaja, difLabel = difLabelCaja;
+  const fechaMostrada = normalizarFechaCaja(e.fecha) || e.fecha || '?';
   return `
       <div class="card" style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;margin-bottom:10px">
           <div>
-            <div style="font-size:14px;font-weight:700;color:#003a79">${e.fecha||'?'} ${e.sinArqueo ? '<span style="font-size:10px;font-weight:600;color:#e07b00;background:#fff3e0;padding:2px 6px;border-radius:4px;margin-left:4px">sin arqueo</span>' : ''}</div>
+            <div style="font-size:14px;font-weight:700;color:#003a79">${fechaMostrada} ${e.sinArqueo ? '<span style="font-size:10px;font-weight:600;color:#e07b00;background:#fff3e0;padding:2px 6px;border-radius:4px;margin-left:4px">sin arqueo</span>' : ''}</div>
             <div style="font-size:11px;color:#888">${e.usuario||''} · ${e.nVentas||0} ventas${e.corregido ? ' · ✏️ corregido' : ''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px">
@@ -3704,11 +3716,11 @@ window.cargarEvaluacionesCaja = async function() {
 
     const evals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Agrupar por mes → día (a partir de e.fecha en formato YYYY-MM-DD)
+    // Agrupar por mes → día (normalizando fechas antiguas que hayan quedado en otro formato)
     const meses = {};
     evals.forEach(e => {
-      const fecha = e.fecha || '';
-      const mesKey = /^\d{4}-\d{2}/.test(fecha) ? fecha.slice(0, 7) : 'otras';
+      const fecha = normalizarFechaCaja(e.fecha) || 'otras';
+      const mesKey = fecha !== 'otras' ? fecha.slice(0, 7) : 'otras';
       if (!meses[mesKey]) meses[mesKey] = {};
       if (!meses[mesKey][fecha]) meses[mesKey][fecha] = [];
       meses[mesKey][fecha].push(e);
@@ -3846,7 +3858,7 @@ window.cerrarCajaSinArqueo = async function(cajaDocId) {
 
     await addDoc(collection(db, 'evaluacion_caja'), {
       cajaId: cajaDocId, sucursal: cajaData.sucursal || sucursal, usuario: cajaData.usuario || usuario.email,
-      fecha: cajaData.fecha || new Date().toLocaleDateString('es-CL'),
+      fecha: cajaData.fecha || fechaLocalHoy(),
       nVentas: cajaData.nVentas || 0,
       montoInicial: parseInt(cajaData.montoInicial) || 0,
       apertura: cajaData.apertura,
