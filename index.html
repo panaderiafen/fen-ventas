@@ -5092,17 +5092,36 @@ window.generarReporte = async function() {
       ).join('')}
     </div>` : ''}
     <div class="card">
-      <div class="card-title">🏆 Top 5 más vendidos por área</div>
-      ${Object.entries(porArea).sort((a,b)=>b[1].total-a[1].total).map(([a]) => {
-        const info = areaInfo(a);
-        const top5 = Object.entries(porProductoEnArea[a] || {}).sort((x,y)=>y[1].total-x[1].total).slice(0,5);
-        const medallas = ['🥇','🥈','🥉','4°','5°'];
-        return `
-        <div style="margin-bottom:12px">
-          <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:4px">${info.emoji} ${info.id} — ${info.nombre}</div>
-          ${top5.map(([n,d],i) => `<div class="resumen-row"><span>${medallas[i]} ${n}</span><span>${d.cantidad} u. · $${d.total.toLocaleString('es-CL')}</span></div>`).join('')}
-        </div>`;
-      }).join('')}
+      <div class="card-title">🏆 Top 3 general</div>
+      ${Object.entries(porProducto).sort((a,b)=>b[1].total-a[1].total).slice(0,3).map(([n,d],i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;${i<2 ? 'border-bottom:0.5px solid #f0f0f0' : ''}">
+          <div style="font-size:20px">${['🥇','🥈','🥉'][i]}</div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:#222">${n}</div>
+            <div style="font-size:11px;color:#888">${d.cantidad} u. vendidas</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:#003a79">$${d.total.toLocaleString('es-CL')}</div>
+        </div>`).join('')}
+    </div>
+    <div class="card">
+      <div class="card-title">🏆 Top 3 por área</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px">
+        ${Object.entries(porArea).sort((a,b)=>b[1].total-a[1].total).map(([a]) => {
+          const info = areaInfo(a);
+          const top3 = Object.entries(porProductoEnArea[a] || {}).sort((x,y)=>y[1].total-x[1].total).slice(0,3);
+          const medallas = ['🥇','🥈','🥉'];
+          return `
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">${info.emoji} ${info.id} — ${info.nombre}</div>
+            ${top3.map(([n,d],i) => `
+              <div style="font-size:12px;padding:4px 0;border-bottom:0.5px solid #f5f5f5">
+                <div>${medallas[i]} ${n}</div>
+                <div style="color:#888;font-size:11px;padding-left:20px">${d.cantidad} u. · $${d.total.toLocaleString('es-CL')}</div>
+              </div>`).join('') || '<div class="empty" style="padding:8px 0">Sin ventas</div>'}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
     </div>
   `;
 
