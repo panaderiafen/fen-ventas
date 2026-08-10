@@ -70,9 +70,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .area-tab.active { background: #003a79; color: white; }
 
 /* CATEGORÍAS (nivel 2) */
-.cat-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 12px; }
-.cat-tab { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1.5px solid #ddd; color: #666; cursor: pointer; white-space: nowrap; background: white; }
-.cat-tab.active { background: #003a79; color: white; border-color: #003a79; }
+.cat-tabs { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; }
+.cat-tab { padding: 4px 10px; border-radius: 14px; font-size: 11px; font-weight: 500; border: none; color: #888; cursor: pointer; white-space: nowrap; background: #f0f1f3; }
+.cat-tab.active { background: #e5edf9; color: #003a79; font-weight: 600; }
 
 /* PEDIDO ACTUAL */
 .linea-pedido-wrap { border-bottom: 0.5px solid #f0f0f0; padding: 8px 0; }
@@ -654,35 +654,6 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
   <!-- PRODUCTOS -->
   <div class="section" id="sec-productos">
 
-    <!-- ── Gestión de áreas ── -->
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="card-title" style="margin:0">🏷️ Áreas de producción</div>
-        <button class="btn-sm btn-edit" onclick="toggleAreaForm()">+ Nueva área</button>
-      </div>
-
-      <!-- Formulario add/edit (oculto por defecto) -->
-      <div id="areaFormWrap" style="display:none;margin-bottom:14px;padding:12px;background:#f8f9fa;border-radius:8px">
-        <input type="hidden" id="areaEditId"/>
-        <div style="display:grid;grid-template-columns:70px 1fr 52px;gap:8px;align-items:end">
-          <div>
-            <label>Código</label>
-            <input type="text" id="areaCodigo" placeholder="BOL" maxlength="6"
-                   oninput="this.value=this.value.toUpperCase()"/>
-          </div>
-          <div><label>Nombre</label><input type="text" id="areaNombre" placeholder="Bollería"/></div>
-          <div><label>Emoji</label><input type="text" id="areaEmoji" placeholder="🥐" maxlength="4"/></div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="btn btn-primary" style="flex:1" id="btnGuardarArea" onclick="guardarArea()">✓ Guardar área</button>
-          <button class="btn btn-secondary" onclick="cancelarArea()">✕ Cancelar</button>
-        </div>
-      </div>
-
-      <!-- Lista dinámica de áreas -->
-      <div id="areasList"></div>
-    </div>
-
     <!-- Formulario agregar/editar producto -->
     <div class="card" id="cardFormProd">
       <div class="card-title" id="formProdTitulo">+ Nuevo producto</div>
@@ -747,76 +718,125 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       </div>
     </div>
 
+    <!-- ── Gestión de áreas ── -->
+    <div class="card">
+      <button onclick="toggleProdSection('areas')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
+        <span class="card-title" style="margin:0"><span id="prodSecIcon-areas">▸</span> 🏷️ Áreas de producción</span>
+      </button>
+      <div id="prodSec-areas" style="display:none;margin-top:12px">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="btn-sm btn-edit" onclick="toggleAreaForm()">+ Nueva área</button>
+        </div>
+
+        <!-- Formulario add/edit (oculto por defecto) -->
+        <div id="areaFormWrap" style="display:none;margin-bottom:14px;padding:12px;background:#f8f9fa;border-radius:8px">
+          <input type="hidden" id="areaEditId"/>
+          <div style="display:grid;grid-template-columns:70px 1fr 52px;gap:8px;align-items:end">
+            <div>
+              <label>Código</label>
+              <input type="text" id="areaCodigo" placeholder="BOL" maxlength="6"
+                     oninput="this.value=this.value.toUpperCase()"/>
+            </div>
+            <div><label>Nombre</label><input type="text" id="areaNombre" placeholder="Bollería"/></div>
+            <div><label>Emoji</label><input type="text" id="areaEmoji" placeholder="🥐" maxlength="4"/></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary" style="flex:1" id="btnGuardarArea" onclick="guardarArea()">✓ Guardar área</button>
+            <button class="btn btn-secondary" onclick="cancelarArea()">✕ Cancelar</button>
+          </div>
+        </div>
+
+        <!-- Lista dinámica de áreas -->
+        <div id="areasList"></div>
+      </div>
+    </div>
+
     <!-- Tipos de leche (nota de café) -->
     <div class="card">
-      <div class="card-title">☕ Tipos de leche (nota de café)</div>
-      <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen en la nota de café al armar un pedido.</div>
-      <div id="tiposLecheLista"></div>
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <input type="text" id="nuevoTipoLeche" placeholder="Nuevo tipo de leche..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
-        <button class="btn-sm btn-edit" onclick="agregarTipoLeche()">+ Agregar</button>
+      <button onclick="toggleProdSection('leche')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
+        <span class="card-title" style="margin:0"><span id="prodSecIcon-leche">▸</span> ☕ Tipos de leche (nota de café)</span>
+      </button>
+      <div id="prodSec-leche" style="display:none;margin-top:10px">
+        <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen en la nota de café al armar un pedido.</div>
+        <div id="tiposLecheLista"></div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input type="text" id="nuevoTipoLeche" placeholder="Nuevo tipo de leche..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
+          <button class="btn-sm btn-edit" onclick="agregarTipoLeche()">+ Agregar</button>
+        </div>
       </div>
     </div>
 
     <!-- Motivos de merma -->
     <div class="card">
-      <div class="card-title">🗑️ Motivos de merma</div>
-      <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen al enviar un producto a Merma.</div>
-      <div id="motivosMermaLista"></div>
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <input type="text" id="nuevoMotivoMerma" placeholder="Nuevo motivo..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
-        <button class="btn-sm btn-edit" onclick="agregarMotivoMerma()">+ Agregar</button>
+      <button onclick="toggleProdSection('motivos')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
+        <span class="card-title" style="margin:0"><span id="prodSecIcon-motivos">▸</span> 🗑️ Motivos de merma</span>
+      </button>
+      <div id="prodSec-motivos" style="display:none;margin-top:10px">
+        <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen al enviar un producto a Merma.</div>
+        <div id="motivosMermaLista"></div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input type="text" id="nuevoMotivoMerma" placeholder="Nuevo motivo..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
+          <button class="btn-sm btn-edit" onclick="agregarMotivoMerma()">+ Agregar</button>
+        </div>
       </div>
     </div>
 
     <!-- Gestionar subcategorías -->
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div class="card-title" style="margin:0">Gestionar subcategorías</div>
-        <button class="btn-sm btn-edit" onclick="renderGestionCategorias()">↻</button>
+      <button onclick="toggleProdSection('subcat')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
+        <span class="card-title" style="margin:0"><span id="prodSecIcon-subcat">▸</span> Gestionar subcategorías</span>
+      </button>
+      <div id="prodSec-subcat" style="display:none;margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:11px;color:#888">Crea, edita o elimina las subcategorías disponibles para asignar a los productos.</div>
+          <button class="btn-sm btn-edit" onclick="renderGestionCategorias()">↻</button>
+        </div>
+        <div id="gestionCategoriasLista"></div>
       </div>
-      <div style="font-size:11px;color:#888;margin-bottom:10px">Fusiona subcategorías duplicadas o vacía las que ya no uses.</div>
-      <div id="gestionCategoriasLista"></div>
     </div>
 
     <!-- Lista de productos -->
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div class="card-title" style="margin:0">Lista de productos</div>
-        <button class="btn-sm btn-edit" onclick="cargarProdAdmin()">↻</button>
-      </div>
-      <!-- Buscador y filtros -->
-      <div class="prod-search-bar">
-        <input type="text" id="prodBuscar" placeholder="🔍 Buscar producto..." oninput="filtrarProdAdmin()"/>
-      </div>
-      <div class="area-filter-btns" id="areaFilterBtns">
-        <button class="area-filter-btn active" data-area="" onclick="selAreaFilter(this, '')">Todos</button>
-        <button class="area-filter-btn" data-area="BOL" onclick="selAreaFilter(this, 'BOL')">BOL</button>
-        <button class="area-filter-btn" data-area="PAN" onclick="selAreaFilter(this, 'PAN')">PAN</button>
-        <button class="area-filter-btn" data-area="PAS" onclick="selAreaFilter(this, 'PAS')">PAS</button>
-        <button class="area-filter-btn" data-area="CAF" onclick="selAreaFilter(this, 'CAF')">CAF</button>
-      </div>
-      <div class="prod-table-wrap" style="margin-top:10px">
-        <table class="prod-table" id="prodTabla">
-          <thead>
-            <tr>
-              <th>Producto</th>
-              <th>Área</th>
-              <th>Stock</th>
-              <th>$ Hoy</th>
-              <th>$ Ayer</th>
-              <th>$ Ant.</th>
-              <th>$ 4to</th>
-              <th>$ Últ.of.</th>
-              <th>Exc.15h</th>
-              <th>Rota</th>
-              <th id="thAcciones">Acc.</th>
-            </tr>
-          </thead>
-          <tbody id="prodLista">
-            <tr><td colspan="11" class="empty">Cargando...</td></tr>
-          </tbody>
-        </table>
+      <button onclick="toggleProdSection('lista')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
+        <span class="card-title" style="margin:0"><span id="prodSecIcon-lista">▸</span> Lista de productos</span>
+      </button>
+      <div id="prodSec-lista" style="display:none;margin-top:10px">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn-sm btn-edit" onclick="cargarProdAdmin()">↻</button>
+        </div>
+        <!-- Buscador y filtros -->
+        <div class="prod-search-bar">
+          <input type="text" id="prodBuscar" placeholder="🔍 Buscar producto..." oninput="filtrarProdAdmin()"/>
+        </div>
+        <div class="area-filter-btns" id="areaFilterBtns">
+          <button class="area-filter-btn active" data-area="" onclick="selAreaFilter(this, '')">Todos</button>
+          <button class="area-filter-btn" data-area="BOL" onclick="selAreaFilter(this, 'BOL')">BOL</button>
+          <button class="area-filter-btn" data-area="PAN" onclick="selAreaFilter(this, 'PAN')">PAN</button>
+          <button class="area-filter-btn" data-area="PAS" onclick="selAreaFilter(this, 'PAS')">PAS</button>
+          <button class="area-filter-btn" data-area="CAF" onclick="selAreaFilter(this, 'CAF')">CAF</button>
+        </div>
+        <div class="prod-table-wrap" style="margin-top:10px">
+          <table class="prod-table" id="prodTabla">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Área</th>
+                <th>Stock</th>
+                <th>$ Hoy</th>
+                <th>$ Ayer</th>
+                <th>$ Ant.</th>
+                <th>$ 4to</th>
+                <th>$ Últ.of.</th>
+                <th>Exc.15h</th>
+                <th>Rota</th>
+                <th id="thAcciones">Acc.</th>
+              </tr>
+            </thead>
+            <tbody id="prodLista">
+              <tr><td colspan="11" class="empty">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -1125,6 +1145,7 @@ onAuthStateChanged(auth, async (user) => {
     if (esAdmin) document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
     await cargarTiposLeche();
     await cargarMotivosMerma();
+    await cargarSubcategorias();
     // Verificar si es visor de stock
     const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
     esStockViewer = viewerDoc.exists() && !esAdmin; // admin siempre tiene prioridad
@@ -1733,7 +1754,7 @@ window.filtrarArea = function(area) {
 
 function renderCategorias() {
   const prodArea = areaActiva ? productos.filter(p => normalizarArea(p.area) === areaActiva) : productos;
-  const cats = [...new Set(prodArea.map(p => p.categoria))];
+  const cats = [...new Set(prodArea.map(p => p.categoria).filter(Boolean))];
   if (cats.length <= 1) {
     document.getElementById('catTabs').innerHTML = '';
     return;
@@ -1844,32 +1865,63 @@ function renderAreaSelect(valorActual) {
 
 const CATEGORIA_NUEVA = '__nueva__';
 
-// Popula <select id="prodCategoria"> con las categorías ya existentes en el área seleccionada,
-// para evitar crear a mano variantes como "Cafés fríos" / "Cafe frio" / "Café Frío"
+// Alterna visibilidad de las secciones colapsables del panel Productos (Áreas, Tipos de leche, Motivos de merma, Subcategorías, Lista)
+window.toggleProdSection = function(id) {
+  const el = document.getElementById(`prodSec-${id}`);
+  const icon = document.getElementById(`prodSecIcon-${id}`);
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  el.style.display = abierto ? 'none' : '';
+  if (icon) icon.textContent = abierto ? '▸' : '▾';
+};
+
+let SUBCATEGORIAS = {}; // { BOL: [...], PAN: [...], PAS: [...], CAF: [...] } — lista maestra, cargada desde Firestore
+
+async function cargarSubcategorias() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'subcategorias'));
+    SUBCATEGORIAS = (snap.exists() && snap.data().porArea) ? snap.data().porArea : {};
+  } catch(e) { console.error('Error cargando subcategorías:', e); SUBCATEGORIAS = {}; }
+  renderCategoriaSelect();
+  renderGestionCategorias();
+}
+
+async function guardarSubcategorias() {
+  try { await setDoc(doc(db, 'config', 'subcategorias'), { porArea: SUBCATEGORIAS }); }
+  catch(e) { console.error('Error guardando subcategorías:', e); }
+}
+
+// Si se escribió una subcategoría nueva desde el formulario de producto, se agrega a la lista
+// maestra automáticamente, para no tener que repetir el paso en el gestor por separado.
+async function asegurarSubcategoriaEnLista(area, nombre) {
+  if (!area || !nombre) return;
+  if (!SUBCATEGORIAS[area]) SUBCATEGORIAS[area] = [];
+  if (!SUBCATEGORIAS[area].includes(nombre)) {
+    SUBCATEGORIAS[area].push(nombre);
+    await guardarSubcategorias();
+  }
+}
+
+// Popula <select id="prodCategoria"> con la lista maestra de subcategorías del área elegida
 function renderCategoriaSelect(valorActual) {
   const sel = document.getElementById('prodCategoria');
   if (!sel) return;
   const prev = valorActual !== undefined ? valorActual : sel.value;
   const area = document.getElementById('prodArea')?.value;
-  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const cats = [...new Set(
-    fuente.filter(p => !area || normalizarArea(p.area) === area)
-          .map(p => p.categoria)
-          .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b));
+  const cats = (area && SUBCATEGORIAS[area]) ? SUBCATEGORIAS[area] : [];
 
   sel.innerHTML = [
-    `<option value="">— Sin categoría (usa el área) —</option>`,
+    `<option value="">— Sin subcategoría —</option>`,
     ...cats.map(c => `<option value="${c}">${c}</option>`),
-    `<option value="${CATEGORIA_NUEVA}">+ Nueva categoría...</option>`
+    `<option value="${CATEGORIA_NUEVA}">+ Nueva subcategoría...</option>`
   ].join('');
 
   if (prev === CATEGORIA_NUEVA) {
     sel.value = CATEGORIA_NUEVA;
   } else if (prev && !cats.includes(prev)) {
-    // Categoría existente que quedó fuera del filtro por área (ej. al editar): la agregamos igual
+    // Valor guardado que ya no está en la lista maestra (ej. se eliminó desde el gestor): se muestra igual, marcado
     const opt = document.createElement('option');
-    opt.value = prev; opt.textContent = prev;
+    opt.value = prev; opt.textContent = `${prev} (fuera de lista)`;
     sel.insertBefore(opt, sel.lastElementChild);
     sel.value = prev;
   } else {
@@ -1878,7 +1930,7 @@ function renderCategoriaSelect(valorActual) {
   toggleCategoriaNueva();
 }
 
-// Muestra/oculta el campo de texto libre cuando se elige "+ Nueva categoría..."
+// Muestra/oculta el campo de texto libre cuando se elige "+ Nueva subcategoría..."
 window.toggleCategoriaNueva = function() {
   const sel = document.getElementById('prodCategoria');
   const nueva = document.getElementById('prodCategoriaNueva');
@@ -1888,78 +1940,101 @@ window.toggleCategoriaNueva = function() {
   if (!esNueva) nueva.value = '';
 };
 
-// Lista las subcategorías en uso (agrupadas por área) con opción de fusionar o vaciar
+// ── Gestor de la lista maestra de subcategorías, por área ──
 window.renderGestionCategorias = function() {
   const wrap = document.getElementById('gestionCategoriasLista');
   if (!wrap) return;
-  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
 
-  const grupos = {};
-  fuente.forEach(p => {
-    const area = normalizarArea(p.area);
-    const cat  = (p.categoria || '').trim();
-    if (!cat || cat === area) return; // sin subcategoría propia, nada que gestionar
-    const key = `${area}|||${cat}`;
-    if (!grupos[key]) grupos[key] = { area, categoria: cat, count: 0 };
-    grupos[key].count++;
-  });
-
-  const lista = Object.values(grupos).sort((a, b) =>
-    a.area.localeCompare(b.area) || a.categoria.localeCompare(b.categoria));
-
-  if (!lista.length) {
-    wrap.innerHTML = '<div class="empty">No hay subcategorías creadas todavía</div>';
-    return;
-  }
-
-  wrap.innerHTML = lista.map((g, idx) => {
-    const otras = lista.filter(o => o.area === g.area && o.categoria !== g.categoria);
-    const selId = `fusionSel-${idx}`;
-    return `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:0.5px solid #f0f0f0">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <div style="font-size:13px"><b>${g.categoria}</b> <span style="color:#888;font-size:11px">(${g.area} · ${g.count} producto${g.count === 1 ? '' : 's'})</span></div>
-        <button class="btn-sm btn-del" onclick="vaciarCategoria('${g.area}','${g.categoria.replace(/'/g, "\\'")}')">Vaciar</button>
+  wrap.innerHTML = AREAS.map(a => `
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">${a.emoji} ${a.id} — ${a.nombre}</div>
+      ${(SUBCATEGORIAS[a.id] || []).length
+        ? SUBCATEGORIAS[a.id].map((c, i) => `
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+            <input type="text" value="${c}" onchange="editarSubcategoria('${a.id}',${i},this.value)"
+                   style="flex:1;font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px"/>
+            <button class="btn-sm btn-del" onclick="eliminarSubcategoria('${a.id}',${i})">🗑️</button>
+          </div>`).join('')
+        : '<div class="empty" style="padding:6px 0;font-size:11px">Sin subcategorías todavía</div>'}
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input type="text" id="nuevaSubcat-${a.id}" placeholder="Nueva subcategoría en ${a.id}..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
+        <button class="btn-sm btn-edit" onclick="agregarSubcategoriaManager('${a.id}')">+ Agregar</button>
       </div>
-      ${otras.length ? `
-      <div style="display:flex;gap:6px;align-items:center">
-        <select id="${selId}" style="flex:1;font-size:12px;padding:6px">
-          ${otras.map(o => `<option value="${o.categoria}">${o.categoria} (${o.area})</option>`).join('')}
-        </select>
-        <button class="btn-sm btn-edit" onclick="fusionarCategoria('${g.area}','${g.categoria.replace(/'/g, "\\'")}', document.getElementById('${selId}').value)">Fusionar →</button>
-      </div>` : ''}
-    </div>`;
-  }).join('');
+    </div>
+  `).join('')
+  + `<button class="btn-sm btn-del" style="width:100%;margin-top:6px" onclick="eliminarTodasSubcategorias()">🗑️ Eliminar TODAS las subcategorías</button>
+  <div id="limpiezaCategoriasFantasma" style="margin-top:10px"></div>`;
+
+  renderLimpiezaCategoriasFantasma();
 };
 
-// Vacía una subcategoría: los productos quedan sin subcategoría propia (usan el área)
-window.vaciarCategoria = async function(area, categoria) {
+window.agregarSubcategoriaManager = function(area) {
+  const input = document.getElementById(`nuevaSubcat-${area}`);
+  const val = input.value.trim();
+  if (!val) return;
+  if (!SUBCATEGORIAS[area]) SUBCATEGORIAS[area] = [];
+  if (SUBCATEGORIAS[area].includes(val)) { alert('Esa subcategoría ya existe en esta área'); return; }
+  SUBCATEGORIAS[area].push(val);
+  input.value = '';
+  renderGestionCategorias();
+  guardarSubcategorias();
+  renderCategoriaSelect();
+};
+
+window.editarSubcategoria = function(area, i, val) {
+  const nuevo = val.trim();
+  if (!SUBCATEGORIAS[area]) return;
+  if (!nuevo) { renderGestionCategorias(); return; }
+  SUBCATEGORIAS[area][i] = nuevo;
+  guardarSubcategorias();
+  renderCategoriaSelect();
+};
+
+window.eliminarSubcategoria = function(area, i) {
+  if (!SUBCATEGORIAS[area]) return;
+  if (!confirm(`¿Eliminar "${SUBCATEGORIAS[area][i]}" de la lista? Los productos que ya la tenían asignada no cambian solos — hay que reasignarlos a mano si quieres.`)) return;
+  SUBCATEGORIAS[area].splice(i, 1);
+  renderGestionCategorias();
+  guardarSubcategorias();
+  renderCategoriaSelect();
+};
+
+window.eliminarTodasSubcategorias = function() {
+  if (!confirm('¿Eliminar TODAS las subcategorías de todas las áreas? Esto no borra ni modifica productos — solo la lista de opciones disponibles para elegir. Vas a poder crear las nuevas y asignarlas producto por producto.')) return;
+  SUBCATEGORIAS = {};
+  renderGestionCategorias();
+  guardarSubcategorias();
+  renderCategoriaSelect();
+  showToast('🗑️ Subcategorías eliminadas');
+};
+
+// Detecta productos con un problema de una versión anterior: la subcategoría quedó guardada
+// igual al código del área (ej. categoria:"BOL" en un producto de área BOL) — no es una
+// subcategoría real, era un valor por defecto que no se podía editar ni borrar.
+function renderLimpiezaCategoriasFantasma() {
+  const wrap = document.getElementById('limpiezaCategoriasFantasma');
+  if (!wrap) return;
   const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const afectados = fuente.filter(p => normalizarArea(p.area) === area && (p.categoria || '').trim() === categoria);
+  const afectados = fuente.filter(p => p.categoria && p.categoria === normalizarArea(p.area));
+  if (!afectados.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:12px;color:#8a6416">
+      Se detectaron ${afectados.length} producto(s) con una subcategoría "fantasma" (igual al código del área, de un problema ya corregido) — no son subcategorías reales.
+      <button class="btn-sm btn-edit" style="margin-top:6px;display:block" onclick="limpiarCategoriasFantasma()">🧹 Limpiar ahora</button>
+    </div>`;
+}
+
+window.limpiarCategoriasFantasma = async function() {
+  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+  const afectados = fuente.filter(p => p.categoria && p.categoria === normalizarArea(p.area));
   if (!afectados.length) return;
-  if (!confirm(`¿Vaciar la subcategoría "${categoria}" en ${area}? ${afectados.length} producto(s) quedarán sin subcategoría propia (usarán el área por defecto).`)) return;
+  if (!confirm(`¿Limpiar la subcategoría fantasma de ${afectados.length} producto(s)? Quedarán sin subcategoría — podrás asignarles una real cuando quieras.`)) return;
   for (const p of afectados) {
     await updateDoc(doc(db, 'productos', p.id), { categoria: '' });
   }
   await cargarProductos();
   await cargarProdAdmin();
-  renderGestionCategorias();
-  showToast('✅ Subcategoría vaciada');
-};
-
-// Fusiona una subcategoría dentro de otra ya existente en la misma área
-window.fusionarCategoria = async function(area, origen, destino) {
-  if (!destino || destino === origen) return;
-  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const afectados = fuente.filter(p => normalizarArea(p.area) === area && (p.categoria || '').trim() === origen);
-  if (!afectados.length) return;
-  if (!confirm(`¿Fusionar "${origen}" en "${destino}"? ${afectados.length} producto(s) pasarán a "${destino}".`)) return;
-  for (const p of afectados) {
-    await updateDoc(doc(db, 'productos', p.id), { categoria: destino });
-  }
-  await cargarProductos();
-  await cargarProdAdmin();
-  renderGestionCategorias();
-  showToast('✅ Subcategorías fusionadas');
+  showToast('✅ Categorías fantasma limpiadas');
 };
 
 // Botones de área en stock ingreso
@@ -2209,8 +2284,8 @@ window.guardarProducto = async function() {
   const area      = document.getElementById('prodArea').value;
   const catSel     = document.getElementById('prodCategoria').value;
   const categoria  = catSel === CATEGORIA_NUEVA
-    ? (document.getElementById('prodCategoriaNueva').value.trim() || area)
-    : (catSel || area);
+    ? document.getElementById('prodCategoriaNueva').value.trim()
+    : catSel;
   const controlStock = document.getElementById('prodControlStock').checked;
 
   let precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta, excepcionHoraria, autoEliminar;
@@ -2252,6 +2327,7 @@ window.guardarProducto = async function() {
       const autoId = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
       await setDoc(doc(db, 'productos', autoId), data);
     }
+    if (catSel === CATEGORIA_NUEVA && categoria) await asegurarSubcategoriaEnLista(area, categoria);
     cancelarEdicion();
     await cargarProductos();
     await cargarProdAdmin();
