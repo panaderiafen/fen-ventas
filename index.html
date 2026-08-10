@@ -1776,7 +1776,13 @@ window.filtrarCat = function(cat) {
 
 function renderProductos() {
   const prodArea = areaActiva ? productos.filter(p => normalizarArea(p.area) === areaActiva) : productos;
-  const lista = catActiva === 'TODOS' ? prodArea : prodArea.filter(p => p.categoria === catActiva);
+  const lista = (catActiva === 'TODOS' ? prodArea : prodArea.filter(p => p.categoria === catActiva))
+    .slice()
+    .sort((a, b) => {
+      const precioA = getPrecioProducto(a, a.autoEliminar === false ? 'hoy' : categoriaStockActiva);
+      const precioB = getPrecioProducto(b, b.autoEliminar === false ? 'hoy' : categoriaStockActiva);
+      return precioA - precioB;
+    });
   const grid = document.getElementById('productosGrid');
   if (lista.length === 0) { grid.innerHTML = '<div class="empty" style="grid-column:1/-1">No hay productos</div>'; return; }
   grid.innerHTML = lista.map(p => {
