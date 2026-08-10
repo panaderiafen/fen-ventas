@@ -2306,7 +2306,7 @@ window.guardarProducto = async function() {
   } else {
     // Producto sin control de stock: un único precio fijo
     const precioUnico = parseInt(document.getElementById('prodPrecioUnico').value) || 0;
-    precioHoy = precioAyer = precioAntesayer = precioUnico;
+    precioHoy = precioAyer = precioAntesayer = precioCuartoDia = precioUltimaOferta = precioUnico;
     excepcionHoraria = false;
     autoEliminar = false;
   }
