@@ -1659,6 +1659,24 @@ function fechaLlegadaUltimaOferta(dateKey) {
   return fechaStr(fecha).split('-').reverse().join('-'); // DD-MM-YYYY, mismo estilo que keyToFechaCL
 }
 
+// Formatea un objeto Date como DD-MM-YYYY (mismo estilo que keyToFechaCL, pero a partir de un Date/Timestamp)
+function formatoDMY(date) {
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  return `${d}-${m}-${date.getFullYear()}`;
+}
+
+// Días entre dos fechas en formato DD-MM-YYYY (ej. fecha de ingreso vs. fecha de envío a merma)
+function diasEntreDMY(dmyDesde, dmyHasta) {
+  if (!dmyDesde || !dmyHasta) return null;
+  const [d1, m1, y1] = dmyDesde.split('-');
+  const [d2, m2, y2] = dmyHasta.split('-');
+  const f1 = new Date(`${y1}-${m1}-${d1}T00:00:00`);
+  const f2 = new Date(`${y2}-${m2}-${d2}T00:00:00`);
+  const dias = Math.round((f2 - f1) / 86400000);
+  return dias >= 0 ? dias : null;
+}
+
 // Determina la categoría de stock según la diferencia de días con hoy
 function getCategoriaFecha(dateKey) {
   if (!dateKey) return 'hoy';
@@ -3797,7 +3815,10 @@ window.cargarMerma = async function() {
                 ${items.map(m => {
                   const area = m.area || idToArea[m.productoId] || 'Otros';
                   const quien = m.usuario ? m.usuario.split('@')[0] : '';
-                  const meta = [areaInfo(area).id, quien, m.motivo].filter(Boolean).join(' · ');
+                  const ingresoTxt = m.fechaIngreso ? `ingresó ${m.fechaIngreso}` : '';
+                  const diasTxt = (m.diasEnStock != null) ? `${m.diasEnStock}d en stock` : '';
+                  const aproxTxt = m.fechaEnvioAprox ? '⚠️ fecha aprox.' : '';
+                  const meta = [areaInfo(area).id, quien, m.motivo, ingresoTxt, diasTxt, aproxTxt].filter(Boolean).join(' · ');
                   return `<div class="resumen-row"><span>${m.nombreProducto} (${m.cantidad} u.)${meta ? ` <span style="color:#aaa;font-size:11px">· ${meta}</span>` : ''}</span><span style="color:#e74c3c">−$${parseInt(m.monto||0).toLocaleString('es-CL')}</span></div>`;
                 }).join('')}
               </div>
@@ -4752,18 +4773,28 @@ async function cargarStockPorCategoria() {
         const precio = prod ? (prod.precioHoy || prod.precio || 0) : 0;
         const qty    = getQtyCategoria(i, 'merma') + (i.merma?.cantidad || 0);
         const entradasMerma = getEntradasPorCategoria(i, 'merma');
-        // La clave viene como "merma_YYYYMMDD" — hay que quitar el prefijo antes de convertirla a fecha
+        // La clave viene como "merma_YYYYMMDD" (fecha de INGRESO del lote) — hay que quitar el prefijo antes de convertirla
         const primerKey  = entradasMerma.length ? entradasMerma[0].key : '';
-        const fechaPlano = primerKey.replace(/^merma_/, '');
-        const fechaRef   = keyToFechaCL(fechaPlano) || (i.merma?.fecha || '');
-        // Quién lo clasificó como merma, buscando la entrada correspondiente en el registro interno
-        const logEntry = (i.mermaLog || []).find(l => l.fechaKey === fechaPlano);
+        const fechaIngresoPlano = primerKey.replace(/^merma_/, '');
+        const fechaIngresoRef   = keyToFechaCL(fechaIngresoPlano) || (i.merma?.fecha || '');
+        // La fecha REAL de envío a merma (y quién lo hizo) vive en el registro interno de movimientos, no en la clave
+        const logEntry    = (i.mermaLog || []).find(l => l.fechaKey === fechaIngresoPlano);
+        const fechaEnvioRef = logEntry?.fecha?.toDate ? formatoDMY(logEntry.fecha.toDate()) : '';
         const quien = logEntry?.usuario ? logEntry.usuario.split('@')[0] : '';
+        const dias  = diasEntreDMY(fechaIngresoRef, fechaEnvioRef);
+        const metaPartes = [
+          fechaEnvioRef ? `envió ${fechaEnvioRef}` : '',
+          fechaIngresoRef ? `ingresó ${fechaIngresoRef}` : '',
+          dias != null ? `${dias}d en stock` : '',
+          quien,
+          `${qty} ud.`,
+          `pérdida $${(qty*precio).toLocaleString('es-CL')}`
+        ].filter(Boolean);
         valorMerma += qty * precio;
         return `<div class="stock-row" style="grid-template-columns:1fr auto">
           <div>
             <div class="stock-prod-nombre">${nombre}</div>
-            <div class="stock-prod-meta">${fechaRef}${quien ? ' · ' + quien : ''} · ${qty} ud. · pérdida $${(qty*precio).toLocaleString('es-CL')}</div>
+            <div class="stock-prod-meta">${metaPartes.join(' · ')}</div>
           </div>
           ${esAdmin
             ? `<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
@@ -4793,11 +4824,11 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
     if (!stockSnap.exists()) return;
     const data = stockSnap.data();
 
-    // Recopilar fechas para el reporte
+    // Recopilar fechas para el reporte (quitar el prefijo "merma_" antes de convertir la clave a fecha)
     const entradasMerma = Object.entries(data.entradas || {})
       .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === 'merma');
     const fechaIngreso = entradasMerma.length
-      ? keyToFechaCL(entradasMerma.sort()[0][0])
+      ? keyToFechaCL(entradasMerma.map(([k]) => k.replace(/^merma_/, '')).sort()[0])
       : (data.merma?.fecha || '');
 
     const fechaRegistro = fechaLocalHoy();
@@ -4806,6 +4837,7 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
     // Agrupar el log por la fecha REAL en que se envió a merma desde Stock (no la fecha de registro de hoy).
     // Si el mismo producto se envió a merma en más de un día distinto antes de registrarlo,
     // se crea un registro separado por cada día, para que el análisis por fecha sea preciso.
+    let usoRespaldo = false;
     const porFechaEnvio = {};
     mermaLog.forEach(m => {
       const fEnvio = m.fecha?.toDate ? fechaStr(m.fecha.toDate()) : fechaRegistro;
@@ -4813,14 +4845,19 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
       porFechaEnvio[fEnvio].cantidad += m.cantidad;
       if (m.motivo) porFechaEnvio[fEnvio].motivos.push({ motivo: m.motivo, cantidad: m.cantidad });
     });
-    // Respaldo por si no hay log (ej. stock de antes de este cambio): usa la fecha de hoy
+    // Respaldo por si no hay log (ej. stock de antes de este cambio): usa la fecha de hoy,
+    // pero queda marcado como "aproximado" para no mostrarlo como si fuera exacto
     if (!Object.keys(porFechaEnvio).length) {
       porFechaEnvio[fechaRegistro] = { cantidad, motivos: [], usuario: usuario.email };
+      usoRespaldo = true;
     }
 
     for (const [fEnvio, info] of Object.entries(porFechaEnvio)) {
       const motivo = info.motivos.map(m => `${m.motivo} (${m.cantidad})`).join(' · ');
       const area = normalizarArea(productos.find(p => p.id === productoId)?.area) || '';
+      // fEnvio viene en formato YYYY-MM-DD; se convierte a DD-MM-YYYY para poder compararla con fechaIngreso
+      const fEnvioDMY = fEnvio.split('-').reverse().join('-');
+      const diasEnStock = diasEntreDMY(fechaIngreso, fEnvioDMY);
 
       // Exportar a Sheets
       await fetch(APPS_SCRIPT_URL, {
@@ -4829,17 +4866,18 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
         body: JSON.stringify({
           tipo: 'merma', sucursal, producto: nombre, area, cantidad: info.cantidad,
           precioOriginal, monto: info.cantidad * precioOriginal,
-          fechaIngreso, fechaMerma: fEnvio, fechaRegistro, motivo
+          fechaIngreso, fechaMerma: fEnvio, fechaRegistro, diasEnStock, motivo
         })
       });
 
       // Guardar también en Firestore, para verla y analizarla desde Reportes > Merma.
       // fechaEnvio = cuándo se mandó a merma desde Stock (lo relevante para análisis).
       // fechaRegistro = cuándo se confirmó acá (queda en segundo plano, solo de referencia).
+      // fechaEnvioAprox = true si no había registro exacto del movimiento y se usó la fecha de registro como respaldo.
       await addDoc(collection(db, 'merma'), {
         sucursal, productoId, nombreProducto: nombre, area, cantidad: info.cantidad,
         precioOriginal, monto: info.cantidad * precioOriginal,
-        fechaIngreso, fechaEnvio: fEnvio, fechaRegistro,
+        fechaIngreso, fechaEnvio: fEnvio, fechaRegistro, fechaEnvioAprox: usoRespaldo, diasEnStock,
         fecha: Timestamp.now(), usuario: info.usuario || usuario.email, motivo, motivos: info.motivos
       });
     }
