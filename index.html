@@ -895,7 +895,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <div id="repMerma" style="display:none">
       <div class="card">
         <div class="card-title">🗑️ Registro de merma</div>
-        <p style="font-size:12px;color:#888;margin-bottom:10px">Productos eliminados automáticamente al rotar el stock.</p>
+        <p style="font-size:12px;color:#888;margin-bottom:10px">Agrupado por la fecha en que cada producto se clasificó como merma desde Stock (no por cuándo se confirmó "Registrar merma" en este panel).</p>
         <button class="btn btn-primary btn-full" id="btnCargarMerma" onclick="cargarMerma()">Cargar registros</button>
       </div>
       <div id="mermaResult"></div>
@@ -3795,9 +3795,9 @@ window.cargarMerma = async function() {
               </button>
               <div id="diaMerma-${diaKeySafe}" style="display:${diaAbierto ? '' : 'none'};padding:8px 2px 0">
                 ${items.map(m => {
-                  const hora = m.fecha?.toDate ? m.fecha.toDate().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}) : '';
                   const area = m.area || idToArea[m.productoId] || 'Otros';
-                  const meta = [areaInfo(area).id, hora, m.usuario, m.motivo].filter(Boolean).join(' · ');
+                  const quien = m.usuario ? m.usuario.split('@')[0] : '';
+                  const meta = [areaInfo(area).id, quien, m.motivo].filter(Boolean).join(' · ');
                   return `<div class="resumen-row"><span>${m.nombreProducto} (${m.cantidad} u.)${meta ? ` <span style="color:#aaa;font-size:11px">· ${meta}</span>` : ''}</span><span style="color:#e74c3c">−$${parseInt(m.monto||0).toLocaleString('es-CL')}</span></div>`;
                 }).join('')}
               </div>
@@ -4752,12 +4752,18 @@ async function cargarStockPorCategoria() {
         const precio = prod ? (prod.precioHoy || prod.precio || 0) : 0;
         const qty    = getQtyCategoria(i, 'merma') + (i.merma?.cantidad || 0);
         const entradasMerma = getEntradasPorCategoria(i, 'merma');
-        const fechaRef = entradasMerma.length ? keyToFechaCL(entradasMerma[0].key) : (i.merma?.fecha || '');
+        // La clave viene como "merma_YYYYMMDD" — hay que quitar el prefijo antes de convertirla a fecha
+        const primerKey  = entradasMerma.length ? entradasMerma[0].key : '';
+        const fechaPlano = primerKey.replace(/^merma_/, '');
+        const fechaRef   = keyToFechaCL(fechaPlano) || (i.merma?.fecha || '');
+        // Quién lo clasificó como merma, buscando la entrada correspondiente en el registro interno
+        const logEntry = (i.mermaLog || []).find(l => l.fechaKey === fechaPlano);
+        const quien = logEntry?.usuario ? logEntry.usuario.split('@')[0] : '';
         valorMerma += qty * precio;
         return `<div class="stock-row" style="grid-template-columns:1fr auto">
           <div>
             <div class="stock-prod-nombre">${nombre}</div>
-            <div class="stock-prod-meta">${fechaRef} · ${qty} ud. · pérdida $${(qty*precio).toLocaleString('es-CL')}</div>
+            <div class="stock-prod-meta">${fechaRef}${quien ? ' · ' + quien : ''} · ${qty} ud. · pérdida $${(qty*precio).toLocaleString('es-CL')}</div>
           </div>
           ${esAdmin
             ? `<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
