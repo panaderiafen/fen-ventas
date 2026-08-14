@@ -1994,6 +1994,7 @@ window.revisarSincronizacionFen = function() {
 
   const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
   const vinculados = fuente.filter(p => p.idRecetaFen);
+  const sinVincular = fuente.filter(p => !p.idRecetaFen);
   const recetaPorId = {};
   RECETAS_FEN.forEach(r => { recetaPorId[r.idReceta] = r; });
 
@@ -2007,7 +2008,7 @@ window.revisarSincronizacionFen = function() {
     if (normalizarArea(p.area) !== receta.area) desajustesArea.push({ p, receta });
   });
 
-  if (!desajustesArea.length && !yaNoEnListaFen.length) {
+  if (!desajustesArea.length && !yaNoEnListaFen.length && !sinVincular.length) {
     wrap.innerHTML = `<div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a">✅ Todo sincronizado — ${vinculados.length} producto(s) vinculado(s), sin diferencias.</div>`;
     return;
   }
@@ -2029,6 +2030,17 @@ window.revisarSincronizacionFen = function() {
       <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">⚠️ Vinculado a un código que ya no está en la lista de fën (${yaNoEnListaFen.length})</div>
       ${yaNoEnListaFen.map(p => `<div style="padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;color:#c0392b">${p.nombre} — ${p.idRecetaFen}</div>`).join('')}
       <div style="font-size:11px;color:#888;margin-top:4px">Solo informativo — no se desvincula solo. Puede ser que la receta fue descontinuada del lado de fën, o el código nunca existió. Revisa si sigue correspondiendo vender este producto.</div>
+    </div>`;
+  }
+  if (sinVincular.length) {
+    html += `<div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#8a6416;margin-bottom:6px">❓ Sin vincular todavía (${sinVincular.length})</div>
+      <div style="font-size:11px;color:#888;margin-bottom:6px">Este producto se vende acá pero no está conectado a ninguna receta de fën. La vinculación siempre es manual — nunca se adivina por nombre.</div>
+      ${sinVincular.map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#fffaf0;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
+          <div>${p.nombre} <span style="color:#888">— ${normalizarArea(p.area)}</span></div>
+          <button class="btn-sm btn-edit" onclick="editarProducto('${p.id}')">Vincular ahora</button>
+        </div>`).join('')}
     </div>`;
   }
   wrap.innerHTML = html;
