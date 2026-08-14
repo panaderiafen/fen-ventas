@@ -1970,7 +1970,7 @@ function renderIdRecetaSelect(valorActual) {
   const ordenadas = [...RECETAS_FEN].sort((a, b) => (a.area + a.nombre).localeCompare(b.area + b.nombre));
   sel.innerHTML = [
     `<option value="">— Sin vincular —</option>`,
-    ...ordenadas.map(r => `<option value="${r.idReceta}">${r.idReceta} — ${r.nombre} (${r.area}${r.estado && r.estado.toLowerCase() !== 'activo' ? ' · ' + r.estado : ''})</option>`)
+    ...ordenadas.map(r => `<option value="${r.idReceta}">${r.idReceta} — ${r.nombre} (${r.area})</option>`)
   ].join('');
   if (prev && !ordenadas.some(r => r.idReceta === prev)) {
     // El producto ya tenía un idRecetaFen asignado que no está en la lista actual (ej. aún no cargada, o receta descontinuada) — se muestra igual para no perderlo de vista
@@ -1997,15 +1997,17 @@ window.revisarSincronizacionFen = function() {
   const recetaPorId = {};
   RECETAS_FEN.forEach(r => { recetaPorId[r.idReceta] = r; });
 
-  const desajustesArea = [], descontinuadas = [], sinReceta = [];
+  // El CSV publicado por fën solo lista recetas activas — si una receta se descontinúa,
+  // deja de aparecer ahí (no cambia de "estado", directamente desaparece). Por eso "ya no está
+  // en la lista actual" es la única señal real de que algo se descontinuó o nunca existió.
+  const desajustesArea = [], yaNoEnListaFen = [];
   vinculados.forEach(p => {
     const receta = recetaPorId[p.idRecetaFen];
-    if (!receta) { sinReceta.push(p); return; }
-    if (receta.estado && receta.estado.toLowerCase() !== 'activo') descontinuadas.push({ p, receta });
+    if (!receta) { yaNoEnListaFen.push(p); return; }
     if (normalizarArea(p.area) !== receta.area) desajustesArea.push({ p, receta });
   });
 
-  if (!desajustesArea.length && !descontinuadas.length && !sinReceta.length) {
+  if (!desajustesArea.length && !yaNoEnListaFen.length) {
     wrap.innerHTML = `<div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a">✅ Todo sincronizado — ${vinculados.length} producto(s) vinculado(s), sin diferencias.</div>`;
     return;
   }
@@ -2022,18 +2024,11 @@ window.revisarSincronizacionFen = function() {
       ${desajustesArea.length > 1 ? `<button class="btn-sm btn-edit" style="width:100%" onclick="aplicarTodasAreasFen()">Aplicar todos (${desajustesArea.length})</button>` : ''}
     </div>`;
   }
-  if (descontinuadas.length) {
+  if (yaNoEnListaFen.length) {
     html += `<div style="margin-top:14px">
-      <div style="font-size:12px;font-weight:700;color:#8a6416;margin-bottom:6px">⚠️ Receta descontinuada en fën, pero sigue vinculada (${descontinuadas.length})</div>
-      ${descontinuadas.map(({p, receta}) => `<div style="padding:8px;background:#fff3e0;border-radius:8px;margin-bottom:6px;font-size:12px;color:#8a6416">${p.nombre} — ${p.idRecetaFen} (${receta.estado})</div>`).join('')}
-      <div style="font-size:11px;color:#888;margin-top:4px">Solo informativo — no se desvincula solo. Revisa si sigue correspondiendo vender este producto.</div>
-    </div>`;
-  }
-  if (sinReceta.length) {
-    html += `<div style="margin-top:14px">
-      <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">❓ Vinculado a un código que ya no aparece en la lista (${sinReceta.length})</div>
-      ${sinReceta.map(p => `<div style="padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;color:#c0392b">${p.nombre} — ${p.idRecetaFen}</div>`).join('')}
-      <div style="font-size:11px;color:#888;margin-top:4px">Puede ser un código eliminado por error del otro lado, o que la lista aún no se actualizó. Revisa con fën-producción antes de tocar nada.</div>
+      <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">⚠️ Vinculado a un código que ya no está en la lista de fën (${yaNoEnListaFen.length})</div>
+      ${yaNoEnListaFen.map(p => `<div style="padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;color:#c0392b">${p.nombre} — ${p.idRecetaFen}</div>`).join('')}
+      <div style="font-size:11px;color:#888;margin-top:4px">Solo informativo — no se desvincula solo. Puede ser que la receta fue descontinuada del lado de fën, o el código nunca existió. Revisa si sigue correspondiendo vender este producto.</div>
     </div>`;
   }
   wrap.innerHTML = html;
