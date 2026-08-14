@@ -804,6 +804,18 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       </div>
     </div>
 
+    <!-- Sincronización con fën-producción -->
+    <div class="card">
+      <button onclick="toggleProdSection('sync')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
+        <span class="card-title" style="margin:0"><span id="prodSecIcon-sync">▸</span> 🔄 Sincronización con fën-producción</span>
+      </button>
+      <div id="prodSec-sync" style="display:none;margin-top:10px">
+        <div style="font-size:11px;color:#888;margin-bottom:10px">Revisa si el área de algún producto vinculado quedó desactualizada respecto a fën-producción, o si alguna receta vinculada fue descontinuada. Nunca toca el nombre de venta, y nunca aplica cambios de área sin que los confirmes tú.</div>
+        <button class="btn btn-secondary btn-full" onclick="revisarSincronizacionFen()">🔍 Revisar sincronización</button>
+        <div id="syncFenResultado" style="margin-top:10px"></div>
+      </div>
+    </div>
+
     <!-- Lista de productos -->
     <div class="card">
       <button onclick="toggleProdSection('lista')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
@@ -1968,6 +1980,89 @@ function renderIdRecetaSelect(valorActual) {
   }
   sel.value = prev || '';
 }
+
+// ── Revisión de sincronización: compara productos vinculados contra la lista publicada por fën ──
+// Nunca toca el nombre. Los cambios de área requieren confirmación explícita (afecta en qué pestaña
+// aparece el producto al vender), nunca se aplican solos.
+window.revisarSincronizacionFen = function() {
+  const wrap = document.getElementById('syncFenResultado');
+  if (!wrap) return;
+  if (!RECETAS_FEN.length) {
+    wrap.innerHTML = '<div class="empty">Primero carga la lista de fën-producción (botón "↻ Actualizar lista" en el formulario de producto, o espera unos segundos a que cargue sola).</div>';
+    return;
+  }
+
+  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+  const vinculados = fuente.filter(p => p.idRecetaFen);
+  const recetaPorId = {};
+  RECETAS_FEN.forEach(r => { recetaPorId[r.idReceta] = r; });
+
+  const desajustesArea = [], descontinuadas = [], sinReceta = [];
+  vinculados.forEach(p => {
+    const receta = recetaPorId[p.idRecetaFen];
+    if (!receta) { sinReceta.push(p); return; }
+    if (receta.estado && receta.estado.toLowerCase() !== 'activo') descontinuadas.push({ p, receta });
+    if (normalizarArea(p.area) !== receta.area) desajustesArea.push({ p, receta });
+  });
+
+  if (!desajustesArea.length && !descontinuadas.length && !sinReceta.length) {
+    wrap.innerHTML = `<div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a">✅ Todo sincronizado — ${vinculados.length} producto(s) vinculado(s), sin diferencias.</div>`;
+    return;
+  }
+
+  let html = '';
+  if (desajustesArea.length) {
+    html += `<div style="margin-top:6px">
+      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">📍 Área desactualizada (${desajustesArea.length})</div>
+      ${desajustesArea.map(({p, receta}) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#fff8ec;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
+          <div>${p.nombre} <span style="color:#888">— ${normalizarArea(p.area)} → <b>${receta.area}</b></span></div>
+          <button class="btn-sm btn-edit" onclick="aplicarAreaFen('${p.id}','${receta.area}')">Aplicar</button>
+        </div>`).join('')}
+      ${desajustesArea.length > 1 ? `<button class="btn-sm btn-edit" style="width:100%" onclick="aplicarTodasAreasFen()">Aplicar todos (${desajustesArea.length})</button>` : ''}
+    </div>`;
+  }
+  if (descontinuadas.length) {
+    html += `<div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#8a6416;margin-bottom:6px">⚠️ Receta descontinuada en fën, pero sigue vinculada (${descontinuadas.length})</div>
+      ${descontinuadas.map(({p, receta}) => `<div style="padding:8px;background:#fff3e0;border-radius:8px;margin-bottom:6px;font-size:12px;color:#8a6416">${p.nombre} — ${p.idRecetaFen} (${receta.estado})</div>`).join('')}
+      <div style="font-size:11px;color:#888;margin-top:4px">Solo informativo — no se desvincula solo. Revisa si sigue correspondiendo vender este producto.</div>
+    </div>`;
+  }
+  if (sinReceta.length) {
+    html += `<div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">❓ Vinculado a un código que ya no aparece en la lista (${sinReceta.length})</div>
+      ${sinReceta.map(p => `<div style="padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;color:#c0392b">${p.nombre} — ${p.idRecetaFen}</div>`).join('')}
+      <div style="font-size:11px;color:#888;margin-top:4px">Puede ser un código eliminado por error del otro lado, o que la lista aún no se actualizó. Revisa con fën-producción antes de tocar nada.</div>
+    </div>`;
+  }
+  wrap.innerHTML = html;
+};
+
+window.aplicarAreaFen = async function(productoId, nuevaArea) {
+  if (!confirm(`¿Actualizar el área de este producto a "${nuevaArea}"? Esto puede cambiar en qué pestaña aparece al vender.`)) return;
+  await updateDoc(doc(db, 'productos', productoId), { area: nuevaArea });
+  await cargarProductos();
+  await cargarProdAdmin();
+  revisarSincronizacionFen();
+  showToast('✅ Área actualizada');
+};
+
+window.aplicarTodasAreasFen = async function() {
+  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+  const recetaPorId = {};
+  RECETAS_FEN.forEach(r => { recetaPorId[r.idReceta] = r; });
+  const desajustes = fuente.filter(p => p.idRecetaFen && recetaPorId[p.idRecetaFen] && normalizarArea(p.area) !== recetaPorId[p.idRecetaFen].area);
+  if (!desajustes.length) return;
+  if (!confirm(`¿Actualizar el área de los ${desajustes.length} productos detectados? Esto puede cambiar en qué pestaña aparecen al vender.`)) return;
+  for (const p of desajustes) {
+    await updateDoc(doc(db, 'productos', p.id), { area: recetaPorId[p.idRecetaFen].area });
+  }
+  await cargarProductos();
+  await cargarProdAdmin();
+  revisarSincronizacionFen();
+  showToast(`✅ ${desajustes.length} área(s) actualizadas`);
+};
 
 
 // Alterna visibilidad de las secciones colapsables del panel Productos (Áreas, Tipos de leche, Motivos de merma, Subcategorías, Lista)
