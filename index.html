@@ -667,6 +667,15 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <label>Categoría (subcategoría visible en ventas)</label>
       <select id="prodCategoria" onchange="toggleCategoriaNueva()"></select>
       <input type="text" id="prodCategoriaNueva" placeholder="Escribe el nombre de la nueva categoría..." style="display:none;margin-top:6px"/>
+
+      <div style="margin-top:14px;padding:10px 0;border-top:0.5px solid #f0f0f0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <label style="margin:0">🔗 Vinculación con fën-producción</label>
+          <button type="button" class="btn-sm btn-edit" onclick="cargarRecetasFen()">↻ Actualizar lista</button>
+        </div>
+        <select id="prodIdRecetaFen"><option value="">— Sin vincular —</option></select>
+        <div id="recetasFenEstado" style="font-size:11px;color:#888;margin-top:4px"></div>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 0;border-top:0.5px solid #f0f0f0">
         <div>
           <div style="font-size:13px;font-weight:600;color:#222">Requiere control de stock</div>
@@ -1146,6 +1155,7 @@ onAuthStateChanged(auth, async (user) => {
     await cargarTiposLeche();
     await cargarMotivosMerma();
     await cargarSubcategorias();
+    cargarRecetasFen();
     // Verificar si es visor de stock
     const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
     esStockViewer = viewerDoc.exists() && !esAdmin; // admin siempre tiene prioridad
@@ -1889,6 +1899,77 @@ function renderAreaSelect(valorActual) {
 
 const CATEGORIA_NUEVA = '__nueva__';
 
+// ── Vinculación con fën-producción (Maestro_recetas publicado como CSV) ──
+// Fuente de verdad para nombres de producción — nunca se usa para sobreescribir el nombre de venta acá.
+const FEN_PRODUCCION_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKvAbWUlwxbcCx54T3lfdMa8XxPD-F2lSE05-vMfdv_UpFVpDi6pbAJOpM7O6LBLmdfkz5804lzMYn/pub?gid=1370945279&single=true&output=csv';
+let RECETAS_FEN = []; // [{idReceta, nombre, area, estado}]
+
+// Parser CSV simple, soporta campos entre comillas con comas adentro (ej. nombres con comas)
+function parseCSV(texto) {
+  const filas = [];
+  let fila = [], campo = '', enComillas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i], sig = texto[i+1];
+    if (enComillas) {
+      if (c === '"' && sig === '"') { campo += '"'; i++; }
+      else if (c === '"') { enComillas = false; }
+      else { campo += c; }
+    } else {
+      if (c === '"') enComillas = true;
+      else if (c === ',') { fila.push(campo); campo = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && sig === '\n') continue;
+        fila.push(campo); campo = '';
+        if (fila.length > 1 || fila[0] !== '') filas.push(fila);
+        fila = [];
+      } else { campo += c; }
+    }
+  }
+  if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila); }
+  return filas;
+}
+
+async function cargarRecetasFen() {
+  const estadoEl = document.getElementById('recetasFenEstado');
+  if (estadoEl) estadoEl.textContent = 'Cargando lista de fën-producción...';
+  try {
+    const res = await fetch(FEN_PRODUCCION_CSV_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const texto = await res.text();
+    const filas = parseCSV(texto);
+    const header = (filas[0] || []).map(h => h.trim().toLowerCase());
+    const iId = header.indexOf('id_receta'), iNom = header.indexOf('nombre'), iArea = header.indexOf('área') !== -1 ? header.indexOf('área') : header.indexOf('area'), iEstado = header.indexOf('estado');
+    RECETAS_FEN = filas.slice(1)
+      .filter(f => f[iId])
+      .map(f => ({ idReceta: (f[iId]||'').trim(), nombre: (f[iNom]||'').trim(), area: normalizarArea((f[iArea]||'').trim()), estado: (f[iEstado]||'').trim() }));
+    if (estadoEl) estadoEl.textContent = `✅ ${RECETAS_FEN.length} recetas cargadas de fën-producción`;
+  } catch (e) {
+    console.error('Error cargando recetas fën:', e);
+    if (estadoEl) estadoEl.textContent = '⚠️ No se pudo cargar la lista (revisa conexión). Puedes reintentar con "Actualizar lista".';
+  }
+  renderIdRecetaSelect();
+}
+
+// Popula <select id="prodIdRecetaFen"> con la lista de recetas de fën-producción
+function renderIdRecetaSelect(valorActual) {
+  const sel = document.getElementById('prodIdRecetaFen');
+  if (!sel) return;
+  const prev = valorActual !== undefined ? valorActual : sel.value;
+  const ordenadas = [...RECETAS_FEN].sort((a, b) => (a.area + a.nombre).localeCompare(b.area + b.nombre));
+  sel.innerHTML = [
+    `<option value="">— Sin vincular —</option>`,
+    ...ordenadas.map(r => `<option value="${r.idReceta}">${r.idReceta} — ${r.nombre} (${r.area}${r.estado && r.estado.toLowerCase() !== 'activo' ? ' · ' + r.estado : ''})</option>`)
+  ].join('');
+  if (prev && !ordenadas.some(r => r.idReceta === prev)) {
+    // El producto ya tenía un idRecetaFen asignado que no está en la lista actual (ej. aún no cargada, o receta descontinuada) — se muestra igual para no perderlo de vista
+    const opt = document.createElement('option');
+    opt.value = prev; opt.textContent = `${prev} (no encontrado en la lista actual)`;
+    sel.appendChild(opt);
+  }
+  sel.value = prev || '';
+}
+
+
 // Alterna visibilidad de las secciones colapsables del panel Productos (Áreas, Tipos de leche, Motivos de merma, Subcategorías, Lista)
 window.toggleProdSection = function(id) {
   const el = document.getElementById(`prodSec-${id}`);
@@ -2214,7 +2295,7 @@ function renderTablaProductos() {
          <button class="btn-sm btn-del"  onclick="eliminarProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">🗑️</button>`
       : '—';
     return `<tr>
-      <td><span style="font-size:16px">${p.emoji||'📦'}</span> ${p.nombre}</td>
+      <td><span style="font-size:16px">${p.emoji||'📦'}</span> ${p.nombre} <span title="${p.idRecetaFen ? 'Vinculado a fën-producción: ' + p.idRecetaFen : 'Sin vincular a fën-producción'}" style="font-size:11px">${p.idRecetaFen ? '🔗' : '<span style=\"color:#d99\">⚠️</span>'}</span></td>
       <td><span class="area-code">${areaCode}</span></td>
       <td style="text-align:center">${conControl ? '✅' : '<span style="color:#888">Sin stock</span>'}</td>
       ${conControl ? `
@@ -2266,6 +2347,7 @@ window.editarProducto = function(id) {
   document.getElementById('prodPrecioUnico').value         = p.precioHoy || p.precio || '';
   document.getElementById('prodExcepcion').checked     = !!p.excepcionHoraria;
   document.getElementById('prodAutoEliminar').checked  = p.autoEliminar !== false;
+  renderIdRecetaSelect(p.idRecetaFen || '');
   toggleCamposStock();
   document.getElementById('formProdTitulo').textContent = '✏️ Editar producto';
   document.getElementById('btnCancelarEdit').style.display = '';
@@ -2286,6 +2368,7 @@ window.cancelarEdicion = function() {
   document.getElementById('prodPrecioUnico').value = '';
   document.getElementById('prodExcepcion').checked = false;
   document.getElementById('prodAutoEliminar').checked = true;
+  renderIdRecetaSelect('');
   toggleCamposStock();
   document.getElementById('formProdTitulo').textContent = '+ Nuevo producto';
   document.getElementById('btnCancelarEdit').style.display = 'none';
@@ -2311,6 +2394,7 @@ window.guardarProducto = async function() {
     ? document.getElementById('prodCategoriaNueva').value.trim()
     : catSel;
   const controlStock = document.getElementById('prodControlStock').checked;
+  const idRecetaFen = document.getElementById('prodIdRecetaFen').value || '';
 
   let precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta, excepcionHoraria, autoEliminar;
   if (controlStock) {
@@ -2342,7 +2426,7 @@ window.guardarProducto = async function() {
     nombre, emoji, area, categoria, activo: true,
     precio: precioHoy,
     precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta,
-    excepcionHoraria, autoEliminar, controlStock
+    excepcionHoraria, autoEliminar, controlStock, idRecetaFen
   };
   try {
     if (id) {
