@@ -5809,6 +5809,24 @@ window.toggleReportePorProducto = function() {
   if (icon) icon.textContent = abierto ? '▸' : '▾';
 };
 
+window.cambiarAgrupacionPorProducto = function(modo) {
+  const nombreBtn = document.getElementById('repProdAgruparNombreBtn');
+  const recetaBtn = document.getElementById('repProdAgruparRecetaBtn');
+  const nombreLista = document.getElementById('repProdListaNombre');
+  const recetaLista = document.getElementById('repProdListaReceta');
+  if (!nombreBtn || !recetaBtn || !nombreLista || !recetaLista) return;
+  const activo = 'flex:1', inactivo = 'flex:1;background:#fff;border:1px solid #ddd;color:#666';
+  if (modo === 'nombre') {
+    nombreBtn.className = 'btn-sm btn-edit'; nombreBtn.style.cssText = activo;
+    recetaBtn.className = 'btn-sm'; recetaBtn.style.cssText = inactivo;
+    nombreLista.style.display = ''; recetaLista.style.display = 'none';
+  } else {
+    recetaBtn.className = 'btn-sm btn-edit'; recetaBtn.style.cssText = activo;
+    nombreBtn.className = 'btn-sm'; nombreBtn.style.cssText = inactivo;
+    recetaLista.style.display = ''; nombreLista.style.display = 'none';
+  }
+};
+
 window.generarReporte = async function() {
   const desde = document.getElementById('repDesde').value;
   const hasta = document.getElementById('repHasta').value;
@@ -5826,12 +5844,17 @@ window.generarReporte = async function() {
   // (se busca en todos los productos, incluidos inactivos, para no perder históricos)
   const prodSnap = await getDocs(collection(db, 'productos'));
   const idToArea = {};
-  prodSnap.docs.forEach(d => { idToArea[d.id] = normalizarArea(d.data().area) || 'Otros'; });
+  const idToRecetaFen = {};
+  prodSnap.docs.forEach(d => {
+    idToArea[d.id] = normalizarArea(d.data().area) || 'Otros';
+    idToRecetaFen[d.id] = d.data().idRecetaFen || '';
+  });
 
   const totalGeneral = ventas.reduce((a, v) => a + v.total, 0);
   const porMedio = {};
   const porArea = {};
   const porProducto = {};
+  const porRecetaFen = {}; // { idRecetaFen || '__sin_vincular__': {cantidad, total} } — para agrupar por receta fën, no por texto de nombre
   const porTipoLeche = {};
   const porProductoEnArea = {}; // { area: { nombreProducto: {cantidad, total} } } — para el ranking por área
   ventas.forEach(v => {
@@ -5848,6 +5871,10 @@ window.generarReporte = async function() {
       if (!porProducto[l.nombre]) porProducto[l.nombre] = { cantidad: 0, total: 0 };
       porProducto[l.nombre].cantidad += l.cantidad;
       porProducto[l.nombre].total += l.total;
+      const claveReceta = idToRecetaFen[l.id] || '__sin_vincular__';
+      if (!porRecetaFen[claveReceta]) porRecetaFen[claveReceta] = { cantidad: 0, total: 0 };
+      porRecetaFen[claveReceta].cantidad += l.cantidad;
+      porRecetaFen[claveReceta].total += l.total;
       if (l.tipoLeche) {
         porTipoLeche[l.tipoLeche] = (porTipoLeche[l.tipoLeche] || 0) + l.cantidad;
       }
@@ -5926,9 +5953,25 @@ window.generarReporte = async function() {
         <span style="font-size:11px;color:#888">${Object.keys(porProducto).length} productos</span>
       </button>
       <div id="repProdLista" style="display:none;margin-top:10px">
-        ${Object.entries(porProducto).sort((a,b)=>b[1].total-a[1].total).map(([n,d]) => 
-          `<div class="resumen-row"><span>${n} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`
-        ).join('')}
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <button class="btn-sm btn-edit" id="repProdAgruparNombreBtn" onclick="cambiarAgrupacionPorProducto('nombre')" style="flex:1">Por nombre</button>
+          <button class="btn-sm" id="repProdAgruparRecetaBtn" onclick="cambiarAgrupacionPorProducto('receta')" style="flex:1;background:#fff;border:1px solid #ddd;color:#666">Por receta fën</button>
+        </div>
+        <div id="repProdListaNombre">
+          ${Object.entries(porProducto).sort((a,b)=>b[1].total-a[1].total).map(([n,d]) =>
+            `<div class="resumen-row"><span>${n} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`
+          ).join('')}
+        </div>
+        <div id="repProdListaReceta" style="display:none">
+          ${Object.entries(porRecetaFen).sort((a,b)=>b[1].total-a[1].total).map(([idReceta,d]) => {
+            if (idReceta === '__sin_vincular__') {
+              return `<div class="resumen-row" style="color:#c0392b"><span>⚠️ Sin vincular a fën (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`;
+            }
+            const receta = RECETAS_FEN.find(r => r.idReceta === idReceta);
+            const etiqueta = receta ? `${idReceta} — ${receta.nombre}` : `${idReceta} (no encontrado en la lista actual)`;
+            return `<div class="resumen-row"><span>${etiqueta} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`;
+          }).join('')}
+        </div>
       </div>
     </div>
   `;
