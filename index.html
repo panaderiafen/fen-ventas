@@ -674,7 +674,8 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
           <label style="margin:0">🔗 Vinculación con fën-producción</label>
           <button type="button" class="btn-sm btn-edit" onclick="cargarRecetasFen()">↻ Actualizar lista</button>
         </div>
-        <select id="prodIdRecetaFen"><option value="">— Sin vincular —</option></select>
+        <input type="hidden" id="prodIdRecetaFen"/>
+        <button type="button" id="prodIdRecetaFenBtn" onclick="abrirModalVincularReceta()" style="width:100%;text-align:left;padding:10px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:13px;color:#333;cursor:pointer">— Sin vincular —</button>
         <div id="recetasFenEstado" style="font-size:11px;color:#888;margin-top:4px"></div>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 0;border-top:0.5px solid #f0f0f0">
@@ -1054,6 +1055,18 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <div id="elegirLoteOpciones" style="display:flex;flex-direction:column;gap:8px"></div>
     <div class="modal-btns" style="margin-top:14px">
       <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalElegirLote').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalVincularReceta">
+  <div class="modal">
+    <div class="modal-title">🔗 Vincular con fën-producción</div>
+    <input type="text" id="buscarRecetaFen" placeholder="Buscar por nombre, código o área..." oninput="filtrarRecetasFenModal()" style="margin-bottom:10px"/>
+    <div id="recetasFenModalLista" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-secondary" style="flex:1" onclick="elegirRecetaFen('')">— Sin vincular —</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalVincularReceta').classList.remove('open')">Cancelar</button>
     </div>
   </div>
 </div>
@@ -1981,24 +1994,53 @@ async function cargarRecetasFen() {
   renderIdRecetaSelect();
 }
 
-// Popula <select id="prodIdRecetaFen"> con la lista de recetas de fën-producción
+// Actualiza el campo oculto y el botón visible con la receta vinculada (mismo nombre de función
+// que antes para no tener que tocar los demás lugares que ya la llaman: editarProducto, cancelarEdicion, cargarRecetasFen)
 function renderIdRecetaSelect(valorActual) {
-  const sel = document.getElementById('prodIdRecetaFen');
-  if (!sel) return;
-  const prev = valorActual !== undefined ? valorActual : sel.value;
-  const ordenadas = [...RECETAS_FEN].sort((a, b) => (a.area + a.nombre).localeCompare(b.area + b.nombre));
-  sel.innerHTML = [
-    `<option value="">— Sin vincular —</option>`,
-    ...ordenadas.map(r => `<option value="${r.idReceta}">${r.idReceta} — ${r.nombre} (${r.area})</option>`)
-  ].join('');
-  if (prev && !ordenadas.some(r => r.idReceta === prev)) {
-    // El producto ya tenía un idRecetaFen asignado que no está en la lista actual (ej. aún no cargada, o receta descontinuada) — se muestra igual para no perderlo de vista
-    const opt = document.createElement('option');
-    opt.value = prev; opt.textContent = `${prev} (no encontrado en la lista actual)`;
-    sel.appendChild(opt);
-  }
-  sel.value = prev || '';
+  const hidden = document.getElementById('prodIdRecetaFen');
+  const btn = document.getElementById('prodIdRecetaFenBtn');
+  if (!hidden || !btn) return;
+  const val = valorActual !== undefined ? valorActual : hidden.value;
+  hidden.value = val || '';
+  if (!val) { btn.textContent = '— Sin vincular —'; return; }
+  const receta = RECETAS_FEN.find(r => r.idReceta === val);
+  btn.textContent = receta ? `🔗 ${receta.idReceta} — ${receta.nombre} (${receta.area})` : `🔗 ${val} (no encontrado en la lista actual)`;
 }
+
+// Abre el buscador de recetas fën para vincular el producto que se está creando/editando
+window.abrirModalVincularReceta = function() {
+  document.getElementById('buscarRecetaFen').value = '';
+  filtrarRecetasFenModal();
+  document.getElementById('modalVincularReceta').classList.add('open');
+};
+
+window.filtrarRecetasFenModal = function() {
+  const q = (document.getElementById('buscarRecetaFen').value || '').toLowerCase().trim();
+  const wrap = document.getElementById('recetasFenModalLista');
+  if (!wrap) return;
+  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+  const idActual = document.getElementById('prodId').value;
+
+  const ordenadas = [...RECETAS_FEN].sort((a, b) => (a.area + a.nombre).localeCompare(b.area + b.nombre));
+  const filtradas = q ? ordenadas.filter(r => (r.idReceta + ' ' + r.nombre + ' ' + r.area).toLowerCase().includes(q)) : ordenadas;
+
+  if (!filtradas.length) { wrap.innerHTML = '<div class="empty">Sin resultados</div>'; return; }
+
+  wrap.innerHTML = filtradas.map(r => {
+    // Varios productos B2C pueden compartir la misma receta (misma pieza, distinta presentación) — está permitido,
+    // solo se muestra como referencia para que el admin vea qué más ya está vinculado a este código.
+    const otrosVinculados = fuente.filter(p => p.idRecetaFen === r.idReceta && p.id !== idActual).map(p => p.nombre);
+    return `<button type="button" onclick="elegirRecetaFen('${r.idReceta}')" style="text-align:left;padding:10px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer">
+      <div style="font-weight:600;font-size:13px">${r.idReceta} — ${r.nombre}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px">${r.area}${otrosVinculados.length ? ` · también vinculado a: ${otrosVinculados.join(', ')}` : ''}</div>
+    </button>`;
+  }).join('');
+};
+
+window.elegirRecetaFen = function(idReceta) {
+  renderIdRecetaSelect(idReceta);
+  document.getElementById('modalVincularReceta').classList.remove('open');
+};
 
 // ── Revisión de sincronización: compara productos vinculados contra la lista publicada por fën ──
 // Nunca toca el nombre. Los cambios de área requieren confirmación explícita (afecta en qué pestaña
