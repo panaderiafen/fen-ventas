@@ -65,8 +65,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* ÁREAS (nivel 1) */
 .area-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; }
-.area-tab { padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; border: 2px solid #003a79; color: #003a79; cursor: pointer; white-space: nowrap; background: white; }
-.area-tab.active { background: #003a79; color: white; }
+.area-tab { padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; border: 2px solid #ddd; color: #888; cursor: pointer; white-space: nowrap; background: white; transition: all 0.15s; }
 
 /* CATEGORÍAS (nivel 2) */
 .cat-tabs { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; }
@@ -172,7 +171,7 @@ input:focus, select:focus { border-color: #003a79; }
 .stock-cat-label { font-size: 11px; font-weight: 600; color: #888; white-space: nowrap; }
 .stock-cat-btns { display: flex; border: 1.5px solid #ddd; border-radius: 8px; overflow: hidden; }
 .stock-cat-btn { padding: 5px 10px; font-size: 12px; font-weight: 600; border: none; background: white; color: #666; cursor: pointer; }
-.stock-cat-btn.active.cat-hoy       { background: #003a79; color: white; }
+.stock-cat-btn.active.cat-hoy       { background: #4a4a4a; color: white; }
 .stock-cat-btn.active.cat-ayer      { background: #b8860b; color: white; }
 .stock-cat-btn.active.cat-antesayer { background: #c0392b; color: white; }
 .stock-cat-btn.active.cat-cuartodia { background: #92400E; color: white; }
@@ -389,7 +388,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 
       <!-- COLUMNA IZQUIERDA: grilla de productos + últimas ventas -->
       <div class="venta-left">
-        <div class="card">
+        <div class="card" id="cardNuevaVenta" style="transition:background 0.2s,border-color 0.2s">
           <div class="card-title" id="ventaCardTitle">🛒 Nueva venta</div>
 
           <!-- Áreas (nivel 1) -->
@@ -1837,11 +1836,26 @@ window.toggleMostrarSinStock = function() {
 
 function renderAreas() {
   const areasConProd = AREAS.filter(a => productos.some(p => normalizarArea(p.area) === a.id));
-  document.getElementById('areaTabs').innerHTML = areasConProd.map(a => `
-    <button class="area-tab ${a.id === areaActiva ? 'active' : ''}" onclick="filtrarArea('${a.id}')">
-      ${a.emoji} ${a.id}
-    </button>
-  `).join('');
+  document.getElementById('areaTabs').innerHTML = areasConProd.map(a => {
+    const activa = a.id === areaActiva;
+    const { principal, fondo } = colorDeArea(a.id);
+    const estilo = activa ? `border-color:${principal};background:${fondo};color:${principal}` : '';
+    return `<button class="area-tab${activa ? ' active' : ''}" style="${estilo}" onclick="filtrarArea('${a.id}')">${a.emoji} ${a.id}</button>`;
+  }).join('');
+}
+
+// Sincroniza el color del card "Nueva venta" con el área seleccionada (franja superior + fondo suave)
+function actualizarColorCardVenta() {
+  const card = document.getElementById('cardNuevaVenta');
+  if (!card) return;
+  if (areaActiva) {
+    const { principal, fondo } = colorDeArea(areaActiva);
+    card.style.background = fondo;
+    card.style.borderTop = `4px solid ${principal}`;
+  } else {
+    card.style.background = '';
+    card.style.borderTop = '';
+  }
 }
 
 window.filtrarArea = function(area) {
@@ -1849,6 +1863,7 @@ window.filtrarArea = function(area) {
   catActiva = 'TODOS';
   renderAreas();
   renderCategorias();
+  actualizarColorCardVenta();
   renderProductos();
 };
 
@@ -3134,7 +3149,7 @@ window.agregarAlPedidoConLote = function(id, loteFecha) {
   } else {
     pedidoLineas.push({
       id, nombre: prod.nombre, precio, cantidad: 1,
-      totalBruto: precio, descTipo: 'pct', descVal: 0, descMonto: 0, total: precio,
+      totalBruto: precio, descTipo: 'peso', descVal: 0, descMonto: 0, total: precio,
       categoriaStock: categoriaStockActiva, loteFecha: loteFecha || '',
       clienteNombre: '', tipoLeche: '', nota: ''
     });
@@ -3199,10 +3214,10 @@ function renderPedido() {
         <input class="linea-desc-input" type="number" min="0" value="${l.descVal || ''}" placeholder="0"
                oninput="cambiarDescLinea(${i}, this.value)"/>
         <div class="linea-desc-tipo">
-          <button id="desc-pct-${i}" class="linea-desc-tipo-btn ${l.descTipo === 'pct' ? 'active' : ''}"
-                  onclick="selDescTipoLinea(${i}, 'pct')">%</button>
           <button id="desc-peso-${i}" class="linea-desc-tipo-btn ${l.descTipo === 'peso' ? 'active' : ''}"
                   onclick="selDescTipoLinea(${i}, 'peso')">$</button>
+          <button id="desc-pct-${i}" class="linea-desc-tipo-btn ${l.descTipo === 'pct' ? 'active' : ''}"
+                  onclick="selDescTipoLinea(${i}, 'pct')">%</button>
         </div>
         <span id="desc-result-${i}" class="linea-desc-result" style="${l.descMonto > 0 ? '' : 'display:none'}">
           ${l.descMonto > 0 ? `−$${parseInt(l.descMonto).toLocaleString('es-CL')} → $${parseInt(l.total).toLocaleString('es-CL')}` : ''}
