@@ -393,7 +393,10 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
         <div class="card">
           <div class="card-title" id="ventaCardTitle">🛒 Nueva venta</div>
 
-          <!-- Categoría de stock activa + toggle visibilidad -->
+          <!-- Áreas (nivel 1) -->
+          <div class="area-tabs" id="areaTabs"></div>
+
+          <!-- Categoría de stock activa + toggle visibilidad + vista general -->
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
             <div class="stock-cat-switch" id="stockCatSwitch" style="margin-bottom:0;flex:1">
               <span class="stock-cat-label">Descontar de:</span>
@@ -409,10 +412,11 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
                     style="white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px">
               👁 Mostrar todos
             </button>
+            <button class="btn-sm" id="btnVistaGeneral" onclick="toggleVistaGeneral()"
+                    style="white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px">
+              📋 Vista general
+            </button>
           </div>
-
-          <!-- Áreas (nivel 1) -->
-          <div class="area-tabs" id="areaTabs"></div>
 
           <!-- Subcategorías (nivel 2) -->
           <div class="cat-tabs" id="catTabs"></div>
@@ -421,6 +425,9 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
           <div class="productos-grid" id="productosGrid">
             <div class="empty" style="grid-column:1/-1">Cargando productos...</div>
           </div>
+
+          <!-- Vista general: stock total por producto, con desglose de lotes -->
+          <div id="vistaGeneralList" style="display:none"></div>
         </div>
 
         <!-- Ventas del turno — debajo de la grilla, columna izquierda -->
@@ -1768,6 +1775,16 @@ function getEntradasPorCategoria(stockItem, cat) {
     .map(([key, qty]) => ({ key, qty }));
 }
 
+// Todos los lotes vendibles de un producto (todas las categorías con fecha, sin merma ni "permanente"),
+// ordenados del más reciente al más antiguo — para la vista general de stock.
+function getTodosLotesVendibles(stockItem) {
+  const entradas = stockItem?.entradas || {};
+  return Object.entries(entradas)
+    .filter(([k, q]) => q > 0 && k !== 'permanente' && !k.startsWith('merma'))
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, qty]) => ({ key, qty }));
+}
+
 function getPrecioProducto(prod, cat) {
   const hora = new Date().getHours();
   if (cat === 'hoy') return prod.precioHoy || prod.precio || 0;
@@ -1847,7 +1864,10 @@ window.filtrarCat = function(cat) {
   renderProductos();
 };
 
+let vistaGeneralActiva = false;
+
 function renderProductos() {
+  if (vistaGeneralActiva) { renderVistaGeneral(); return; }
   const prodArea = areaActiva ? productos.filter(p => normalizarArea(p.area) === areaActiva) : productos;
   const lista = (catActiva === 'TODOS' ? prodArea : prodArea.filter(p => p.categoria === catActiva))
     .slice()
@@ -1893,6 +1913,61 @@ function renderProductos() {
       <div class="precio">$${parseInt(precio).toLocaleString('es-CL')}</div>
       <div class="stock-badge">${stockLabel}</div>
     </button>`;
+  }).join('');
+}
+
+// Muestra/oculta la vista general: stock total por producto con desglose de lotes por fecha,
+// en vez de la grilla de venta rápida filtrada por categoría de día.
+window.toggleVistaGeneral = function() {
+  vistaGeneralActiva = !vistaGeneralActiva;
+  const btn = document.getElementById('btnVistaGeneral');
+  const catSwitch = document.getElementById('stockCatSwitch');
+  const grid = document.getElementById('productosGrid');
+  const lista = document.getElementById('vistaGeneralList');
+  if (vistaGeneralActiva) {
+    btn.style.cssText = 'white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px;background:#003a79;color:#fff;border:none';
+    catSwitch.style.opacity = '0.4';
+    catSwitch.style.pointerEvents = 'none';
+    grid.style.display = 'none';
+    lista.style.display = '';
+  } else {
+    btn.style.cssText = 'white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px';
+    catSwitch.style.opacity = '';
+    catSwitch.style.pointerEvents = '';
+    grid.style.display = '';
+    lista.style.display = 'none';
+  }
+  renderProductos();
+};
+
+// Stock total por producto + desglose de lotes (más reciente primero), respetando área/subcategoría activa
+function renderVistaGeneral() {
+  const prodArea = areaActiva ? productos.filter(p => normalizarArea(p.area) === areaActiva) : productos;
+  const lista = (catActiva === 'TODOS' ? prodArea : prodArea.filter(p => p.categoria === catActiva))
+    .slice()
+    .sort((a, b) => getPrecioProducto(a, 'hoy') - getPrecioProducto(b, 'hoy'));
+
+  const wrap = document.getElementById('vistaGeneralList');
+  if (!wrap) return;
+  if (!lista.length) { wrap.innerHTML = '<div class="empty">No hay productos</div>'; return; }
+
+  wrap.innerHTML = lista.map(p => {
+    const conControl = p.controlStock !== false;
+    if (!conControl) {
+      return `<div class="stock-row"><div style="flex:1"><div class="stock-prod-nombre">${p.emoji||'📦'} ${p.nombre}</div><div class="stock-prod-meta">Sin control de stock</div></div></div>`;
+    }
+    const stockKey  = sucursal + '_' + p.id;
+    const stockItem = window._stockMap ? window._stockMap[stockKey] : null;
+    const lotes = getTodosLotesVendibles(stockItem);
+    const total = lotes.reduce((a, l) => a + l.qty, 0);
+    const detalle = lotes.map(l => `${l.qty}un · ${keyToFechaCL(l.key)}`).join(' — ');
+    return `<div class="stock-row">
+      <div style="flex:1;min-width:0">
+        <div class="stock-prod-nombre">${p.emoji||'📦'} ${p.nombre}</div>
+        <div class="stock-prod-meta">${detalle || 'Sin stock'}</div>
+      </div>
+      <div style="font-weight:700;color:#003a79;white-space:nowrap;padding-left:8px">${total} un.</div>
+    </div>`;
   }).join('');
 }
 
