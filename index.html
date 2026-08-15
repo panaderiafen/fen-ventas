@@ -1603,8 +1603,20 @@ const AREA_COLORES = {
   PAS: { principal: '#1B5E20', fondo: '#E8F5E9' },
   CAF: { principal: '#B71C1C', fondo: '#FFEBEE' }
 };
+// Aclara un color hexadecimal mezclándolo hacia blanco (0 = igual, 1 = blanco puro) — para derivar
+// tonos más suaves del mismo color sin tener que definir uno nuevo a mano por cada área.
+function aclararColor(hex, pct) {
+  const num = parseInt(hex.slice(1), 16);
+  const r = Math.round(((num >> 16) & 255) + (255 - ((num >> 16) & 255)) * pct);
+  const g = Math.round(((num >> 8) & 255)  + (255 - ((num >> 8) & 255))  * pct);
+  const b = Math.round((num & 255)         + (255 - (num & 255))         * pct);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
 function colorDeArea(areaId) {
-  return AREA_COLORES[normalizarArea(areaId)] || { principal: '#555555', fondo: '#f2f2f2' };
+  const c = AREA_COLORES[normalizarArea(areaId)] || { principal: '#555555', fondo: '#f2f2f2' };
+  // fondoClaro: una versión aún más suave del mismo tono, para fondos grandes (el card completo),
+  // dejando "fondo" (más saturado) para elementos chicos como la tarjeta de producto — así no se aplanan entre sí.
+  return { ...c, fondoClaro: aclararColor(c.fondo, 0.6) };
 }
 
 let areaActiva = null;
@@ -1849,8 +1861,8 @@ function actualizarColorCardVenta() {
   const card = document.getElementById('cardNuevaVenta');
   if (!card) return;
   if (areaActiva) {
-    const { principal, fondo } = colorDeArea(areaActiva);
-    card.style.background = fondo;
+    const { principal, fondoClaro } = colorDeArea(areaActiva);
+    card.style.background = fondoClaro;
     card.style.borderTop = `4px solid ${principal}`;
   } else {
     card.style.background = '';
