@@ -664,10 +664,8 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <div class="card" id="cardFormProd">
       <div class="card-title" id="formProdTitulo">+ Nuevo producto</div>
       <input type="hidden" id="prodId"/>
-      <div style="display:grid;grid-template-columns:1fr 60px;gap:8px">
-        <div><label>Nombre *</label><input type="text" id="prodNombre" placeholder="Ej: Croissant clásico"/></div>
-        <div><label>Emoji</label><input type="text" id="prodEmoji" placeholder="🥐" maxlength="4"/></div>
-      </div>
+      <label>Nombre *</label>
+      <input type="text" id="prodNombre" placeholder="Ej: Croissant clásico"/>
       <label>Área</label>
       <select id="prodArea" onchange="renderCategoriaSelect()"></select>
       <label>Categoría (subcategoría visible en ventas)</label>
@@ -1333,7 +1331,7 @@ function renderResumenVisor() {
     const esPerm = prod.autoEliminar === false;
 
     if (!resumen[data.productoId]) {
-      resumen[data.productoId] = { nombre: prod.nombre, emoji: prod.emoji || '📦', cats: {}, total: 0, esPerm };
+      resumen[data.productoId] = { nombre: prod.nombre, area: normalizarArea(prod.area), cats: {}, total: 0, esPerm };
     }
 
     const entradas = data.entradas || {};
@@ -1359,13 +1357,14 @@ function renderResumenVisor() {
   const catLabel = { hoy: 'Hoy', ayer: 'Ayer', antesayer: 'Ant.', cuartoDia: '4to', permanente: 'Sin venc.' };
 
   lista.innerHTML = items.map(r => {
+    const { principal, fondo } = colorDeArea(r.area);
     const detalle = Object.entries(r.cats)
       .filter(([, q]) => q > 0)
       .map(([c, q]) => `${catLabel[c] || c}: ${q}`)
       .join(' · ');
-    return `<div class="visor-resumen-row">
+    return `<div class="visor-resumen-row" style="background:${fondo};border-left:4px solid ${principal};border-radius:6px;padding:8px 10px;margin-bottom:6px">
       <div>
-        <div class="visor-resumen-nombre">${r.emoji} ${r.nombre}</div>
+        <div class="visor-resumen-nombre" style="color:${principal}">${r.nombre}</div>
         <div class="visor-resumen-detalle">${detalle}</div>
       </div>
       <div class="visor-resumen-total">${r.total} ud.</div>
@@ -1653,12 +1652,13 @@ function renderStockIngresoGrid() {
   let lista = productos.filter(p => p.controlStock !== false); // excluir productos sin control de stock
   if (_stockIngresoArea) lista = lista.filter(p => normalizarArea(p.area) === _stockIngresoArea);
   if (lista.length === 0) { grid.innerHTML = '<div class="empty">Sin productos con control de stock en esta área</div>'; return; }
-  grid.innerHTML = lista.map(p => `
-    <button class="stock-ingreso-btn" onclick="selStockProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}','${p.emoji||'📦'}')">
-      <div class="s-icon">${p.emoji||'📦'}</div>
-      <div class="s-name">${p.nombre}</div>
-    </button>
-  `).join('');
+  grid.innerHTML = lista.map(p => {
+    const { principal, fondo } = colorDeArea(p.area);
+    return `
+    <button class="stock-ingreso-btn" style="background:${fondo};border-color:${principal}40" onclick="selStockProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">
+      <div class="s-name" style="color:${principal}">${p.nombre}</div>
+    </button>`;
+  }).join('');
 }
 
 window.selStockArea = function(btn, area) {
@@ -1668,9 +1668,9 @@ window.selStockArea = function(btn, area) {
   renderStockIngresoGrid();
 };
 
-window.selStockProducto = function(id, nombre, emoji) {
+window.selStockProducto = function(id, nombre) {
   document.getElementById('stockProducto').value = id;
-  document.getElementById('stockSelNombre').textContent = emoji + ' ' + nombre;
+  document.getElementById('stockSelNombre').textContent = nombre;
   document.getElementById('stockSelBadge').style.display = 'flex';
   document.getElementById('stockIngresoGrid').style.display = 'none';
   document.getElementById('stockAreaBtns').style.display = 'none';
@@ -1887,11 +1887,10 @@ function renderCategorias() {
     return;
   }
   document.getElementById('catTabs').innerHTML = [
-    `<button class="cat-tab ${catActiva === 'TODOS' ? 'active' : ''}" onclick="filtrarCat('TODOS')">🛒 Todos</button>`,
-    ...cats.map(c => {
-      const emoji = prodArea.find(p => p.categoria === c)?.emoji || '📦';
-      return `<button class="cat-tab ${c === catActiva ? 'active' : ''}" onclick="filtrarCat('${c}')">${emoji} ${c}</button>`;
-    })
+    `<button class="cat-tab ${catActiva === 'TODOS' ? 'active' : ''}" onclick="filtrarCat('TODOS')">Todos</button>`,
+    ...cats.map(c =>
+      `<button class="cat-tab ${c === catActiva ? 'active' : ''}" onclick="filtrarCat('${c}')">${c}</button>`
+    )
   ].join('');
 }
 
@@ -2785,7 +2784,7 @@ function renderTablaProductos() {
     return `<tr>
       <td>
         <div onclick="abrirModalVincularRecetaDirecto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')" style="cursor:pointer">
-          <span style="font-size:16px">${p.emoji||'📦'}</span> ${p.nombre}
+          ${p.nombre}
           <div style="font-size:10px;color:${p.idRecetaFen ? '#2a8a4a' : '#c77'};margin-top:2px">
             ${p.idRecetaFen ? `🔗 ${p.idRecetaFen}` : '⚠️ sin vincular'}
           </div>
@@ -2830,7 +2829,6 @@ window.editarProducto = function(id) {
   const conControl = p.controlStock !== false;
   document.getElementById('prodId').value = id;
   document.getElementById('prodNombre').value       = p.nombre || '';
-  document.getElementById('prodEmoji').value        = p.emoji  || '';
   document.getElementById('prodArea').value         = normalizarArea(p.area) || 'BOL';
   renderCategoriaSelect(p.categoria || '');
   document.getElementById('prodControlStock').checked   = conControl;
@@ -2852,7 +2850,6 @@ window.editarProducto = function(id) {
 window.cancelarEdicion = function() {
   document.getElementById('prodId').value = '';
   document.getElementById('prodNombre').value = '';
-  document.getElementById('prodEmoji').value = '';
   renderCategoriaSelect('');
   document.getElementById('prodControlStock').checked = true;
   document.getElementById('prodPrecioHoy').value = '';
@@ -2882,7 +2879,6 @@ window.guardarProducto = async function() {
   const btn = document.getElementById('btnGuardarProd');
   const id        = document.getElementById('prodId').value.trim();
   const nombre    = document.getElementById('prodNombre').value.trim();
-  const emoji     = document.getElementById('prodEmoji').value.trim();
   const area      = document.getElementById('prodArea').value;
   const catSel     = document.getElementById('prodCategoria').value;
   const categoria  = catSel === CATEGORIA_NUEVA
@@ -2918,7 +2914,7 @@ window.guardarProducto = async function() {
 
   btn.disabled = true; btn.textContent = 'Guardando...';
   const data = {
-    nombre, emoji, area, categoria, activo: true,
+    nombre, area, categoria, activo: true,
     precio: precioHoy,
     precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta,
     excepcionHoraria, autoEliminar, controlStock, idRecetaFen
