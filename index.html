@@ -56,11 +56,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* GRILLA PRODUCTOS */
 .productos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 6px; margin-bottom: 12px; }
-.prod-btn { background: white; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 7px 4px; text-align: center; cursor: pointer; transition: all 0.15s; }
+.prod-btn { background: white; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 9px 5px; text-align: center; cursor: pointer; transition: all 0.15s; }
 .prod-btn:active { background: #e8f0fb; border-color: #003a79; transform: scale(0.97); }
-.prod-btn .icon  { font-size: 20px; margin-bottom: 3px; }
-.prod-btn .nombre { font-size: 10px; font-weight: 600; color: #333; line-height: 1.2; }
-.prod-btn .precio { font-size: 10px; color: #888; margin-top: 2px; }
+.prod-btn .nombre { font-size: 11px; font-weight: 700; line-height: 1.25; }
+.prod-btn .precio { font-size: 10px; color: #888; margin-top: 3px; }
 .prod-btn.sin-stock { opacity: 0.4; cursor: not-allowed; }
 .stock-badge { font-size: 9px; color: #888; margin-top: 2px; }
 
@@ -1598,6 +1597,17 @@ window.eliminarTipoLeche = function(i) {
 const AREA_COMPAT = { 'Panadería':'PAN','Bollería':'BOL','Sándwiches':'PAN','Cafetería':'CAF','Pastelería':'PAS','Chocolatería':'PAS' };
 function normalizarArea(a) { return AREAS.find(x=>x.id===a) ? a : (AREA_COMPAT[a] || (AREAS[0]?.id || 'GEN')); }
 
+// Paleta de colores por área, la misma que usa fën-producción — para identidad visual consistente entre sistemas.
+const AREA_COLORES = {
+  PAN: { principal: '#E65100', fondo: '#FFF8E1' },
+  BOL: { principal: '#6A1B9A', fondo: '#F3E5F5' },
+  PAS: { principal: '#1B5E20', fondo: '#E8F5E9' },
+  CAF: { principal: '#B71C1C', fondo: '#FFEBEE' }
+};
+function colorDeArea(areaId) {
+  return AREA_COLORES[normalizarArea(areaId)] || { principal: '#555555', fondo: '#f2f2f2' };
+}
+
 let areaActiva = null;
 let categoriaStockActiva = 'hoy'; // 'hoy' | 'ayer' | 'antesayer'
 let mostrarSinStock = false;      // true = muestra todos; false = oculta sin stock
@@ -1884,10 +1894,10 @@ function renderProductos() {
     // Producto SIN control de stock → siempre disponible, sin badge de stock
     if (!conControl) {
       const precio = getPrecioProducto(p, categoriaStockActiva);
+      const { principal, fondo } = colorDeArea(p.area);
       return `
-      <button class="prod-btn" onclick="agregarAlPedido('${p.id}')">
-        <div class="icon">${p.emoji || '🍞'}</div>
-        <div class="nombre">${p.nombre}</div>
+      <button class="prod-btn" onclick="agregarAlPedido('${p.id}')" style="background:${fondo};border-color:${principal}40">
+        <div class="nombre" style="color:${principal}">${p.nombre}</div>
         <div class="precio">$${parseInt(precio).toLocaleString('es-CL')}</div>
       </button>`;
     }
@@ -1906,10 +1916,10 @@ function renderProductos() {
     if (sinStock && !mostrarSinStock) return '';
     const stockLabel = sinStock ? 'Sin stock' : `Stock: ${qty}`;
     const precio = getPrecioProducto(p, esPermanente ? 'hoy' : categoriaStockActiva);
+    const { principal, fondo } = colorDeArea(p.area);
     return `
-    <button class="prod-btn${sinStock ? ' sin-stock' : ''}" onclick="agregarAlPedido('${p.id}')" ${sinStock ? 'disabled' : ''}>
-      <div class="icon">${p.emoji || '🍞'}</div>
-      <div class="nombre">${p.nombre}</div>
+    <button class="prod-btn${sinStock ? ' sin-stock' : ''}" onclick="agregarAlPedido('${p.id}')" ${sinStock ? 'disabled' : ''} style="background:${fondo};border-color:${principal}40">
+      <div class="nombre" style="color:${principal}">${p.nombre}</div>
       <div class="precio">$${parseInt(precio).toLocaleString('es-CL')}</div>
       <div class="stock-badge">${stockLabel}</div>
     </button>`;
@@ -1952,18 +1962,21 @@ function renderVistaGeneral() {
   if (!lista.length) { wrap.innerHTML = '<div class="empty">No hay productos</div>'; return; }
 
   wrap.innerHTML = lista.map(p => {
+    const { principal, fondo } = colorDeArea(p.area);
     const conControl = p.controlStock !== false;
     if (!conControl) {
-      return `<div class="stock-row"><div style="flex:1"><div class="stock-prod-nombre">${p.emoji||'📦'} ${p.nombre}</div><div class="stock-prod-meta">Sin control de stock</div></div></div>`;
+      return `<div class="stock-row" style="border-left:4px solid ${principal};background:${fondo};border-radius:6px;padding:8px 10px;margin-bottom:6px">
+        <div style="flex:1"><div class="stock-prod-nombre" style="color:${principal}">${p.nombre}</div><div class="stock-prod-meta">Sin control de stock</div></div>
+      </div>`;
     }
     const stockKey  = sucursal + '_' + p.id;
     const stockItem = window._stockMap ? window._stockMap[stockKey] : null;
     const lotes = getTodosLotesVendibles(stockItem);
     const total = lotes.reduce((a, l) => a + l.qty, 0);
     const detalle = lotes.map(l => `${l.qty}un · ${keyToFechaCL(l.key)}`).join(' — ');
-    return `<div class="stock-row">
+    return `<div class="stock-row" style="border-left:4px solid ${principal};background:${fondo};border-radius:6px;padding:8px 10px;margin-bottom:6px">
       <div style="flex:1;min-width:0">
-        <div class="stock-prod-nombre">${p.emoji||'📦'} ${p.nombre}</div>
+        <div class="stock-prod-nombre" style="color:${principal}">${p.nombre}</div>
         <div class="stock-prod-meta">${detalle || 'Sin stock'}</div>
       </div>
       <div style="font-weight:700;color:#003a79;white-space:nowrap;padding-left:8px">${total} un.</div>
