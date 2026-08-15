@@ -364,6 +364,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <div class="nav-btn" onclick="showSection('caja', this)">💵 Caja</div>
     <div class="nav-btn" onclick="showSection('productos', this)">🛍️ Productos</div>
     <div class="nav-btn admin-only" onclick="showSection('reportes', this)" style="display:none">📊 Reportes</div>
+    <div class="nav-btn admin-only" onclick="showSection('configuracion', this)" style="display:none">⚙️ Configuración</div>
   </div>
 
   <!-- VENTA -->
@@ -804,18 +805,6 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       </div>
     </div>
 
-    <!-- Sincronización con fën-producción -->
-    <div class="card">
-      <button onclick="toggleProdSection('sync')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
-        <span class="card-title" style="margin:0"><span id="prodSecIcon-sync">▸</span> 🔄 Sincronización con fën-producción</span>
-      </button>
-      <div id="prodSec-sync" style="display:none;margin-top:10px">
-        <div style="font-size:11px;color:#888;margin-bottom:10px">Revisa si el área de algún producto vinculado quedó desactualizada respecto a fën-producción, o si alguna receta vinculada fue descontinuada. Nunca toca el nombre de venta, y nunca aplica cambios de área sin que los confirmes tú.</div>
-        <button class="btn btn-secondary btn-full" onclick="revisarSincronizacionFen()">🔍 Revisar sincronización</button>
-        <div id="syncFenResultado" style="margin-top:10px"></div>
-      </div>
-    </div>
-
     <!-- Lista de productos -->
     <div class="card">
       <button onclick="toggleProdSection('lista')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
@@ -939,6 +928,35 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
         <button class="btn btn-primary btn-full" id="btnCargarSolicitudes" onclick="cargarSolicitudesAnulacion()">Cargar solicitudes</button>
       </div>
       <div id="solicitudesResult"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- CONFIGURACIÓN -->
+<div class="section" id="sec-configuracion">
+
+  <!-- Conexión con fën-producción -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:4px">🥐 Conexión con fën-producción</div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">Revisa si el área de algún producto vinculado quedó desactualizada respecto a fën-producción, o si algún vínculo quedó roto (código que ya no aparece en la lista publicada). Nunca toca el nombre de venta, y nunca aplica cambios de área sin que los confirmes tú.</div>
+    <button class="btn btn-secondary btn-full" onclick="revisarSincronizacionFen()">🔍 Revisar sincronización</button>
+    <div id="syncFenResultado" style="margin-top:10px"></div>
+  </div>
+
+  <!-- Reconciliación de nombres históricos -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:4px">🔗 Reconciliación de nombres históricos</div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">Ventas y merma pasadas quedan siempre congeladas tal como se registraron. Esta herramienta es opcional: te deja emparejar nombres antiguos con la receta correcta de fën, y decidir caso a caso si solo guardas la equivalencia o si además reescribes esas filas puntuales.</div>
+
+    <label>Período a revisar</label>
+    <select id="reconciliarPeriodo"></select>
+    <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="analizarPeriodoReconciliacion()">🔍 Analizar período</button>
+    <div id="reconciliarResultado" style="margin-top:10px"></div>
+
+    <div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #f0f0f0">
+      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">Seguimiento por período</div>
+      <div id="reconciliarSeguimiento"></div>
     </div>
   </div>
 
@@ -1431,6 +1449,7 @@ window.showSection = function(id, el) {
   if (id === 'stock')     { cargarStockPorCategoria(); renderStockIngresoGrid(); inicializarFechaStock(); }
   if (id === 'productos') { cargarProdAdmin(); renderAllAreaUIs(); }
   if (id === 'caja')      { cargarSaldoSugerido(); }
+  if (id === 'configuracion') { cargarSeguimientoReconciliacion().then(renderPeriodosReconciliacion); }
 };
 
 // ═══════════════════════════
@@ -2069,6 +2088,192 @@ window.aplicarTodasAreasFen = async function() {
   await cargarProdAdmin();
   revisarSincronizacionFen();
   showToast(`✅ ${desajustes.length} área(s) actualizadas`);
+};
+
+// ── Reconciliación de nombres históricos (ventas y merma) ──
+// Nunca reescribe en bloque. El período va del mes actual hacia atrás hasta enero de este año.
+let PERIODOS_SEGUIMIENTO = {}; // cache de config/reconciliacionPeriodos
+
+function listaPeriodosReconciliacion() {
+  const hoy = new Date();
+  const anio = hoy.getFullYear();
+  const mesActual = hoy.getMonth() + 1;
+  const periodos = [];
+  for (let m = mesActual; m >= 1; m--) periodos.push(`${anio}-${String(m).padStart(2,'0')}`);
+  return periodos;
+}
+
+const NOMBRES_MESES = ['', 'Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function etiquetaPeriodo(periodo) {
+  const [y, m] = periodo.split('-');
+  return `${NOMBRES_MESES[parseInt(m)]} ${y}`;
+}
+
+function rangoPeriodo(periodo) {
+  const [y, m] = periodo.split('-').map(Number);
+  const desde = new Date(y, m - 1, 1, 0, 0, 0);
+  const hasta = new Date(y, m, 0, 23, 59, 59); // día 0 del mes siguiente = último día de este mes
+  return {
+    tsDesde: Timestamp.fromDate(desde), tsHasta: Timestamp.fromDate(hasta),
+    fEnvioDesde: fechaStr(desde), fEnvioHasta: fechaStr(hasta)
+  };
+}
+
+async function cargarSeguimientoReconciliacion() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'reconciliacionPeriodos'));
+    PERIODOS_SEGUIMIENTO = snap.exists() ? (snap.data().periodos || {}) : {};
+  } catch (e) { console.error(e); PERIODOS_SEGUIMIENTO = {}; }
+}
+
+function renderPeriodosReconciliacion() {
+  const sel = document.getElementById('reconciliarPeriodo');
+  if (sel && !sel.dataset.armado) {
+    sel.innerHTML = listaPeriodosReconciliacion().map(p =>
+      `<option value="${p}">${etiquetaPeriodo(p)}${PERIODOS_SEGUIMIENTO[p]?.revisado ? ' ✅' : ''}</option>`
+    ).join('');
+    sel.dataset.armado = '1';
+  }
+  const segWrap = document.getElementById('reconciliarSeguimiento');
+  if (segWrap) {
+    segWrap.innerHTML = listaPeriodosReconciliacion().map(p => {
+      const rev = PERIODOS_SEGUIMIENTO[p];
+      return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px">
+        <span>${etiquetaPeriodo(p)}</span>
+        <span style="color:${rev?.revisado ? '#2a8a4a' : '#aaa'}">${rev?.revisado ? '✅ Revisado' : '⏳ Pendiente'}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+window.marcarPeriodoRevisado = async function(periodo) {
+  PERIODOS_SEGUIMIENTO[periodo] = { revisado: true, fecha: fechaLocalHoy(), usuario: usuario.email };
+  await setDoc(doc(db, 'config', 'reconciliacionPeriodos'), { periodos: PERIODOS_SEGUIMIENTO });
+  renderPeriodosReconciliacion();
+  showToast('✅ Período marcado como revisado');
+};
+
+// Analiza un período: agrupa nombres distintos usados en ventas y merma, con cuántas filas afecta cada uno
+window.analizarPeriodoReconciliacion = async function() {
+  const periodo = document.getElementById('reconciliarPeriodo').value;
+  const wrap = document.getElementById('reconciliarResultado');
+  if (!periodo || !wrap) return;
+  wrap.innerHTML = '<div class="empty">Analizando período, puede tardar unos segundos...</div>';
+
+  const { tsDesde, tsHasta, fEnvioDesde, fEnvioHasta } = rangoPeriodo(periodo);
+
+  const [ventasSnap, mermaSnap, equivSnap] = await Promise.all([
+    getDocs(query(collection(db, 'ventas'), where('fecha', '>=', tsDesde), where('fecha', '<=', tsHasta))),
+    getDocs(query(collection(db, 'merma'), where('fechaEnvio', '>=', fEnvioDesde), where('fechaEnvio', '<=', fEnvioHasta))),
+    getDocs(collection(db, 'equivalenciasNombres'))
+  ]);
+
+  const equivalencias = {};
+  equivSnap.docs.forEach(d => { equivalencias[d.data().nombreOriginal] = d.data(); });
+
+  // Agrupar por nombre: cuántas líneas de venta y cuántos registros de merma usan ese nombre exacto
+  const porNombre = {};
+  ventasSnap.docs.forEach(d => {
+    (d.data().lineas || []).forEach(l => {
+      if (!l.nombre) return;
+      if (!porNombre[l.nombre]) porNombre[l.nombre] = { ventas: 0, merma: 0 };
+      porNombre[l.nombre].ventas++;
+    });
+  });
+  mermaSnap.docs.forEach(d => {
+    const n = d.data().nombreProducto;
+    if (!n) return;
+    if (!porNombre[n]) porNombre[n] = { ventas: 0, merma: 0 };
+    porNombre[n].merma++;
+  });
+
+  const nombres = Object.keys(porNombre).sort();
+  if (!nombres.length) {
+    wrap.innerHTML = '<div class="empty">No hay ventas ni merma registradas en este período.</div>';
+    return;
+  }
+
+  const opcionesRecetas = RECETAS_FEN.slice().sort((a,b) => (a.area+a.nombre).localeCompare(b.area+b.nombre))
+    .map(r => `<option value="${r.idReceta}">${r.idReceta} — ${r.nombre} (${r.area})</option>`).join('');
+
+  wrap.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:8px">${nombres.length} nombre(s) distinto(s) encontrados en ${etiquetaPeriodo(periodo)}.</div>` +
+    nombres.map((n, i) => {
+      const info = porNombre[n];
+      const equivPrevia = equivalencias[n]?.idRecetaFen || '';
+      const idInput = `reconc-${i}`;
+      return `<div style="padding:10px;background:#f8f9fa;border-radius:8px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${n}</div>
+        <div style="font-size:11px;color:#888;margin-bottom:6px">${info.ventas} línea(s) de venta · ${info.merma} registro(s) de merma</div>
+        <select id="${idInput}" style="width:100%;margin-bottom:6px">
+          <option value="">— Sin emparejar —</option>
+          ${opcionesRecetas}
+        </select>
+        <div style="display:flex;gap:6px">
+          <button class="btn-sm btn-edit" style="flex:1" onclick="guardarEquivalenciaNombre('${idInput}','${n.replace(/'/g,"\\'")}')">💾 Guardar equivalencia</button>
+          <button class="btn-sm btn-del" style="flex:1" onclick="reescribirNombreHistorico('${idInput}','${n.replace(/'/g,"\\'")}','${periodo}',${info.ventas},${info.merma})">✏️ Reescribir estas filas</button>
+        </div>
+      </div>`;
+    }).join('') +
+    `<button class="btn btn-secondary btn-full" style="margin-top:6px" onclick="marcarPeriodoRevisado('${periodo}')">✅ Marcar ${etiquetaPeriodo(periodo)} como revisado</button>`;
+
+  // Preseleccionar equivalencias ya guardadas de antes
+  nombres.forEach((n, i) => {
+    const equivPrevia = equivalencias[n]?.idRecetaFen;
+    if (equivPrevia) { const el = document.getElementById(`reconc-${i}`); if (el) el.value = equivPrevia; }
+  });
+};
+
+// Solo guarda la equivalencia (nombre viejo → receta correcta). No toca ningún documento histórico.
+window.guardarEquivalenciaNombre = async function(selectId, nombreOriginal) {
+  const idRecetaFen = document.getElementById(selectId).value;
+  if (!idRecetaFen) { alert('Elige una receta primero'); return; }
+  const receta = RECETAS_FEN.find(r => r.idReceta === idRecetaFen);
+  await setDoc(doc(db, 'equivalenciasNombres', encodeURIComponent(nombreOriginal)), {
+    nombreOriginal, idRecetaFen, area: receta?.area || '', fechaAsignado: fechaLocalHoy(), usuario: usuario.email
+  });
+  showToast('💾 Equivalencia guardada (no se tocó ningún registro histórico)');
+};
+
+// Reescribe el nombre en las filas puntuales de ese período exacto (ventas.lineas[] y merma.nombreProducto)
+window.reescribirNombreHistorico = async function(selectId, nombreOriginal, periodo, cantVentas, cantMerma) {
+  const idRecetaFen = document.getElementById(selectId).value;
+  if (!idRecetaFen) { alert('Elige una receta primero'); return; }
+  const receta = RECETAS_FEN.find(r => r.idReceta === idRecetaFen);
+  if (!receta) return;
+  const nombreNuevo = receta.nombre;
+
+  if (!confirm(`Vas a reescribir "${nombreOriginal}" → "${nombreNuevo}" en:\n\n• ${cantVentas} línea(s) de venta\n• ${cantMerma} registro(s) de merma\n\nSolo dentro de ${etiquetaPeriodo(periodo)}. Esto SÍ modifica el histórico. ¿Confirmas?`)) return;
+
+  const { tsDesde, tsHasta, fEnvioDesde, fEnvioHasta } = rangoPeriodo(periodo);
+  let filasVentas = 0, filasMerma = 0;
+
+  const ventasSnap = await getDocs(query(collection(db, 'ventas'), where('fecha', '>=', tsDesde), where('fecha', '<=', tsHasta)));
+  for (const d of ventasSnap.docs) {
+    const venta = d.data();
+    if (!venta.lineas) continue;
+    let cambiado = false;
+    const nuevasLineas = venta.lineas.map(l => {
+      if (l.nombre === nombreOriginal) { cambiado = true; filasVentas++; return { ...l, nombre: nombreNuevo }; }
+      return l;
+    });
+    if (cambiado) await updateDoc(doc(db, 'ventas', d.id), { lineas: nuevasLineas });
+  }
+
+  const mermaSnap = await getDocs(query(collection(db, 'merma'), where('fechaEnvio', '>=', fEnvioDesde), where('fechaEnvio', '<=', fEnvioHasta)));
+  for (const d of mermaSnap.docs) {
+    if (d.data().nombreProducto === nombreOriginal) {
+      await updateDoc(doc(db, 'merma', d.id), { nombreProducto: nombreNuevo });
+      filasMerma++;
+    }
+  }
+
+  // También queda guardada la equivalencia, para períodos futuros
+  await setDoc(doc(db, 'equivalenciasNombres', encodeURIComponent(nombreOriginal)), {
+    nombreOriginal, idRecetaFen, area: receta.area || '', fechaAsignado: fechaLocalHoy(), usuario: usuario.email
+  });
+
+  showToast(`✅ Reescrito: ${filasVentas} venta(s), ${filasMerma} merma(s)`);
+  analizarPeriodoReconciliacion();
 };
 
 
