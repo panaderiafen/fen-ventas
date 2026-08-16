@@ -1467,7 +1467,10 @@ window.showSection = function(id, el) {
   if (id === 'stock')     { cargarStockPorCategoria(); renderStockIngresoGrid(); inicializarFechaStock(); }
   if (id === 'productos') { cargarProdAdmin(); renderAllAreaUIs(); }
   if (id === 'caja')      { cargarSaldoSugerido(); }
-  if (id === 'configuracion') { cargarSeguimientoReconciliacion().then(renderPeriodosReconciliacion); }
+  if (id === 'configuracion') {
+    cargarSeguimientoReconciliacion().then(renderPeriodosReconciliacion);
+    cargarRecetasOcultas();
+  }
 };
 
 // ═══════════════════════════
@@ -2062,6 +2065,14 @@ const CATEGORIA_NUEVA = '__nueva__';
 // Fuente de verdad para nombres de producción — nunca se usa para sobreescribir el nombre de venta acá.
 const FEN_PRODUCCION_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKvAbWUlwxbcCx54T3lfdMa8XxPD-F2lSE05-vMfdv_UpFVpDi6pbAJOpM7O6LBLmdfkz5804lzMYn/pub?gid=1370945279&single=true&output=csv';
 let RECETAS_FEN = []; // [{idReceta, nombre, area, estado}]
+let RECETAS_OCULTAS = []; // ids de recetas marcadas "no corresponde en B2C" — reversible, guardado en config/recetasOcultas
+
+async function cargarRecetasOcultas() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'recetasOcultas'));
+    RECETAS_OCULTAS = snap.exists() ? (snap.data().ids || []) : [];
+  } catch (e) { console.error('Error cargando recetas ocultas:', e); RECETAS_OCULTAS = []; }
+}
 
 // Parser CSV simple, soporta campos entre comillas con comas adentro (ej. nombres con comas)
 function parseCSV(texto) {
@@ -2207,7 +2218,13 @@ window.revisarSincronizacionFen = function() {
     if (normalizarArea(p.area) !== receta.area) desajustesArea.push({ p, receta });
   });
 
-  if (!desajustesArea.length && !yaNoEnListaFen.length && !sinVincular.length) {
+  // Recetas liberadas para venta en fën que todavía no tienen producto acá — candidatas a crear.
+  const idsVinculados = new Set(vinculados.map(p => p.idRecetaFen));
+  const recetasSinProducto = RECETAS_FEN.filter(r => !idsVinculados.has(r.idReceta));
+  const recetasVisibles = recetasSinProducto.filter(r => !RECETAS_OCULTAS.includes(r.idReceta));
+  const recetasOcultas  = recetasSinProducto.filter(r => RECETAS_OCULTAS.includes(r.idReceta));
+
+  if (!desajustesArea.length && !yaNoEnListaFen.length && !sinVincular.length && !recetasVisibles.length) {
     wrap.innerHTML = `<div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a">✅ Todo sincronizado — ${vinculados.length} producto(s) vinculado(s), sin diferencias.</div>`;
     return;
   }
@@ -2227,8 +2244,12 @@ window.revisarSincronizacionFen = function() {
   if (yaNoEnListaFen.length) {
     html += `<div style="margin-top:14px">
       <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">⚠️ Vinculado a un código que ya no está en la lista de fën (${yaNoEnListaFen.length})</div>
-      ${yaNoEnListaFen.map(p => `<div style="padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;color:#c0392b">${p.nombre} — ${p.idRecetaFen}</div>`).join('')}
-      <div style="font-size:11px;color:#888;margin-top:4px">Solo informativo — no se desvincula solo. Puede ser que la receta fue descontinuada del lado de fën, o el código nunca existió. Revisa si sigue correspondiendo vender este producto.</div>
+      ${yaNoEnListaFen.map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;color:#c0392b;gap:8px">
+          <span>${p.nombre} — ${p.idRecetaFen}</span>
+          <button class="btn-sm btn-del" onclick="desvincularRecetaFen('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">✕ Desvincular</button>
+        </div>`).join('')}
+      <div style="font-size:11px;color:#888;margin-top:4px">No se desvincula solo — nunca se toca sin que lo confirmes. Puede ser que la receta fue descontinuada del lado de fën, se vinculó por error, o el código nunca existió. Usa "Desvincular" y vuelve a elegir la correcta cuando esté disponible.</div>
     </div>`;
   }
   if (sinVincular.length) {
@@ -2242,7 +2263,69 @@ window.revisarSincronizacionFen = function() {
         </div>`).join('')}
     </div>`;
   }
+  if (recetasVisibles.length || recetasOcultas.length) {
+    html += `<div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">🆕 Recetas sin producto en B2C (${recetasVisibles.length})</div>
+      <div style="font-size:11px;color:#888;margin-bottom:6px">Liberadas para venta desde producción, pero todavía no existen como producto acá. Crear uno igual requiere definir precio, control de stock, etc. — nada se crea solo.</div>
+      ${recetasVisibles.length ? recetasVisibles.map(r => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#eef6fb;border-radius:8px;margin-bottom:6px;font-size:12px;gap:6px">
+          <span>${r.idReceta} — ${r.nombre} (${r.area})</span>
+          <div style="display:flex;gap:4px;flex-shrink:0">
+            <button class="btn-sm btn-edit" onclick="crearProductoDesdeReceta('${r.idReceta}')">+ Crear</button>
+            <button class="btn-sm" style="background:#fff;border:1px solid #ddd;color:#888" onclick="ocultarRecetaFen('${r.idReceta}')" title="No corresponde acá (ej. es B2B) — se puede volver a mostrar cuando quieras">🙈</button>
+          </div>
+        </div>`).join('') : '<div class="empty" style="font-size:11px">Ninguna pendiente por ahora.</div>'}
+      ${recetasOcultas.length ? `
+        <button type="button" onclick="toggleRecetasOcultas()" style="background:none;border:none;color:#888;font-size:11px;cursor:pointer;padding:4px 0"><span id="recetasOcultasIcon">▸</span> Ocultos (${recetasOcultas.length})</button>
+        <div id="recetasOcultasLista" style="display:none">
+          ${recetasOcultas.map(r => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#f5f5f5;border-radius:8px;margin-bottom:6px;font-size:12px;color:#888;gap:6px">
+              <span>${r.idReceta} — ${r.nombre} (${r.area})</span>
+              <button class="btn-sm" style="background:#fff;border:1px solid #ddd" onclick="mostrarRecetaFen('${r.idReceta}')">↩️ Volver a mostrar</button>
+            </div>`).join('')}
+        </div>` : ''}
+    </div>`;
+  }
   wrap.innerHTML = html;
+};
+
+window.toggleRecetasOcultas = function() {
+  const el = document.getElementById('recetasOcultasLista');
+  const icon = document.getElementById('recetasOcultasIcon');
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  el.style.display = abierto ? 'none' : '';
+  if (icon) icon.textContent = abierto ? '▸' : '▾';
+};
+
+// Oculta una receta de la lista "sin producto en B2C" — reversible, nunca se pierde, solo se pliega
+window.ocultarRecetaFen = async function(idReceta) {
+  if (!RECETAS_OCULTAS.includes(idReceta)) RECETAS_OCULTAS.push(idReceta);
+  await setDoc(doc(db, 'config', 'recetasOcultas'), { ids: RECETAS_OCULTAS });
+  revisarSincronizacionFen();
+};
+
+window.mostrarRecetaFen = async function(idReceta) {
+  RECETAS_OCULTAS = RECETAS_OCULTAS.filter(id => id !== idReceta);
+  await setDoc(doc(db, 'config', 'recetasOcultas'), { ids: RECETAS_OCULTAS });
+  revisarSincronizacionFen();
+};
+
+// Abre el formulario de "Nuevo producto" precargado con nombre/área/vínculo de la receta elegida.
+// Nada se guarda solo — el admin completa precio, control de stock, etc. y confirma con "Guardar".
+window.crearProductoDesdeReceta = function(idReceta) {
+  const receta = RECETAS_FEN.find(r => r.idReceta === idReceta);
+  if (!receta) return;
+  cancelarEdicion();
+  const navProductos = document.querySelector('.nav-btn[onclick*="productos"]');
+  showSection('productos', navProductos);
+  document.getElementById('prodNombre').value = receta.nombre;
+  document.getElementById('prodArea').value = receta.area;
+  renderCategoriaSelect('');
+  renderIdRecetaSelect(receta.idReceta);
+  const card = document.getElementById('cardFormProd');
+  if (card) card.scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('prodNombre').focus();
 };
 
 window.aplicarAreaFen = async function(productoId, nuevaArea) {
@@ -2268,6 +2351,17 @@ window.aplicarTodasAreasFen = async function() {
   await cargarProdAdmin();
   revisarSincronizacionFen();
   showToast(`✅ ${desajustes.length} área(s) actualizadas`);
+};
+
+// Quita un vínculo roto/erróneo, dejando el producto sin idRecetaFen — para volver a vincularlo
+// cuando exista la receta correcta del lado de fën.
+window.desvincularRecetaFen = async function(productoId, nombre) {
+  if (!confirm(`¿Quitar el vínculo de "${nombre}" con fën-producción? El producto queda sin vincular hasta que elijas una receta correcta.`)) return;
+  await updateDoc(doc(db, 'productos', productoId), { idRecetaFen: '' });
+  await cargarProductos();
+  await cargarProdAdmin();
+  revisarSincronizacionFen();
+  showToast('✅ Desvinculado');
 };
 
 // ── Reconciliación de nombres históricos (ventas y merma) ──
