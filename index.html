@@ -1202,6 +1202,7 @@ onAuthStateChanged(auth, async (user) => {
     await cargarTiposLeche();
     await cargarMotivosMerma();
     await cargarSubcategorias();
+    await cargarAreas(); // necesario ANTES de cargarRecetasFen(): normaliza el área de cada receta contra la lista real de áreas
     cargarRecetasFen();
     // Verificar si es visor de stock
     const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
