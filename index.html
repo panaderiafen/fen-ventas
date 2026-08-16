@@ -2112,7 +2112,13 @@ async function cargarRecetasFen() {
     const iId = header.indexOf('id_receta'), iNom = header.indexOf('nombre'), iArea = header.indexOf('área') !== -1 ? header.indexOf('área') : header.indexOf('area'), iEstado = header.indexOf('estado');
     RECETAS_FEN = filas.slice(1)
       .filter(f => f[iId])
-      .map(f => ({ idReceta: (f[iId]||'').trim(), nombre: (f[iNom]||'').trim(), area: normalizarArea((f[iArea]||'').trim()), estado: (f[iEstado]||'').trim() }));
+      .map(f => {
+        const areaRaw = (f[iArea]||'').trim();
+        // No forzamos el área a una de las conocidas en B2C — si "REV" (o cualquier otra) no existe acá,
+        // se detecta como área nueva en vez de asignarse por error a otra área existente.
+        const area = AREAS.some(a => a.id === areaRaw) ? areaRaw : (AREA_COMPAT[areaRaw] || areaRaw);
+        return { idReceta: (f[iId]||'').trim(), nombre: (f[iNom]||'').trim(), area, estado: (f[iEstado]||'').trim() };
+      });
     if (estadoEl) estadoEl.textContent = `✅ ${RECETAS_FEN.length} recetas cargadas de fën-producción`;
   } catch (e) {
     console.error('Error cargando recetas fën:', e);
@@ -2212,10 +2218,16 @@ window.revisarSincronizacionFen = function() {
   // El CSV publicado por fën solo lista recetas activas — si una receta se descontinúa,
   // deja de aparecer ahí (no cambia de "estado", directamente desaparece). Por eso "ya no está
   // en la lista actual" es la única señal real de que algo se descontinuó o nunca existió.
-  const desajustesArea = [], yaNoEnListaFen = [];
+  const desajustesArea = [], yaNoEnListaFen = [], areasNuevas = {};
   vinculados.forEach(p => {
     const receta = recetaPorId[p.idRecetaFen];
     if (!receta) { yaNoEnListaFen.push(p); return; }
+    if (!AREAS.some(a => a.id === receta.area)) {
+      // El área que dice fën no existe todavía en B2C — nunca se ofrece "Aplicar" a algo que no existe
+      if (!areasNuevas[receta.area]) areasNuevas[receta.area] = [];
+      areasNuevas[receta.area].push(p);
+      return;
+    }
     if (normalizarArea(p.area) !== receta.area) desajustesArea.push({ p, receta });
   });
 
@@ -2224,13 +2236,24 @@ window.revisarSincronizacionFen = function() {
   const recetasSinProducto = RECETAS_FEN.filter(r => !idsVinculados.has(r.idReceta));
   const recetasVisibles = recetasSinProducto.filter(r => !RECETAS_OCULTAS.includes(r.idReceta));
   const recetasOcultas  = recetasSinProducto.filter(r => RECETAS_OCULTAS.includes(r.idReceta));
+  const areasNuevasKeys = Object.keys(areasNuevas);
 
-  if (!desajustesArea.length && !yaNoEnListaFen.length && !sinVincular.length && !recetasVisibles.length) {
+  if (!desajustesArea.length && !yaNoEnListaFen.length && !sinVincular.length && !recetasVisibles.length && !areasNuevasKeys.length) {
     wrap.innerHTML = `<div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a">✅ Todo sincronizado — ${vinculados.length} producto(s) vinculado(s), sin diferencias.</div>`;
     return;
   }
 
   let html = '';
+  if (areasNuevasKeys.length) {
+    html += `<div style="margin-top:6px">
+      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">🆕 Área nueva detectada en fën (${areasNuevasKeys.length})</div>
+      ${areasNuevasKeys.map(areaId => `
+        <div style="padding:8px;background:#eef6fb;border-radius:8px;margin-bottom:6px;font-size:12px">
+          <b>"${areaId}"</b> no existe todavía como área en B2C — afecta a: ${areasNuevas[areaId].map(p => p.nombre).join(', ')}
+        </div>`).join('')}
+      <div style="font-size:11px;color:#888;margin-top:4px">Si estos productos deben venderse en el mostrador, crea el área "${areasNuevasKeys[0]}" en Productos → "Áreas de producción" (con su emoji y color) — nada se crea sola. Una vez creada, "Revisar sincronización" de nuevo va a ofrecerte aplicar el cambio de área a estos productos.</div>
+    </div>`;
+  }
   if (desajustesArea.length) {
     html += `<div style="margin-top:6px">
       <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">📍 Área desactualizada (${desajustesArea.length})</div>
