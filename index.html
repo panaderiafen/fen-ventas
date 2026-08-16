@@ -964,6 +964,16 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     </div>
   </div>
 
+  <!-- Ventas mensuales hacia fën-producción -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:4px">📤 Ventas mensuales hacia fën-producción</div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">Genera la agregación mensual por receta vinculada (cantidad y monto neto, sin IVA y después de descuentos) y la publica en la planilla que fën lee con su botón "Sincronizar ventas". No es automático — se corre cuando quieras actualizar el dato, típicamente una vez al mes.</div>
+    <label>Período a enviar</label>
+    <select id="exportVentasPeriodo"></select>
+    <button class="btn btn-primary btn-full" style="margin-top:8px" id="btnExportVentasFen" onclick="generarVentasMensualesFen()">📤 Generar y enviar</button>
+    <div id="exportVentasFenResultado" style="margin-top:10px"></div>
+  </div>
+
 </div>
 
 <!-- MODAL CIERRE CIEGO -->
@@ -1471,6 +1481,7 @@ window.showSection = function(id, el) {
   if (id === 'configuracion') {
     cargarSeguimientoReconciliacion().then(renderPeriodosReconciliacion);
     cargarRecetasOcultas();
+    renderPeriodosExportVentas();
   }
 };
 
@@ -2451,6 +2462,78 @@ window.marcarPeriodoRevisado = async function(periodo) {
   showToast('✅ Período marcado como revisado');
 };
 
+function renderPeriodosExportVentas() {
+  const sel = document.getElementById('exportVentasPeriodo');
+  if (sel && !sel.dataset.armado) {
+    sel.innerHTML = listaPeriodosReconciliacion().map(p => `<option value="${p}">${etiquetaPeriodo(p)}</option>`).join('');
+    sel.dataset.armado = '1';
+  }
+}
+
+// Agrega ventas del mes por idRecetaFen (cantidad + monto neto: sin IVA y después de descuento de línea)
+// y lo publica en Sheets, mismo patrón que ya usamos para caja y merma.
+window.generarVentasMensualesFen = async function() {
+  const periodo = document.getElementById('exportVentasPeriodo').value;
+  const btn = document.getElementById('btnExportVentasFen');
+  const resultEl = document.getElementById('exportVentasFenResultado');
+  if (!periodo) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Calculando...'; }
+  resultEl.innerHTML = '';
+
+  try {
+    const { tsDesde, tsHasta } = rangoPeriodo(periodo);
+    const ventasSnap = await getDocs(query(collection(db, 'ventas'), where('fecha', '>=', tsDesde), where('fecha', '<=', tsHasta)));
+
+    const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+    const idToRecetaFen = {};
+    fuente.forEach(p => { idToRecetaFen[p.id] = p.idRecetaFen || ''; });
+
+    const porReceta = {}; // { idRecetaFen: {cantidad, montoNeto} }
+    let huerfanas = 0;
+
+    ventasSnap.docs.forEach(d => {
+      const venta = d.data();
+      if (venta.anulada === true) return; // excluir ventas anuladas — no son ingreso real
+      (venta.lineas || []).forEach(l => {
+        const idRecetaFen = idToRecetaFen[l.id];
+        if (idRecetaFen === undefined) { huerfanas++; return; } // producto ya no existe (eliminado antes de este cambio)
+        if (!idRecetaFen) return; // producto sin vincular todavía — fuera de alcance, no es error
+        if (!porReceta[idRecetaFen]) porReceta[idRecetaFen] = { cantidad: 0, montoNeto: 0 };
+        porReceta[idRecetaFen].cantidad += l.cantidad;
+        porReceta[idRecetaFen].montoNeto += (l.total || 0) / 1.19; // neto: post-descuento de línea, sin IVA
+      });
+    });
+
+    const filas = Object.entries(porReceta).map(([idRecetaFen, d]) => ({
+      idRecetaFen, mes: periodo, cantidad_vendida: d.cantidad, monto_neto: Math.round(d.montoNeto)
+    }));
+
+    if (!filas.length) {
+      resultEl.innerHTML = `<div class="empty">No hay ventas de productos vinculados en ${etiquetaPeriodo(periodo)}.</div>`;
+      if (btn) { btn.disabled = false; btn.textContent = '📤 Generar y enviar'; }
+      return;
+    }
+
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ tipo: 'ventas_mensuales_fen', periodo, filas })
+    });
+
+    const totalMonto = filas.reduce((a, f) => a + f.monto_neto, 0);
+    resultEl.innerHTML = `
+      <div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a;margin-bottom:8px">
+        ✅ Enviado — ${filas.length} receta(s), $${totalMonto.toLocaleString('es-CL')} neto total en ${etiquetaPeriodo(periodo)}.
+      </div>
+      ${huerfanas > 0 ? `<div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:12px;color:#8a6416">⚠️ ${huerfanas} línea(s) de venta pertenecen a productos que ya no existen (fueron eliminados). No se pudieron atribuir a ninguna receta — quedan fuera del total enviado.</div>` : ''}
+    `;
+    showToast('✅ Ventas mensuales enviadas a fën');
+  } catch (e) {
+    resultEl.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '📤 Generar y enviar'; }
+};
+
 // Analiza un período: agrupa nombres distintos usados en ventas y merma, con cuántas filas afecta cada uno
 window.analizarPeriodoReconciliacion = async function() {
   const periodo = document.getElementById('reconciliarPeriodo').value;
@@ -2895,14 +2978,17 @@ function renderTablaProductos() {
     const precAnt  = parseInt(p.precioAntesayer || 0).toLocaleString('es-CL');
     const prec4to  = parseInt(p.precioCuartoDia || 0).toLocaleString('es-CL');
     const precUlt  = parseInt(p.precioUltimaOferta || 0).toLocaleString('es-CL');
+    const inactivo = p.activo === false;
     const accs = esAdmin
       ? `<button class="btn-sm btn-edit" onclick="editarProducto('${p.id}')">✏️</button>
-         <button class="btn-sm btn-del"  onclick="eliminarProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">🗑️</button>`
+         ${inactivo
+            ? `<button class="btn-sm btn-edit" onclick="reactivarProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">↩️</button>`
+            : `<button class="btn-sm btn-del"  onclick="eliminarProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">🗑️</button>`}`
       : '—';
-    return `<tr>
+    return `<tr style="${inactivo ? 'opacity:0.5' : ''}">
       <td>
         <div onclick="abrirModalVincularRecetaDirecto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')" style="cursor:pointer">
-          ${p.nombre}
+          ${p.nombre}${inactivo ? ' <span style="font-size:10px;color:#888">(inactivo)</span>' : ''}
           <div style="font-size:10px;color:${p.idRecetaFen ? '#2a8a4a' : '#c77'};margin-top:2px">
             ${p.idRecetaFen ? `🔗 ${p.idRecetaFen}` : '⚠️ sin vincular'}
           </div>
@@ -2984,8 +3070,25 @@ window.cancelarEdicion = function() {
   document.getElementById('btnCancelarEdit').style.display = 'none';
 };
 
+window.reactivarProducto = async function(id, nombre) {
+  if (!confirm(`¿Reactivar "${nombre}"? Vuelve a aparecer disponible para vender.`)) return;
+  await updateDoc(doc(db, 'productos', id), { activo: true });
+  await cargarProductos();
+  await cargarProdAdmin();
+  showToast('✅ Producto reactivado');
+};
+
 window.eliminarProducto = async function(id, nombre) {
-  if (!confirm(`¿Eliminar "${nombre}"?`)) return;
+  const prod = _todosProdsAdmin.find(p => p.id === id) || productos.find(p => p.id === id);
+  if (prod?.tuvoVentas) {
+    if (!confirm(`"${nombre}" ya tiene ventas registradas — no se puede eliminar del todo, se perdería la trazabilidad con esas ventas y con fën-producción.\n\n¿Marcarlo como inactivo en su lugar? Deja de aparecer para vender, pero su historial y vínculo con fën se conservan intactos.`)) return;
+    await updateDoc(doc(db, 'productos', id), { activo: false });
+    await cargarProductos();
+    await cargarProdAdmin();
+    showToast('✅ Producto marcado como inactivo');
+    return;
+  }
+  if (!confirm(`¿Eliminar "${nombre}"? Nunca tuvo ventas registradas, así que se puede borrar por completo.`)) return;
   const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
   await deleteDoc(doc(db, 'productos', id));
   await cargarProductos();
@@ -3580,6 +3683,21 @@ window.confirmarPagoBoton = function() {
 // ═══════════════════════════
 // REGISTRAR VENTA
 // ═══════════════════════════
+// Marca cada producto vendido con tuvoVentas:true, una sola vez (no vuelve a escribir si ya lo tenía).
+// Se usa para decidir si "Eliminar" puede borrar de verdad o debe marcar inactivo en su lugar —
+// así nunca queda una venta histórica apuntando a un producto que ya no existe.
+async function marcarProductosConVenta(lineas) {
+  const idsUnicos = [...new Set((lineas || []).map(l => l.id).filter(Boolean))];
+  for (const id of idsUnicos) {
+    const prod = productos.find(p => p.id === id);
+    if (prod && !prod.tuvoVentas) {
+      prod.tuvoVentas = true;
+      try { await updateDoc(doc(db, 'productos', id), { tuvoVentas: true }); }
+      catch (e) { console.error('Error marcando tuvoVentas:', e); }
+    }
+  }
+}
+
 window.registrarVenta = async function() {
   if (pedidoLineas.length === 0) return;
   if (!cajaId) { alert('Debes abrir la caja primero'); return; }
@@ -3611,6 +3729,7 @@ window.registrarVenta = async function() {
   };
   try {
     await addDoc(collection(db, 'ventas'), venta);
+    await marcarProductosConVenta(venta.lineas);
     // Actualizar caja
     await incrementarTotalesCaja(pagoData, total);
     // Descontar stock — FIFO por fechas (más antiguo primero dentro de la categoría)
@@ -3696,6 +3815,7 @@ window.cerrarYCobrarMesa = async function() {
   };
   try {
     await addDoc(collection(db, 'ventas'), venta);
+    await marcarProductosConVenta(venta.lineas);
     await incrementarTotalesCaja(pagoData, total);
     // El stock NO se vuelve a descontar acá — ya se descontó al agregar cada producto a la mesa.
     await updateDoc(doc(db, 'mesas', mesaActivaId), { estado: 'cerrada', cierre: Timestamp.now(), total });
