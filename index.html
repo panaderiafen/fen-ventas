@@ -1162,6 +1162,8 @@ const db = getFirestore(app);
 // CONFIGURACIÓN EXPORTACIÓN
 // ═══════════════════════════
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7eYgaVGK5NBFcmX5rVr2H_QiLIuRKS7oBwiVfy5_74icgNnKvD_WEkYD92dU-fddv1A/exec';
+// Script independiente, exclusivo para el envío mensual de ventas hacia fën-producción (no comparte planilla ni lógica con el de caja/merma de arriba)
+const APPS_SCRIPT_URL_VENTAS_FEN = 'https://script.google.com/macros/s/AKfycbxeA_xhOm83PlYgLzv7wP5N6AM-ogfrfTClrs91JzFWgi5HCSgIRwgzAuGIbd6WsukrNQ/exec';
 
 // ═══════════════════════════
 // ESTADO GLOBAL
@@ -2514,7 +2516,7 @@ window.generarVentasMensualesFen = async function() {
       return;
     }
 
-    await fetch(APPS_SCRIPT_URL, {
+    await fetch(APPS_SCRIPT_URL_VENTAS_FEN, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ tipo: 'ventas_mensuales_fen', periodo, filas })
