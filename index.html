@@ -148,12 +148,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* COMANDA */
 #comandaPreview { position: fixed; left: -9999px; top: 0; width: 300px; background: white; padding: 20px; font-family: monospace; }
 
+/* REPORTE DE PRECIOS POR ÁREA */
+#reportePreciosPreview { position: fixed; left: -9999px; top: 0; width: 210mm; background: white; padding: 15mm; font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #222; }
+
 @media print {
   body * { visibility: hidden; }
   #comandaPreview, #comandaPreview * { visibility: visible; }
   #comandaPreview {
     position: absolute; left: 0; top: 0;
     width: 100%; padding: 0 2mm;
+  }
+  #reportePreciosPreview, #reportePreciosPreview * { visibility: visible; }
+  #reportePreciosPreview {
+    position: absolute; left: 0; top: 0;
+    width: 100%; padding: 10mm;
   }
 }
 
@@ -974,6 +982,13 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <div id="exportVentasFenResultado" style="margin-top:10px"></div>
   </div>
 
+  <!-- Exportar precios por área -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:4px">🖨️ Exportar precios por área</div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">Genera un documento con todos los productos activos, agrupados por área y ordenados de menor a mayor precio, mostrando el precio de primer día (Hoy). Se abre el diálogo de impresión — ahí puedes elegir "Guardar como PDF" en vez de imprimir.</div>
+    <button class="btn btn-primary btn-full" onclick="exportarPreciosPorArea()">📄 Generar documento</button>
+  </div>
+
 </div>
 
 <!-- MODAL CIERRE CIEGO -->
@@ -1134,6 +1149,8 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
   <div id="cmdTotal" style="font-weight:bold;font-size:15px;margin-top:8px;"></div>
   <div id="cmdMedio" style="font-size:12px;"></div>
 </div>
+
+<div id="reportePreciosPreview"></div>
 
 <div id="toastMsg"></div>
 
@@ -2474,6 +2491,42 @@ function renderPeriodosExportVentas() {
 
 // Agrega ventas del mes por idRecetaFen (cantidad + monto neto: sin IVA y después de descuento de línea)
 // y lo publica en Sheets, mismo patrón que ya usamos para caja y merma.
+// Genera un documento imprimible (PDF vía diálogo de impresión) con los productos activos
+// agrupados por área, ordenados de menor a mayor precio, mostrando el precio de "Hoy" (primer día).
+window.exportarPreciosPorArea = function() {
+  const activos = productos.filter(p => p.activo !== false);
+  const areasConProd = AREAS.filter(a => activos.some(p => normalizarArea(p.area) === a.id));
+  const fechaHoy = fechaLocalHoy().split('-').reverse().join('-'); // DD-MM-YYYY
+
+  let html = `
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:22px;font-weight:800">Fën — Precios por área</div>
+      <div style="font-size:12px;color:#888;margin-top:2px">Precio de primer día · generado el ${fechaHoy}</div>
+    </div>
+  `;
+
+  areasConProd.forEach(a => {
+    const prods = activos
+      .filter(p => normalizarArea(p.area) === a.id)
+      .slice()
+      .sort((x, y) => (x.precioHoy || x.precio || 0) - (y.precioHoy || y.precio || 0));
+    if (!prods.length) return;
+    html += `
+      <div style="margin-top:18px;margin-bottom:6px;font-size:15px;font-weight:700;border-bottom:2px solid #333;padding-bottom:4px">${a.emoji} ${a.nombre}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        ${prods.map(p => `
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:5px 2px">${p.nombre}</td>
+            <td style="padding:5px 2px;text-align:right;font-weight:600;white-space:nowrap">$${parseInt(p.precioHoy || p.precio || 0).toLocaleString('es-CL')}</td>
+          </tr>`).join('')}
+      </table>
+    `;
+  });
+
+  document.getElementById('reportePreciosPreview').innerHTML = html;
+  window.print();
+};
+
 window.generarVentasMensualesFen = async function() {
   const periodo = document.getElementById('exportVentasPeriodo').value;
   const btn = document.getElementById('btnExportVentasFen');
