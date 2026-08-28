@@ -669,6 +669,14 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
   <div class="section" id="sec-productos">
 
     <!-- Formulario agregar/editar producto -->
+    <!-- Recetas sin producto en B2C — visible a cualquier cuenta, no solo admin -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:4px">🆕 Recetas sin producto en B2C</div>
+      <div style="font-size:11px;color:#888;margin-bottom:10px">Liberadas para venta desde producción, pero todavía no existen como producto acá. Crear uno igual requiere definir precio, control de stock, etc. — nada se crea solo.</div>
+      <button class="btn btn-secondary btn-full" id="btnSincronizarRecetasProd" onclick="sincronizarRecetasSinProductoProd()">🔄 Sincronizar</button>
+      <div id="recetasSinProductoProdLista" style="display:none;margin-top:10px"></div>
+    </div>
+
     <div class="card" id="cardFormProd">
       <div class="card-title" id="formProdTitulo">+ Nuevo producto</div>
       <input type="hidden" id="prodId"/>
@@ -1245,6 +1253,7 @@ onAuthStateChanged(auth, async (user) => {
     await cargarSubcategorias();
     await cargarAreas(); // necesario ANTES de cargarRecetasFen(): normaliza el área de cada receta contra la lista real de áreas
     cargarRecetasFen();
+    cargarRecetasOcultas(); // para todos, no solo admin: que lo ya descartado no vuelva a aparecer en Productos
     // Verificar si es visor de stock
     const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
     esStockViewer = viewerDoc.exists() && !esAdmin; // admin siempre tiene prioridad
@@ -2415,6 +2424,66 @@ window.crearProductoDesdeReceta = function(idReceta) {
   const card = document.getElementById('cardFormProd');
   if (card) card.scrollIntoView({ behavior: 'smooth' });
   document.getElementById('prodNombre').focus();
+};
+
+// Similitud simple entre dos nombres (0 a 1) — normaliza tildes/mayúsculas y compara por palabras en común.
+// No es perfecta, pero alcanza para avisar "esto podría ya existir" antes de crear un duplicado.
+function similitudNombres(a, b) {
+  const norm = s => (s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const na = norm(a), nb = norm(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  if (na.includes(nb) || nb.includes(na)) return 0.85;
+  const wa = new Set(na.split(' ')), wb = new Set(nb.split(' '));
+  const interseccion = [...wa].filter(w => wb.has(w)).length;
+  const union = new Set([...wa, ...wb]).size;
+  return union ? interseccion / union : 0;
+}
+
+// Versión de "Recetas sin producto en B2C" para Productos — accesible a cualquier cuenta (no solo admin),
+// para que el equipo pueda crear productos que llegan de fën sin depender de que un admin esté conectado.
+window.sincronizarRecetasSinProductoProd = async function() {
+  const btn = document.getElementById('btnSincronizarRecetasProd');
+  const wrap = document.getElementById('recetasSinProductoProdLista');
+  if (!btn || !wrap) return;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sincronizando...';
+
+  try {
+    await cargarRecetasFen();
+    await cargarProductos();
+
+    const idsVinculados = new Set(productos.filter(p => p.idRecetaFen).map(p => p.idRecetaFen));
+    const sinProducto = RECETAS_FEN.filter(r => !idsVinculados.has(r.idReceta) && !RECETAS_OCULTAS.includes(r.idReceta));
+
+    if (!sinProducto.length) {
+      wrap.innerHTML = '<div class="empty">No hay recetas pendientes por crear — todo al día.</div>';
+    } else {
+      wrap.innerHTML = sinProducto.map(r => {
+        // Antes de ofrecer "crear", se revisa si ya existe un producto con nombre parecido (una versión
+        // vieja o distinta apuntando a lo mismo) — si es así, se pide contactar al admin en vez de crear.
+        const posibleDuplicado = productos.find(p => similitudNombres(p.nombre, r.nombre) >= 0.6);
+        if (posibleDuplicado) {
+          return `<div style="padding:8px;background:#fff3e0;border-radius:8px;margin-bottom:6px;font-size:12px">
+            <div><b>${r.idReceta} — ${r.nombre}</b> <span style="color:#888">(${r.area})</span></div>
+            <div style="color:#8a6416;margin-top:4px">⚠️ Ya existe algo parecido: "${posibleDuplicado.nombre}". Antes de crear uno nuevo, avísale al admin para confirmar si es el mismo producto o uno distinto de verdad.</div>
+          </div>`;
+        }
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#eef6fb;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
+          <span>${r.idReceta} — ${r.nombre} <span style="color:#888">(${r.area})</span></span>
+          <button class="btn-sm btn-edit" style="flex-shrink:0" onclick="crearProductoDesdeReceta('${r.idReceta}')">+ Crear</button>
+        </div>`;
+      }).join('');
+    }
+    wrap.style.display = '';
+  } catch (e) {
+    wrap.innerHTML = `<div class="empty">Error al sincronizar: ${e.message}</div>`;
+    wrap.style.display = '';
+  }
+
+  btn.disabled = false;
+  btn.textContent = textoOriginal;
 };
 
 // Crea un área nueva directo desde la detección de sincronización — mismo formato que el CRUD normal
