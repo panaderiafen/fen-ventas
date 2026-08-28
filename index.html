@@ -2264,7 +2264,7 @@ window.revisarSincronizacionFen = function() {
   // El CSV publicado por fën solo lista recetas activas — si una receta se descontinúa,
   // deja de aparecer ahí (no cambia de "estado", directamente desaparece). Por eso "ya no está
   // en la lista actual" es la única señal real de que algo se descontinuó o nunca existió.
-  const desajustesArea = [], yaNoEnListaFen = [], areasNuevas = {}, areasNuevasNombreSugerido = {};
+  const desajustesArea = [], yaNoEnListaFen = [], areasNuevas = {}, areasNuevasNombreSugerido = {}, productosAreaHuerfana = [];
   vinculados.forEach(p => {
     const receta = recetaPorId[p.idRecetaFen];
     if (!receta) { yaNoEnListaFen.push(p); return; }
@@ -2275,7 +2275,13 @@ window.revisarSincronizacionFen = function() {
       if (!areasNuevasNombreSugerido[receta.area]) areasNuevasNombreSugerido[receta.area] = receta.areaNombreCompleto || receta.area;
       return;
     }
-    if (normalizarArea(p.area) !== receta.area) desajustesArea.push({ p, receta });
+    if (!AREAS.some(a => a.id === p.area)) {
+      // El producto tiene guardada un área que ya no existe en B2C (se eliminó) — no comparar con
+      // normalizarArea acá, porque disfrazaría el problema mostrando otra área como si fuera la real.
+      productosAreaHuerfana.push(p);
+      return;
+    }
+    if (p.area !== receta.area) desajustesArea.push({ p, receta });
   });
 
   // Recetas liberadas para venta en fën que todavía no tienen producto acá — candidatas a crear.
@@ -2285,7 +2291,7 @@ window.revisarSincronizacionFen = function() {
   const recetasOcultas  = recetasSinProducto.filter(r => RECETAS_OCULTAS.includes(r.idReceta));
   const areasNuevasKeys = Object.keys(areasNuevas);
 
-  if (!desajustesArea.length && !yaNoEnListaFen.length && !sinVincular.length && !recetasVisibles.length && !areasNuevasKeys.length) {
+  if (!desajustesArea.length && !yaNoEnListaFen.length && !sinVincular.length && !recetasVisibles.length && !areasNuevasKeys.length && !productosAreaHuerfana.length) {
     wrap.innerHTML = `<div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a">✅ Todo sincronizado — ${vinculados.length} producto(s) vinculado(s), sin diferencias.</div>`;
     return;
   }
@@ -2300,6 +2306,17 @@ window.revisarSincronizacionFen = function() {
           <button class="btn-sm btn-edit" style="flex-shrink:0" onclick="crearAreaDesdeRecetaFen('${areaId}','${(areasNuevasNombreSugerido[areaId]||'').replace(/'/g,"\\'")}')">+ Crear área ahora</button>
         </div>`).join('')}
       <div style="font-size:11px;color:#888;margin-top:4px">Nada se crea sola — "+ Crear área ahora" solo te pide confirmar nombre y emoji antes de guardarla. Una vez creada, "Revisar sincronización" de nuevo va a ofrecerte aplicar el cambio de área a estos productos.</div>
+    </div>`;
+  }
+  if (productosAreaHuerfana.length) {
+    html += `<div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">⚠️ Área eliminada, producto huérfano (${productosAreaHuerfana.length})</div>
+      ${productosAreaHuerfana.map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
+          <span>${p.nombre} — el área "${p.area}" ya no existe</span>
+          <button class="btn-sm btn-edit" onclick="editarProducto('${p.id}')">Editar producto</button>
+        </div>`).join('')}
+      <div style="font-size:11px;color:#888;margin-top:4px">El área guardada en este producto se eliminó de "Áreas de producción". Puedes volver a crear esa área con el mismo código, o editar el producto y asignarle una distinta.</div>
     </div>`;
   }
   if (desajustesArea.length) {
@@ -3061,7 +3078,8 @@ function renderTablaProductos() {
   if (lista.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="empty">Sin productos</td></tr>`; return; }
 
   tbody.innerHTML = lista.map(p => {
-    const areaCode = normalizarArea(p.area);
+    const areaExiste = AREAS.some(a => a.id === p.area);
+    const areaCode = areaExiste ? p.area : normalizarArea(p.area); // solo cae al respaldo para el resto de la fila (precios, etc.), no para lo que se muestra
     const conControl = p.controlStock !== false;
     const precHoy  = parseInt(p.precioHoy || p.precio || 0).toLocaleString('es-CL');
     const precAyer = parseInt(p.precioAyer || 0).toLocaleString('es-CL');
@@ -3084,7 +3102,9 @@ function renderTablaProductos() {
           </div>
         </div>
       </td>
-      <td><span class="area-code">${areaCode}</span></td>
+      <td>${areaExiste
+        ? `<span class="area-code">${areaCode}</span>`
+        : `<span class="area-code" style="background:#fdeceb;color:#c0392b" title="El área &quot;${p.area||''}&quot; ya no existe (fue eliminada, o nunca se creó) — edita el producto para asignarle un área válida">⚠️ ${p.area || 'sin área'}</span>`}</td>
       <td style="text-align:center">${conControl ? '✅' : '<span style="color:#888">Sin stock</span>'}</td>
       ${conControl ? `
         <td>$${precHoy}</td>
