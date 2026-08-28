@@ -992,6 +992,18 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 </div>
 
 <!-- MODAL CIERRE CIEGO -->
+<div class="modal-overlay" id="modalNotaDescuadre">
+  <div class="modal">
+    <div class="modal-title">📝 Diferencia detectada en caja</div>
+    <p id="notaDescuadreResumen" style="font-size:13px;color:#555;margin-bottom:10px"></p>
+    <textarea id="notaDescuadreTexto" rows="3" placeholder="Ej: faltó cambio para un cliente, se traspasó dinero a otra caja, un cliente no se llevó su vuelto, etc." style="width:100%;box-sizing:border-box"></textarea>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-secondary" style="flex:1" onclick="cancelarNotaDescuadre()">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1" onclick="confirmarNotaDescuadre()">✓ Continuar y cerrar caja</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalCierreCiego">
   <div class="modal">
     <div class="modal-title">🔒 Arqueo manual de caja</div>
@@ -4304,6 +4316,34 @@ window.cerrarModalCierre = function() {
   document.getElementById('modalCierreCiego').classList.remove('open');
 };
 
+// Pide una nota obligatoria de justificación cuando el cierre de caja tiene diferencias
+// (a favor o en contra, mismo trato para ambas). Devuelve el texto escrito, o null si se canceló.
+let _resolverNotaDescuadre = null;
+function pedirNotaDescuadre(difs) {
+  const partes = [];
+  if (difs.difEfectivo !== 0) partes.push(`Efectivo: ${difs.difEfectivo > 0 ? '+' : ''}$${difs.difEfectivo.toLocaleString('es-CL')}`);
+  if (difs.difDebito !== 0)   partes.push(`Débito: ${difs.difDebito > 0 ? '+' : ''}$${difs.difDebito.toLocaleString('es-CL')}`);
+  if (difs.difCredito !== 0)  partes.push(`Crédito: ${difs.difCredito > 0 ? '+' : ''}$${difs.difCredito.toLocaleString('es-CL')}`);
+  if (difs.difTransfer !== 0) partes.push(`Transferencia: ${difs.difTransfer > 0 ? '+' : ''}$${difs.difTransfer.toLocaleString('es-CL')}`);
+  document.getElementById('notaDescuadreResumen').textContent =
+    `Antes de cerrar, cuéntanos brevemente qué pasó: ${partes.join(' · ')}. Es solo para dejar registro, no es un reto.`;
+  document.getElementById('notaDescuadreTexto').value = '';
+  document.getElementById('modalNotaDescuadre').classList.add('open');
+  return new Promise(resolve => { _resolverNotaDescuadre = resolve; });
+}
+
+window.confirmarNotaDescuadre = function() {
+  const texto = document.getElementById('notaDescuadreTexto').value.trim();
+  if (!texto) { alert('Por favor escribe una breve explicación antes de continuar.'); return; }
+  document.getElementById('modalNotaDescuadre').classList.remove('open');
+  if (_resolverNotaDescuadre) { _resolverNotaDescuadre(texto); _resolverNotaDescuadre = null; }
+};
+
+window.cancelarNotaDescuadre = function() {
+  document.getElementById('modalNotaDescuadre').classList.remove('open');
+  if (_resolverNotaDescuadre) { _resolverNotaDescuadre(null); _resolverNotaDescuadre = null; }
+};
+
 window.confirmarCierreCiego = async function() {
   const btn = document.getElementById('btnConfirmarCierre');
   const manEfectivo  = parseInt(document.getElementById('cierrEfectivo').value)  || 0;
@@ -4357,6 +4397,17 @@ window.confirmarCierreCiego = async function() {
     // = efectivo físico contado − monto retirado (si se registró retiro)
     const saldoSiguiente = montoRetirado > 0 ? manEfectivo - montoRetirado : null;
 
+    // Si hay cualquier diferencia (a favor o en contra, mismo trato), se exige una nota antes de continuar
+    let notaDescuadre = '';
+    const hayDiferencia = difEfectivo !== 0 || difDebito !== 0 || difCredito !== 0 || difTransfer !== 0;
+    if (hayDiferencia) {
+      notaDescuadre = await pedirNotaDescuadre({ difEfectivo, difDebito, difCredito, difTransfer });
+      if (notaDescuadre === null) {
+        btn.disabled = false; btn.textContent = '🔒 Confirmar cierre';
+        return;
+      }
+    }
+
     // Cerrar caja en Firestore
     await updateDoc(doc(db, 'cajas', cajaDocId), {
       estado: 'cerrada', cierre: Timestamp.now(),
@@ -4378,6 +4429,8 @@ window.confirmarCierreCiego = async function() {
       manDebito, manCredito, manTransfer, manTotal,
       // Diferencias
       difEfectivo, difDebito, difCredito, difTransfer, difTotal,
+      // Nota de justificación (obligatoria si hubo cualquier diferencia)
+      ...(hayDiferencia ? { notaDescuadre } : {}),
       // Retiro y saldo siguiente (opcionales)
       ...(montoRetirado > 0 ? { montoRetirado, saldoSiguiente } : {})
     });
@@ -4397,6 +4450,28 @@ window.confirmarCierreCiego = async function() {
 
     // Exportar a Sheets
     const cajaDataFinal = (await getDoc(doc(db, 'cajas', cajaDocId))).data();
+    if (hayDiferencia) {
+      cajaDataFinal.notaDescuadre = notaDescuadre;
+      cajaDataFinal.difEfectivo = difEfectivo;
+      cajaDataFinal.difDebito = difDebito;
+      cajaDataFinal.difCredito = difCredito;
+      cajaDataFinal.difTransfer = difTransfer;
+      cajaDataFinal.difTotal = difTotal;
+      // Aviso por correo del descuadre — mismo proyecto/URL que ya usa la exportación de ventas mensuales
+      fetch(APPS_SCRIPT_URL_VENTAS_FEN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          tipo: 'descuadre_caja',
+          filaCaja: {
+            sucursal: cajaDataFinal.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana',
+            fecha: fechaLocalHoy().split('-').reverse().join('-'),
+            usuario: cajaDataFinal.usuario || usuario.email,
+            difTotal, difEfectivo, notaDescuadre
+          }
+        })
+      }).catch(e => console.error('Error enviando aviso de descuadre:', e));
+    }
     await exportarASheets(cajaDocId, cajaDataFinal, false);
   } catch(e) {
     alert('Error al cerrar caja: ' + e.message);
@@ -4813,6 +4888,11 @@ function renderEvalCajaCardHTML(e) {
             <td style="text-align:right;padding:5px;color:${difColor(e.difTotal||0)}">${difLabel(e.difTotal||0)}</td>` : ''}
           </tr>
         </table>
+        ${e.notaDescuadre ? `
+        <div style="margin-top:10px;padding:8px 10px;background:#fdf6e3;border-left:3px solid #c79a3b;border-radius:6px">
+          <div style="font-size:10px;color:#8a6416;font-weight:700;text-transform:uppercase;margin-bottom:2px">📝 Nota del cajero</div>
+          <div style="font-size:12px;color:#4a4638">${e.notaDescuadre}</div>
+        </div>` : ''}
       </div>`;
 }
 
@@ -5301,7 +5381,11 @@ async function exportarASheets(cajaDocId, cajaData, silencioso = false) {
       totalTransfer:  parseInt(t.transferencia)         || 0,
       totalVentas:    parseInt(cajaData.totalVentas)    || 0,
       nVentas:        parseInt(cajaData.nVentas)        || 0,
-      cajaId:         cajaDocId
+      cajaId:         cajaDocId,
+      // Diferencia y nota de justificación (solo presentes si hubo diferencia al cerrar)
+      difEfectivo:    cajaData.difEfectivo || 0,
+      difTotal:       cajaData.difTotal || 0,
+      notaDescuadre:  cajaData.notaDescuadre || ''
     };
 
     // 4. Enviar al Apps Script
