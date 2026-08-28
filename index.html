@@ -2152,14 +2152,18 @@ async function cargarRecetasFen() {
     const filas = parseCSV(texto);
     const header = (filas[0] || []).map(h => h.trim().toLowerCase());
     const iId = header.indexOf('id_receta'), iNom = header.indexOf('nombre'), iArea = header.indexOf('área') !== -1 ? header.indexOf('área') : header.indexOf('area'), iEstado = header.indexOf('estado');
+    const iCodigoArea = header.indexOf('código_área') !== -1 ? header.indexOf('código_área') : header.indexOf('codigo_area');
     RECETAS_FEN = filas.slice(1)
       .filter(f => f[iId])
       .map(f => {
-        const areaRaw = (f[iArea]||'').trim();
+        // "código_área" es la fuente confiable (código corto, ej. "REV") — "área" (nombre completo) queda
+        // solo como respaldo por si la columna nueva llegara vacía en alguna fila.
+        const areaRaw = (iCodigoArea !== -1 ? (f[iCodigoArea] || '').trim() : '') || (f[iArea] || '').trim();
+        const areaNombreCompleto = (f[iArea] || '').trim(); // nombre completo, ej. "Reventa" — solo como sugerencia al crear el área
         // No forzamos el área a una de las conocidas en B2C — si "REV" (o cualquier otra) no existe acá,
         // se detecta como área nueva en vez de asignarse por error a otra área existente.
         const area = AREAS.some(a => a.id === areaRaw) ? areaRaw : (AREA_COMPAT[areaRaw] || areaRaw);
-        return { idReceta: (f[iId]||'').trim(), nombre: (f[iNom]||'').trim(), area, estado: (f[iEstado]||'').trim() };
+        return { idReceta: (f[iId]||'').trim(), nombre: (f[iNom]||'').trim(), area, areaNombreCompleto, estado: (f[iEstado]||'').trim() };
       });
     if (estadoEl) estadoEl.textContent = `✅ ${RECETAS_FEN.length} recetas cargadas de fën-producción`;
   } catch (e) {
@@ -2260,7 +2264,7 @@ window.revisarSincronizacionFen = function() {
   // El CSV publicado por fën solo lista recetas activas — si una receta se descontinúa,
   // deja de aparecer ahí (no cambia de "estado", directamente desaparece). Por eso "ya no está
   // en la lista actual" es la única señal real de que algo se descontinuó o nunca existió.
-  const desajustesArea = [], yaNoEnListaFen = [], areasNuevas = {};
+  const desajustesArea = [], yaNoEnListaFen = [], areasNuevas = {}, areasNuevasNombreSugerido = {};
   vinculados.forEach(p => {
     const receta = recetaPorId[p.idRecetaFen];
     if (!receta) { yaNoEnListaFen.push(p); return; }
@@ -2268,6 +2272,7 @@ window.revisarSincronizacionFen = function() {
       // El área que dice fën no existe todavía en B2C — nunca se ofrece "Aplicar" a algo que no existe
       if (!areasNuevas[receta.area]) areasNuevas[receta.area] = [];
       areasNuevas[receta.area].push(p);
+      if (!areasNuevasNombreSugerido[receta.area]) areasNuevasNombreSugerido[receta.area] = receta.areaNombreCompleto || receta.area;
       return;
     }
     if (normalizarArea(p.area) !== receta.area) desajustesArea.push({ p, receta });
@@ -2290,10 +2295,11 @@ window.revisarSincronizacionFen = function() {
     html += `<div style="margin-top:6px">
       <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">🆕 Área nueva detectada en fën (${areasNuevasKeys.length})</div>
       ${areasNuevasKeys.map(areaId => `
-        <div style="padding:8px;background:#eef6fb;border-radius:8px;margin-bottom:6px;font-size:12px">
-          <b>"${areaId}"</b> no existe todavía como área en B2C — afecta a: ${areasNuevas[areaId].map(p => p.nombre).join(', ')}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#eef6fb;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
+          <div><b>"${areaId}"</b> no existe todavía como área en B2C — afecta a: ${areasNuevas[areaId].map(p => p.nombre).join(', ')}</div>
+          <button class="btn-sm btn-edit" style="flex-shrink:0" onclick="crearAreaDesdeRecetaFen('${areaId}','${(areasNuevasNombreSugerido[areaId]||'').replace(/'/g,"\\'")}')">+ Crear área ahora</button>
         </div>`).join('')}
-      <div style="font-size:11px;color:#888;margin-top:4px">Si estos productos deben venderse en el mostrador, crea el área "${areasNuevasKeys[0]}" en Productos → "Áreas de producción" (con su emoji y color) — nada se crea sola. Una vez creada, "Revisar sincronización" de nuevo va a ofrecerte aplicar el cambio de área a estos productos.</div>
+      <div style="font-size:11px;color:#888;margin-top:4px">Nada se crea sola — "+ Crear área ahora" solo te pide confirmar nombre y emoji antes de guardarla. Una vez creada, "Revisar sincronización" de nuevo va a ofrecerte aplicar el cambio de área a estos productos.</div>
     </div>`;
   }
   if (desajustesArea.length) {
@@ -2392,6 +2398,23 @@ window.crearProductoDesdeReceta = function(idReceta) {
   const card = document.getElementById('cardFormProd');
   if (card) card.scrollIntoView({ behavior: 'smooth' });
   document.getElementById('prodNombre').focus();
+};
+
+// Crea un área nueva directo desde la detección de sincronización — mismo formato que el CRUD normal
+// de "Áreas de producción" (código/nombre/emoji), solo que sin salir de esta pantalla.
+window.crearAreaDesdeRecetaFen = async function(codigo, nombreSugerido) {
+  if (AREAS.find(a => a.id === codigo)) { showToast('⚠️ Esa área ya existe'); revisarSincronizacionFen(); return; }
+  const nombre = prompt(`Nombre para el área "${codigo}":`, nombreSugerido || codigo);
+  if (!nombre || !nombre.trim()) return;
+  const emoji = prompt('Emoji para esta área (opcional, se puede dejar en blanco):', '📦') || '📦';
+  try {
+    await setDoc(doc(db, 'areas', codigo), { id: codigo, nombre: nombre.trim(), emoji: emoji.trim() || '📦' });
+    await cargarAreas();
+    showToast(`✅ Área "${nombre.trim()}" creada`);
+    revisarSincronizacionFen();
+  } catch (e) {
+    alert('Error al crear el área: ' + e.message);
+  }
 };
 
 window.aplicarAreaFen = async function(productoId, nuevaArea) {
