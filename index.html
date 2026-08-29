@@ -2690,16 +2690,27 @@ window.generarVentasMensualesFen = async function() {
       return;
     }
 
-    await fetch(APPS_SCRIPT_URL_VENTAS_FEN, {
+    const res = await fetch(APPS_SCRIPT_URL_VENTAS_FEN, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ tipo: 'ventas_mensuales_fen', periodo, filas })
     });
+    const resultado = await res.json().catch(() => null);
+
+    if (!res.ok || !resultado || resultado.ok !== true) {
+      const detalle = resultado?.error || `HTTP ${res.status}`;
+      resultEl.innerHTML = `<div style="padding:10px;background:#fdeceb;border-radius:8px;font-size:12px;color:#c0392b">
+        ❌ El script no confirmó haber guardado los datos (${detalle}). No des por hecho que se envió — revisa el registro de ejecución en Apps Script antes de reintentar.
+      </div>`;
+      showToast('❌ No se pudo confirmar el envío');
+      if (btn) { btn.disabled = false; btn.textContent = '📤 Generar y enviar'; }
+      return;
+    }
 
     const totalMonto = filas.reduce((a, f) => a + f.monto_neto, 0);
     resultEl.innerHTML = `
       <div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a;margin-bottom:8px">
-        ✅ Enviado — ${filas.length} receta(s), $${totalMonto.toLocaleString('es-CL')} neto total en ${etiquetaPeriodo(periodo)}.
+        ✅ Enviado y confirmado — ${filas.length} receta(s), $${totalMonto.toLocaleString('es-CL')} neto total en ${etiquetaPeriodo(periodo)}.
       </div>
       ${huerfanas > 0 ? `<div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:12px;color:#8a6416">⚠️ ${huerfanas} línea(s) de venta pertenecen a productos que ya no existen (fueron eliminados). No se pudieron atribuir a ninguna receta — quedan fuera del total enviado.</div>` : ''}
     `;
