@@ -4448,8 +4448,13 @@ function pedirNotaDescuadre(difs) {
   if (difs.difDebito !== 0)   partes.push(`Débito: ${difs.difDebito > 0 ? '+' : ''}$${difs.difDebito.toLocaleString('es-CL')}`);
   if (difs.difCredito !== 0)  partes.push(`Crédito: ${difs.difCredito > 0 ? '+' : ''}$${difs.difCredito.toLocaleString('es-CL')}`);
   if (difs.difTransfer !== 0) partes.push(`Transferencia: ${difs.difTransfer > 0 ? '+' : ''}$${difs.difTransfer.toLocaleString('es-CL')}`);
-  document.getElementById('notaDescuadreResumen').textContent =
-    `Antes de cerrar, cuéntanos brevemente qué pasó: ${partes.join(' · ')}. Es solo para dejar registro, no es un reto.`;
+
+  const total = difs.difTotal ?? (difs.difEfectivo + difs.difDebito + difs.difCredito + difs.difTransfer);
+  const tipoSaldo = total >= 0 ? 'a favor' : 'en contra';
+  const montoTexto = `${total >= 0 ? '+' : '-'}$${Math.abs(total).toLocaleString('es-CL')}`;
+
+  document.getElementById('notaDescuadreResumen').innerHTML =
+    `La caja no está cuadrada, tienes un <b>saldo ${tipoSaldo} ${montoTexto}</b>${partes.length ? ` (${partes.join(' · ')})` : ''}. Por favor tómate el tiempo en verificar qué pasó realmente con ese dinero y anota la información <b>DETALLADA</b> en el recuadro de abajo.`;
   document.getElementById('notaDescuadreTexto').value = '';
   document.getElementById('modalNotaDescuadre').classList.add('open');
   return new Promise(resolve => { _resolverNotaDescuadre = resolve; });
@@ -4524,7 +4529,7 @@ window.confirmarCierreCiego = async function() {
     let notaDescuadre = '';
     const hayDiferencia = difEfectivo !== 0 || difDebito !== 0 || difCredito !== 0 || difTransfer !== 0;
     if (hayDiferencia) {
-      notaDescuadre = await pedirNotaDescuadre({ difEfectivo, difDebito, difCredito, difTransfer });
+      notaDescuadre = await pedirNotaDescuadre({ difEfectivo, difDebito, difCredito, difTransfer, difTotal });
       if (notaDescuadre === null) {
         btn.disabled = false; btn.textContent = '🔒 Confirmar cierre';
         return;
