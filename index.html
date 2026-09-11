@@ -990,6 +990,44 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     <div id="exportVentasFenResultado" style="margin-top:10px"></div>
   </div>
 
+  <!-- Tiempos de pago por sucursal -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:4px">💰 Tiempos de pago por sucursal</div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">Días que demora en estar disponible el dinero de cada medio de pago, según el convenio de cada sucursal con el procesador. Efectivo siempre es al momento — no se configura. Se usa para proyectar el flujo de caja hacia fën-producción.</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="border-bottom:1px solid #eee">
+          <th style="text-align:left;padding:6px 4px;font-size:11px;color:#888">Medio de pago</th>
+          <th style="text-align:center;padding:6px 4px;font-size:11px;color:#888">Ainavillo</th>
+          <th style="text-align:center;padding:6px 4px;font-size:11px;color:#888">Barros Arana</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #f5f5f5">
+          <td style="padding:6px 4px">Efectivo</td>
+          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (al momento)</td>
+          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (al momento)</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f5f5f5">
+          <td style="padding:6px 4px">Débito</td>
+          <td style="text-align:center;padding:4px"><input type="number" min="0" id="tiempoPago-ainavillo-debito" style="width:60px;text-align:center" onchange="guardarTiemposPago()"/> días</td>
+          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (inmediato)</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f5f5f5">
+          <td style="padding:6px 4px">Crédito</td>
+          <td style="text-align:center;padding:4px"><input type="number" min="0" id="tiempoPago-ainavillo-credito" style="width:60px;text-align:center" onchange="guardarTiemposPago()"/> días</td>
+          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (inmediato)</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 4px">Transferencia</td>
+          <td style="text-align:center;padding:4px"><input type="number" min="0" id="tiempoPago-ainavillo-transferencia" style="width:60px;text-align:center" onchange="guardarTiemposPago()"/> días</td>
+          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (inmediato)</td>
+        </tr>
+      </tbody>
+    </table>
+    <div id="tiemposPagoEstado" style="font-size:11px;color:#888;margin-top:8px"></div>
+  </div>
+
   <!-- Exportar precios por área -->
   <div class="card">
     <div class="card-title" style="margin-bottom:4px">🖨️ Exportar precios por área</div>
@@ -1522,6 +1560,7 @@ window.showSection = function(id, el) {
     cargarSeguimientoReconciliacion().then(renderPeriodosReconciliacion);
     cargarRecetasOcultas();
     renderPeriodosExportVentas();
+    cargarTiemposPago();
   }
 };
 
@@ -2614,6 +2653,40 @@ function renderPeriodosExportVentas() {
 // y lo publica en Sheets, mismo patrón que ya usamos para caja y merma.
 // Genera un documento imprimible (PDF vía diálogo de impresión) con los productos activos
 // agrupados por área, ordenados de menor a mayor precio, mostrando el precio de "Hoy" (primer día).
+// Tiempos de pago por sucursal (días hasta que el dinero está disponible según cada medio).
+// Barros Arana queda fijo en 0 (convenio de pago inmediato, ya confirmado) — solo Ainavillo es editable,
+// hasta que se confirme el tiempo real con el procesador.
+async function cargarTiemposPago() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'tiemposPago'));
+    const datos = snap.exists() ? snap.data() : {};
+    const ain = datos.ainavillo || {};
+    document.getElementById('tiempoPago-ainavillo-debito').value = ain.debito ?? 0;
+    document.getElementById('tiempoPago-ainavillo-credito').value = ain.credito ?? 0;
+    document.getElementById('tiempoPago-ainavillo-transferencia').value = ain.transferencia ?? 0;
+    document.getElementById('tiemposPagoEstado').textContent = '';
+  } catch (e) {
+    console.error('Error cargando tiempos de pago:', e);
+  }
+}
+
+window.guardarTiemposPago = async function() {
+  const ainavillo = {
+    debito: parseInt(document.getElementById('tiempoPago-ainavillo-debito').value) || 0,
+    credito: parseInt(document.getElementById('tiempoPago-ainavillo-credito').value) || 0,
+    transferencia: parseInt(document.getElementById('tiempoPago-ainavillo-transferencia').value) || 0
+  };
+  // Barros Arana queda fijo en 0 para los tres medios — convenio de pago inmediato ya confirmado
+  const barros_arana = { debito: 0, credito: 0, transferencia: 0 };
+  try {
+    await setDoc(doc(db, 'config', 'tiemposPago'), { ainavillo, barros_arana });
+    document.getElementById('tiemposPagoEstado').textContent = '✅ Guardado';
+    setTimeout(() => { const el = document.getElementById('tiemposPagoEstado'); if (el) el.textContent = ''; }, 2000);
+  } catch (e) {
+    document.getElementById('tiemposPagoEstado').textContent = '⚠️ Error al guardar: ' + e.message;
+  }
+};
+
 window.exportarPreciosPorArea = function() {
   const activos = productos.filter(p => p.activo !== false);
   const areasConProd = AREAS.filter(a => activos.some(p => normalizarArea(p.area) === a.id));
@@ -2664,12 +2737,23 @@ window.generarVentasMensualesFen = async function() {
     const idToRecetaFen = {};
     fuente.forEach(p => { idToRecetaFen[p.id] = p.idRecetaFen || ''; });
 
+    // Tiempos de pago configurados (días hasta disponibilidad), para el flujo de caja proyectado
+    const tiemposSnap = await getDoc(doc(db, 'config', 'tiemposPago'));
+    const tiemposPago = tiemposSnap.exists() ? tiemposSnap.data() : {};
+
     const porReceta = {}; // { idRecetaFen: {cantidad, montoNeto} }
+    const verificacionPorSucursal = {}; // { ainavillo: neto, barros_arana: neto } — total real, sin filtrar por vinculación
+    const flujoCajaMapa = {}; // "mesVenta|mesDisponible|sucursal|medio" -> monto neto
     let huerfanas = 0;
 
     ventasSnap.docs.forEach(d => {
       const venta = d.data();
       if (venta.anulada === true) return; // excluir ventas anuladas — no son ingreso real
+
+      const sucursalKey = venta.sucursal === 'ainavillo' ? 'ainavillo' : 'barros_arana';
+      const fechaVenta = venta.fecha?.toDate ? venta.fecha.toDate() : new Date();
+
+      // Detalle por receta vinculada (como ya existía)
       (venta.lineas || []).forEach(l => {
         const idRecetaFen = idToRecetaFen[l.id];
         if (idRecetaFen === undefined) { huerfanas++; return; } // producto ya no existe (eliminado antes de este cambio)
@@ -2678,14 +2762,45 @@ window.generarVentasMensualesFen = async function() {
         porReceta[idRecetaFen].cantidad += l.cantidad;
         porReceta[idRecetaFen].montoNeto += (l.total || 0) / 1.19; // neto: post-descuento de línea, sin IVA
       });
+
+      // Total neto real de la venta completa, SIN filtrar por vinculación — para el CSV de verificación
+      const totalLineasVenta = (venta.lineas || []).reduce((a, l) => a + (l.total || 0), 0);
+      const netoVenta = totalLineasVenta / 1.19;
+      verificacionPorSucursal[sucursalKey] = (verificacionPorSucursal[sucursalKey] || 0) + netoVenta;
+
+      // Flujo de caja proyectado: por cada medio de pago de la venta (uno solo, o varios si el pago fue dividido),
+      // se calcula a qué mes queda disponible el dinero según el convenio configurado para esa sucursal.
+      const pagos = (venta.pagos && venta.pagos.length) ? venta.pagos : [{ medio: venta.medioPago || 'efectivo', monto: venta.total || totalLineasVenta }];
+      pagos.forEach(pago => {
+        const dias = pago.medio === 'efectivo' ? 0 : (tiemposPago[sucursalKey]?.[pago.medio] ?? 0);
+        const fechaDisponible = new Date(fechaVenta);
+        fechaDisponible.setDate(fechaDisponible.getDate() + dias);
+        const mesDisponible = `${fechaDisponible.getFullYear()}-${String(fechaDisponible.getMonth() + 1).padStart(2, '0')}`;
+        const montoNetoPago = (pago.monto || 0) / 1.19;
+        const clave = `${periodo}|${mesDisponible}|${sucursalKey}|${pago.medio}`;
+        flujoCajaMapa[clave] = (flujoCajaMapa[clave] || 0) + montoNetoPago;
+      });
     });
 
     const filas = Object.entries(porReceta).map(([idRecetaFen, d]) => ({
       idRecetaFen, mes: periodo, cantidad_vendida: d.cantidad, monto_neto: Math.round(d.montoNeto)
     }));
 
-    if (!filas.length) {
-      resultEl.innerHTML = `<div class="empty">No hay ventas de productos vinculados en ${etiquetaPeriodo(periodo)}.</div>`;
+    const totalConsolidado = Object.values(verificacionPorSucursal).reduce((a, b) => a + b, 0);
+    const verificacion = [
+      ...Object.entries(verificacionPorSucursal).map(([suc, neto]) => ({
+        mes: periodo, sucursal: suc === 'ainavillo' ? 'Ainavillo' : 'Barros Arana', total_neto: Math.round(neto)
+      })),
+      { mes: periodo, sucursal: 'TOTAL', total_neto: Math.round(totalConsolidado) }
+    ];
+
+    const flujoCaja = Object.entries(flujoCajaMapa).map(([clave, monto]) => {
+      const [mesVenta, mesDisponible, suc, medio] = clave.split('|');
+      return { mes_venta: mesVenta, mes_disponible: mesDisponible, sucursal: suc === 'ainavillo' ? 'Ainavillo' : 'Barros Arana', medio_pago: medio, monto_neto: Math.round(monto) };
+    });
+
+    if (!filas.length && totalConsolidado === 0) {
+      resultEl.innerHTML = `<div class="empty">No hay ventas registradas en ${etiquetaPeriodo(periodo)}.</div>`;
       if (btn) { btn.disabled = false; btn.textContent = '📤 Generar y enviar'; }
       return;
     }
@@ -2693,7 +2808,7 @@ window.generarVentasMensualesFen = async function() {
     const res = await fetch(APPS_SCRIPT_URL_VENTAS_FEN, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ tipo: 'ventas_mensuales_fen', periodo, filas })
+      body: JSON.stringify({ tipo: 'ventas_mensuales_fen', periodo, filas, verificacion, flujoCaja })
     });
     const resultado = await res.json().catch(() => null);
 
@@ -2710,9 +2825,10 @@ window.generarVentasMensualesFen = async function() {
     const totalMonto = filas.reduce((a, f) => a + f.monto_neto, 0);
     resultEl.innerHTML = `
       <div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a;margin-bottom:8px">
-        ✅ Enviado y confirmado — ${filas.length} receta(s), $${totalMonto.toLocaleString('es-CL')} neto total en ${etiquetaPeriodo(periodo)}.
+        ✅ Enviado y confirmado — ${filas.length} receta(s), $${totalMonto.toLocaleString('es-CL')} neto (por receta) en ${etiquetaPeriodo(periodo)}.<br/>
+        Verificación: Ainavillo $${Math.round(verificacionPorSucursal.ainavillo || 0).toLocaleString('es-CL')} · Barros Arana $${Math.round(verificacionPorSucursal.barros_arana || 0).toLocaleString('es-CL')} · Total $${Math.round(totalConsolidado).toLocaleString('es-CL')}
       </div>
-      ${huerfanas > 0 ? `<div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:12px;color:#8a6416">⚠️ ${huerfanas} línea(s) de venta pertenecen a productos que ya no existen (fueron eliminados). No se pudieron atribuir a ninguna receta — quedan fuera del total enviado.</div>` : ''}
+      ${huerfanas > 0 ? `<div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:12px;color:#8a6416">⚠️ ${huerfanas} línea(s) de venta pertenecen a productos que ya no existen (fueron eliminados). No se pudieron atribuir a ninguna receta — quedan fuera del detalle por receta, pero sí están incluidas en el total de verificación.</div>` : ''}
     `;
     showToast('✅ Ventas mensuales enviadas a fën');
   } catch (e) {
