@@ -2742,6 +2742,7 @@ window.generarVentasMensualesFen = async function() {
     const tiemposPago = tiemposSnap.exists() ? tiemposSnap.data() : {};
 
     const porReceta = {}; // { idRecetaFen: {cantidad, montoNeto} }
+    const sinVincularMonto = {}; // { nombreProducto: {cantidad, montoNeto} } — explica la diferencia vs. verificación
     const verificacionPorSucursal = {}; // { ainavillo: neto, barros_arana: neto } — total real, sin filtrar por vinculación
     const flujoCajaMapa = {}; // "mesVenta|mesDisponible|sucursal|medio" -> monto neto
     let huerfanas = 0;
@@ -2757,7 +2758,14 @@ window.generarVentasMensualesFen = async function() {
       (venta.lineas || []).forEach(l => {
         const idRecetaFen = idToRecetaFen[l.id];
         if (idRecetaFen === undefined) { huerfanas++; return; } // producto ya no existe (eliminado antes de este cambio)
-        if (!idRecetaFen) return; // producto sin vincular todavía — fuera de alcance, no es error
+        if (!idRecetaFen) {
+          // Sin vincular todavía — fuera del detalle por receta (no es error), pero se registra
+          // para poder explicar la diferencia contra el total de verificación.
+          if (!sinVincularMonto[l.nombre]) sinVincularMonto[l.nombre] = { cantidad: 0, montoNeto: 0 };
+          sinVincularMonto[l.nombre].cantidad += l.cantidad;
+          sinVincularMonto[l.nombre].montoNeto += (l.total || 0) / 1.19;
+          return;
+        }
         if (!porReceta[idRecetaFen]) porReceta[idRecetaFen] = { cantidad: 0, montoNeto: 0 };
         porReceta[idRecetaFen].cantidad += l.cantidad;
         porReceta[idRecetaFen].montoNeto += (l.total || 0) / 1.19; // neto: post-descuento de línea, sin IVA
@@ -2829,6 +2837,15 @@ window.generarVentasMensualesFen = async function() {
         Verificación: Ainavillo $${Math.round(verificacionPorSucursal.ainavillo || 0).toLocaleString('es-CL')} · Barros Arana $${Math.round(verificacionPorSucursal.barros_arana || 0).toLocaleString('es-CL')} · Total $${Math.round(totalConsolidado).toLocaleString('es-CL')}
       </div>
       ${huerfanas > 0 ? `<div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:12px;color:#8a6416">⚠️ ${huerfanas} línea(s) de venta pertenecen a productos que ya no existen (fueron eliminados). No se pudieron atribuir a ninguna receta — quedan fuera del detalle por receta, pero sí están incluidas en el total de verificación.</div>` : ''}
+      ${Object.keys(sinVincularMonto).length ? `<div style="padding:10px;background:#eef6fb;border-radius:8px;font-size:12px;color:#1a4a7a;margin-top:8px">
+        <b>Esto explica la diferencia con el total de verificación</b> — productos vendidos en ${etiquetaPeriodo(periodo)} que todavía no están vinculados a una receta de fën:
+        ${Object.entries(sinVincularMonto).sort((a,b) => b[1].montoNeto - a[1].montoNeto).map(([nombre, d]) =>
+          `<div style="display:flex;justify-content:space-between;padding:3px 0">
+            <span>${nombre} (${d.cantidad} u.)</span>
+            <span>$${Math.round(d.montoNeto).toLocaleString('es-CL')}</span>
+          </div>`).join('')}
+        <div style="margin-top:6px;font-size:11px;color:#888">Vincúlalos en Productos → toca el nombre → elige la receta correspondiente.</div>
+      </div>` : ''}
     `;
     showToast('✅ Ventas mensuales enviadas a fën');
   } catch (e) {
