@@ -1240,6 +1240,32 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7eYgaVGK5NBFc
 // Script independiente, exclusivo para el envío mensual de ventas hacia fën-producción (no comparte planilla ni lógica con el de caja/merma de arriba)
 const APPS_SCRIPT_URL_VENTAS_FEN = 'https://script.google.com/macros/s/AKfycbxeA_xhOm83PlYgLzv7wP5N6AM-ogfrfTClrs91JzFWgi5HCSgIRwgzAuGIbd6WsukrNQ/exec';
 
+// ─── v2.0.0 (seguridad): toda llamada a los dos Apps Script de la caja lleva
+// el token de sesión de Firebase de quien está conectada, y una clave única
+// (idem) para que un envío repetido no se guarde dos veces. Si Google desvía
+// el POST (llega como GET sin datos), se reintenta por GET con los mismos datos.
+const _fetchOriginalCaja = window.fetch.bind(window);
+window.fetch = async function (recurso, init) {
+  const url = typeof recurso === 'string' ? recurso : (recurso && recurso.url) || '';
+  const esScriptCaja = url === APPS_SCRIPT_URL || url === APPS_SCRIPT_URL_VENTAS_FEN;
+  if (!esScriptCaja || !init || typeof init.body !== 'string') return _fetchOriginalCaja(recurso, init);
+  let datos;
+  try { datos = JSON.parse(init.body); } catch (e) { return _fetchOriginalCaja(recurso, init); }
+  if (auth.currentUser) datos.idToken = await auth.currentUser.getIdToken();
+  // Clave estable cuando hay un id propio: si la cajera reintenta el mismo
+  // cierre o la misma solicitud, el script la reconoce y no la duplica.
+  if (!datos.idem && datos.filaCaja && datos.filaCaja.cajaId && !datos.tipo) datos.idem = ('caja-' + datos.filaCaja.cajaId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64);
+  if (!datos.idem && datos.tipo === 'solicitud_anulacion' && datos.solicitudId) datos.idem = ('anul-' + datos.solicitudId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64);
+  datos.idem = datos.idem || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12));
+  const cuerpo = JSON.stringify(datos);
+  const res = await _fetchOriginalCaja(url, Object.assign({}, init, { body: cuerpo }));
+  try {
+    const d = await res.clone().json();
+    if (d && d.code === 'version') return _fetchOriginalCaja(url + '?p=' + encodeURIComponent(cuerpo));
+  } catch (e) {}
+  return res;
+};
+
 // ═══════════════════════════
 // ESTADO GLOBAL
 // ═══════════════════════════
