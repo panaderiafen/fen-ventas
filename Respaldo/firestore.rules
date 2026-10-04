@@ -1,0 +1,194 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════
+//  Fën · Ventas (caja) — Reglas de Firestore v1.1.0 (2026-10-04)
+//  v1.1.0: nueva colección resumenes_caja (resumen de cada cierre, caja v2.1).
+//
+//  Reemplazan a la regla anterior, que dejaba leer y escribir TODO a
+//  cualquier usuario con sesión. Están escritas para que la caja siga
+//  funcionando exactamente igual que hoy; solo bloquean lo que una
+//  cajera no debería poder hacer:
+//    · darse permisos de admin (o de visor de stock)
+//    · borrar cualquier cosa (ventas, cajas, productos, stock...)
+//    · cambiar precios o datos de productos existentes
+//    · modificar ventas ajenas más allá de pedir anulación o
+//      corregir el medio de pago (que queda firmado con su correo)
+//    · aprobar anulaciones, corregir arqueos o registrar merma
+//    · registrar ventas o cajas a nombre de otra persona
+//  El visor de stock queda solo de lectura.
+//
+//  Roles (se administran SOLO desde la consola de Firebase):
+//    admins/{uid}         → administrador
+//    stock_viewers/{uid}  → visor de stock (solo lectura)
+//    cualquier otro usuario con sesión → cajera / operación
+// ═══════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Ayudas ────────────────────────────────────────────────
+    function conSesion() {
+      return request.auth != null;
+    }
+    function esAdmin() {
+      return conSesion() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function esVisor() {
+      return conSesion() && exists(/databases/$(database)/documents/stock_viewers/$(request.auth.uid));
+    }
+    // Puede operar la caja: tiene sesión y no es solo visor (el admin también opera).
+    function opera() {
+      return conSesion() && (esAdmin() || !esVisor());
+    }
+    function miCorreo() {
+      return request.auth.token.email;
+    }
+    // El cambio solo toca estos campos del documento.
+    function soloCambia(campos) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
+    }
+
+    // DECIDIDO (Emmanuel, 1-oct): las cajeras SÍ crean productos (y las áreas,
+    // subcategorías, tipos de leche y motivos de merma que eso requiera) desde
+    // la pestaña Productos, a partir de las recetas que Producción ya liberó con
+    // su ID. Así el flujo no depende del admin. Lo que NO pueden es cambiar
+    // precios ni datos de un producto que ya existe: eso es solo admin.
+    // Si algún día quieres que lo haga solo el admin, cambia `true` por `false`.
+    function cajeraGestionaCatalogo() {
+      return true;
+    }
+    function gestionaCatalogo() {
+      return esAdmin() || (opera() && cajeraGestionaCatalogo());
+    }
+
+    // ── Roles: cada uno lee solo su propio documento; nadie los escribe desde la app ──
+    match /admins/{uid} {
+      allow read: if conSesion() && (request.auth.uid == uid || esAdmin());
+      allow write: if false;
+    }
+    match /stock_viewers/{uid} {
+      allow read: if conSesion() && (request.auth.uid == uid || esAdmin());
+      allow write: if false;
+    }
+
+    // ── Catálogo ───────────────────────────────────────────────
+    match /productos/{id} {
+      allow read: if conSesion();
+      allow create: if gestionaCatalogo();
+      // Al vender se marca tuvoVentas. Vincular receta, ajustar área o limpiar
+      // subcategoría (panel de sincronización con fën) es parte del catálogo.
+      // Precios, nombre, activo, etc. de un producto existente: solo admin.
+      allow update: if esAdmin()
+                    || (opera() && soloCambia(['tuvoVentas']))
+                    || (gestionaCatalogo() && soloCambia(['idRecetaFen', 'area', 'categoria']));
+      allow delete: if esAdmin();
+    }
+
+    match /areas/{id} {
+      allow read: if conSesion();
+      // La app crea las 4 áreas base la primera vez que alguien entra.
+      allow create: if gestionaCatalogo() || (opera() && id in ['BOL', 'PAN', 'PAS', 'CAF']);
+      allow update, delete: if esAdmin();
+    }
+
+    match /config/{id} {
+      allow read: if conSesion();
+      // tiposLeche y motivosMerma: la app los crea con valores base si no existen.
+      allow create: if esAdmin() || (opera() && id in ['tiposLeche', 'motivosMerma'])
+                    || (gestionaCatalogo() && id in ['subcategorias', 'recetasOcultas']);
+      allow update: if esAdmin()
+                    || (gestionaCatalogo() && id in ['tiposLeche', 'motivosMerma', 'subcategorias', 'recetasOcultas']);
+      // tiemposPago y reconciliacionPeriodos: solo admin.
+      allow delete: if false;
+    }
+
+    match /equivalenciasNombres/{id} {
+      allow read: if conSesion();
+      allow write: if esAdmin();
+    }
+
+    // ── Venta ─────────────────────────────────────────────────
+    match /ventas/{id} {
+      allow read: if conSesion();
+      allow create: if opera() && request.resource.data.usuario == miCorreo();
+      allow update: if esAdmin()
+                    // pedir anulación (la aprueba el admin)
+                    || (opera() && soloCambia(['solicitudAnulacionPendiente'])
+                        && request.resource.data.solicitudAnulacionPendiente == true)
+                    // corregir medio de pago: queda firmado con el correo de quien lo cambió
+                    || (opera() && soloCambia(['medioPago', 'medioPagoOriginal', 'medioPagoEditadoPor', 'medioPagoEditadoFecha'])
+                        && request.resource.data.medioPagoEditadoPor == miCorreo());
+      allow delete: if false; // las ventas nunca se borran: se anulan
+    }
+
+    match /mesas/{id} {
+      allow read: if conSesion();
+      allow create, update: if opera();
+      allow delete: if false;
+    }
+
+    match /solicitudes_anulacion/{id} {
+      allow read: if conSesion();
+      allow create: if opera()
+                    && request.resource.data.estado == 'pendiente'
+                    && request.resource.data.solicitadoPor == miCorreo();
+      allow update: if esAdmin(); // aprobar o rechazar
+      allow delete: if false;
+    }
+
+    // ── Caja ──────────────────────────────────────────────────
+    match /cajas/{id} {
+      allow read: if conSesion();
+      allow create: if opera()
+                    && request.resource.data.usuario == miCorreo()
+                    && request.resource.data.estado == 'abierta';
+      // Totales, cierre y exportación se actualizan durante el turno.
+      allow update: if opera();
+      allow delete: if false;
+    }
+
+    // v1.1.0: resumen de cada caja cerrada (por producto, área y medio de pago).
+    // Lo escribe la caja al cerrar o reenviar; lo leen los informes y Sistema Fën.
+    match /resumenes_caja/{id} {
+      allow read: if conSesion();
+      allow create, update: if opera();
+      allow delete: if false;
+    }
+
+    match /evaluacion_caja/{id} {
+      allow read: if conSesion();
+      allow create: if opera();
+      allow update: if esAdmin(); // correcciones de arqueo
+      allow delete: if false;
+    }
+
+    // ── Stock y merma ─────────────────────────────────────────
+    match /stock/{id} {
+      allow read: if conSesion();
+      allow create, update: if opera(); // ingreso, ajustes y descuento al vender
+      allow delete: if false;
+    }
+
+    match /stockMovimientos/{id} {
+      allow read: if conSesion();
+      allow create: if opera();
+      allow update, delete: if false;
+    }
+
+    match /merma/{id} {
+      allow read: if conSesion();
+      allow create, update: if esAdmin(); // en la app, registrar merma es solo admin
+      allow delete: if false;
+    }
+
+    match /meta_rotacion/{id} {
+      allow read: if conSesion();
+      allow write: if esAdmin(); // "Forzar rotación" es solo admin
+    }
+
+    // ── Cualquier otra colección: cerrada ─────────────────────
+    match /{otro=**} {
+      allow read, write: if false;
+    }
+  }
+}
