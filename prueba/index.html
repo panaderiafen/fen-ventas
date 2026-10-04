@@ -650,6 +650,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 
   <!-- CAJA -->
   <div class="section" id="sec-caja">
+    <div id="avisoCajaAnterior"></div>
     <div class="card" id="cardAbrirCaja">
       <div class="card-title">💵 Abrir caja</div>
       <label>Monto inicial en efectivo ($)</label>
@@ -932,12 +933,20 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     </div>
     <div id="repCaja" style="display:none">
       <div id="cajasSinCerrarWrap"></div>
+      <div id="cierresSinExportarWrap"></div>
       <div class="card">
         <div class="card-title">💵 Evaluación de cierre de caja</div>
         <p style="font-size:12px;color:#888;margin-bottom:10px">Comparación entre el conteo manual del cajero y los totales del sistema.</p>
         <button class="btn btn-primary btn-full" id="btnCargarEvalCaja" onclick="cargarEvaluacionesCaja()">Cargar evaluaciones</button>
       </div>
       <div id="evalCajaResult"></div>
+      <div class="card">
+        <div class="card-title">🧾 Resúmenes de caja</div>
+        <p style="font-size:12px;color:#888;margin-bottom:10px">Desde la versión 2.1 cada cierre guarda un resumen por producto, área y medio de pago. Para un mes anterior, genera aquí los que falten (lee las ventas de ese mes una sola vez).</p>
+        <input type="month" id="resumenesMes"/>
+        <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="generarResumenesMes()">Generar resúmenes faltantes</button>
+        <div id="resumenesMesResultado" style="font-size:12px;color:#555;margin-top:6px"></div>
+      </div>
     </div>
 
     <!-- Solicitudes de anulación -->
@@ -1240,7 +1249,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyr2_PToNPL3cHo
 // Script independiente, exclusivo para el envío mensual de ventas hacia fën-producción (no comparte planilla ni lógica con el de caja/merma de arriba)
 const APPS_SCRIPT_URL_VENTAS_FEN = 'https://script.google.com/macros/s/AKfycbyoL8No1LWzmsv5jSkeULQQ1vMdpT1gA8UcZGFPYj2gl05YkxWt_ziOtCnfhlFkm95x2w/exec';
 
-// ─── v2.0.0 (seguridad): toda llamada a los dos Apps Script de la caja lleva
+// ─── v2.1.0 · v2.0.0 (seguridad): toda llamada a los dos Apps Script de la caja lleva
 // el token de sesión de Firebase de quien está conectada, y una clave única
 // (idem) para que un envío repetido no se guarde dos veces. Si Google desvía
 // el POST (llega como GET sin datos), se reintenta por GET con los mismos datos.
@@ -1265,6 +1274,36 @@ window.fetch = async function (recurso, init) {
   } catch (e) {}
   return res;
 };
+
+// ─── v2.1.0 ────────────────────────────────────────────────────────────────
+// Historiales: por defecto solo los últimos DIAS_HISTORIAL días. Antes cada
+// consulta traía toda la historia de la sucursal y gastaba lecturas de Firestore.
+const DIAS_HISTORIAL = 60;
+function tsHaceDias(n) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - n); return Timestamp.fromDate(d); }
+// Un rango sobre un solo campo no necesita índices nuevos en Firestore; la sucursal se filtra aquí.
+async function leerHistorial(coleccion, campoFecha, completo) {
+  const snap = completo
+    ? await getDocs(query(collection(db, coleccion), where('sucursal', '==', sucursal)))
+    : await getDocs(query(collection(db, coleccion), where(campoFecha, '>=', tsHaceDias(DIAS_HISTORIAL))));
+  return snap.docs.filter(d => d.data().sucursal === sucursal);
+}
+function botonHistorial(fn, completo) {
+  if (completo === true) return '';
+  const desde = tsHaceDias(DIAS_HISTORIAL).toDate().toLocaleDateString('es-CL');
+  return `<div style="font-size:11px;color:#888;margin-top:10px;text-align:center">Se muestran los últimos ${DIAS_HISTORIAL} días (desde el ${desde}); el mes más antiguo puede estar incompleto.</div>
+  <button class="btn btn-secondary btn-full" style="margin-top:6px" onclick="${fn}(true)">Ver historial completo (más lento)</button>`;
+}
+function escHtml(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
+// Todos los productos (también inactivos), leídos una sola vez por sesión.
+let _prodsTodosCache = null;
+async function productosEnMemoria() {
+  if (typeof _todosProdsAdmin !== 'undefined' && _todosProdsAdmin.length) return _todosProdsAdmin;
+  if (_prodsTodosCache) return _prodsTodosCache;
+  const sn = await getDocs(collection(db, 'productos'));
+  _prodsTodosCache = sn.docs.map(d => ({ id: d.id, ...d.data() }));
+  return _prodsTodosCache;
+}
+function fechaDMY(iso) { return /^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? iso.split('-').reverse().join('-') : (iso || ''); }
 
 // ═══════════════════════════
 // ESTADO GLOBAL
@@ -1569,6 +1608,7 @@ window.selSucursal = async function(s) {
   await cargarProductos();
   await verificarCaja();
   cargarStockLista();
+  reintentarExportacionesPendientes(); // v2.1: cierres que no alcanzaron a llegar a la planilla
 };
 
 // ═══════════════════════════
@@ -4309,6 +4349,31 @@ async function verificarCaja() {
     mostrarResumenCaja(snap.docs[0].data());
     await cargarUltimasVentas();
   }
+  await avisarCajaAnterior();
+}
+
+// v2.1: si en esta sucursal quedó abierta una caja de un día anterior (por ejemplo,
+// pasó la medianoche sin cerrar), se avisa aquí mismo con el botón para cerrarla.
+async function avisarCajaAnterior() {
+  const wrap = document.getElementById('avisoCajaAnterior');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  try {
+    const hoy = fechaLocalHoy();
+    const sn = await getDocs(query(collection(db, 'cajas'), where('sucursal', '==', sucursal), where('estado', '==', 'abierta')));
+    const viejas = sn.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => c.fecha !== hoy);
+    if (!viejas.length) return;
+    wrap.innerHTML = `
+    <div class="card" style="border:1px solid #f0ad4e;background:#fffaf0">
+      <div class="card-title" style="color:#8a6416">⚠️ Caja anterior sin cerrar</div>
+      <p style="font-size:12px;color:#8a6416;margin-bottom:10px">Quedó abierta una caja de un día anterior. Ciérrala con el conteo de ese turno para que su cierre llegue a la planilla.</p>
+      ${viejas.map(c => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:0.5px solid #f0d9a0">
+          <div style="font-size:13px"><b>${escHtml(fechaDMY(c.fecha))}</b> <span style="color:#888;font-size:11px">(${escHtml(c.usuario)} · $${parseInt(c.totalVentas || 0).toLocaleString('es-CL')} vendidos)</span></div>
+          <button class="btn-sm btn-edit" onclick="cerrarCaja('${c.id}')">Cerrar con arqueo</button>
+        </div>`).join('')}
+    </div>`;
+  } catch (e) { console.error('No se pudo revisar cajas anteriores:', e); }
 }
 
 // ═══════════════════════════
@@ -4745,6 +4810,7 @@ window.confirmarCierreCiego = async function() {
       document.getElementById('cardCajaAbierta').classList.add('hidden');
     } else {
       renderCajasSinCerrar();
+      avisarCajaAnterior();
     }
     showToast('✅ Caja cerrada correctamente');
 
@@ -4765,7 +4831,7 @@ window.confirmarCierreCiego = async function() {
           tipo: 'descuadre_caja',
           filaCaja: {
             sucursal: cajaDataFinal.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana',
-            fecha: fechaLocalHoy().split('-').reverse().join('-'),
+            fecha: fechaDMY(cajaDataFinal.fecha || fechaLocalHoy()), // v2.1: la fecha de la caja, no la de hoy
             usuario: cajaDataFinal.usuario || usuario.email,
             difTotal, difEfectivo, notaDescuadre
           }
@@ -4798,7 +4864,7 @@ window.selRepTab = function(btn, id) {
   }
   if (id === 'repStock')       cargarValorStock();
   if (id === 'repMerma')       cargarMerma();
-  if (id === 'repCaja') { cargarEvaluacionesCaja(); renderCajasSinCerrar(); }
+  if (id === 'repCaja') { cargarEvaluacionesCaja(); renderCajasSinCerrar(); renderCierresSinExportar(); }
   if (id === 'repSolicitudes') cargarSolicitudesAnulacion();
 };
 
@@ -4971,21 +5037,22 @@ window.toggleDiaMerma = function(diaKey) {
   if (icon) icon.textContent = abierto ? '▸' : '▾';
 };
 
-window.cargarMerma = async function() {
+window.cargarMerma = async function(completo) {
   const btn = document.getElementById('btnCargarMerma');
   const el  = document.getElementById('mermaResult');
   btn.disabled = true; btn.textContent = 'Cargando...';
   el.innerHTML = '';
   try {
-    const snap = await getDocs(query(collection(db, 'merma'), where('sucursal', '==', sucursal)));
-    if (snap.empty) { el.innerHTML = '<div class="empty">Sin registros de merma</div>'; btn.disabled = false; btn.textContent = 'Cargar registros'; return; }
+    // v2.1: por defecto solo los últimos DIAS_HISTORIAL días
+    const docsMerma = await leerHistorial('merma', 'fecha', completo === true);
+    if (!docsMerma.length) { el.innerHTML = '<div class="empty">Sin registros de merma' + (completo === true ? '' : ` en los últimos ${DIAS_HISTORIAL} días`) + '</div>' + botonHistorial('cargarMerma', completo); btn.disabled = false; btn.textContent = 'Cargar registros'; return; }
 
-    const mermas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const mermas = docsMerma.map(d => ({ id: d.id, ...d.data() }));
 
     // Mapa productoId → área, para poder mostrar el resumen "PAN $X · BOL $Y" por día y por mes
-    const prodSnap = await getDocs(collection(db, 'productos'));
+    // (v2.1: usa los productos ya leídos en esta sesión)
     const idToArea = {};
-    prodSnap.docs.forEach(d => { idToArea[d.id] = normalizarArea(d.data().area) || 'Otros'; });
+    (await productosEnMemoria()).forEach(p => { idToArea[p.id] = normalizarArea(p.area) || 'Otros'; });
     const areaInfo = a => AREAS.find(x => x.id === a) || { id: a, nombre: a, emoji: '📦' };
 
     function resumenPorArea(items) {
@@ -5076,7 +5143,7 @@ window.cargarMerma = async function() {
             `<div class="resumen-row"><span>${mot}</span><span>${cant} u.</span></div>`
           ).join('')}
         </div>` : '')
-      + `<div class="card"><div class="resumen-row total"><span>💸 Total merma acumulada</span><span style="color:#e74c3c">−$${parseInt(totalGeneral).toLocaleString('es-CL')}</span></div></div>`;
+      + `<div class="card"><div class="resumen-row total"><span>💸 Total merma acumulada</span><span style="color:#e74c3c">−$${parseInt(totalGeneral).toLocaleString('es-CL')}</span></div></div>` + botonHistorial('cargarMerma', completo);
   } catch(e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
   btn.disabled = false; btn.textContent = 'Cargar registros';
 };
@@ -5216,16 +5283,17 @@ window.toggleDiaCaja = function(diaKey) {
   if (icon) icon.textContent = abierto ? '▸' : '▾';
 };
 
-window.cargarEvaluacionesCaja = async function() {
+window.cargarEvaluacionesCaja = async function(completo) {
   const btn = document.getElementById('btnCargarEvalCaja');
   const el  = document.getElementById('evalCajaResult');
   btn.disabled = true; btn.textContent = 'Cargando...';
   el.innerHTML = '';
   try {
-    const snap = await getDocs(query(collection(db, 'evaluacion_caja'), where('sucursal', '==', sucursal)));
-    if (snap.empty) { el.innerHTML = '<div class="empty">Sin evaluaciones de caja</div>'; btn.disabled = false; btn.textContent = 'Cargar evaluaciones'; return; }
+    // v2.1: por defecto solo los últimos DIAS_HISTORIAL días (por fecha de cierre)
+    const docsEval = await leerHistorial('evaluacion_caja', 'cierre', completo === true);
+    if (!docsEval.length) { el.innerHTML = '<div class="empty">Sin evaluaciones de caja' + (completo === true ? '' : ` en los últimos ${DIAS_HISTORIAL} días`) + '</div>' + botonHistorial('cargarEvaluacionesCaja', completo); btn.disabled = false; btn.textContent = 'Cargar evaluaciones'; return; }
 
-    const evals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const evals = docsEval.map(d => ({ id: d.id, ...d.data() }));
 
     // Agrupar por mes → día (normalizando fechas antiguas que hayan quedado en otro formato)
     const meses = {};
@@ -5332,6 +5400,7 @@ window.cargarEvaluacionesCaja = async function() {
         </div>
       </div>`;
     }).join('');
+    el.insertAdjacentHTML('beforeend', botonHistorial('cargarEvaluacionesCaja', completo));
   } catch(e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
   btn.disabled = false; btn.textContent = 'Cargar evaluaciones';
 };
@@ -5467,16 +5536,21 @@ window.guardarCorreccionEval = async function() {
 // ══════════════════════════════════
 // SOLICITUDES DE ANULACIÓN (ADMIN)
 // ══════════════════════════════════
-window.cargarSolicitudesAnulacion = async function() {
+window.cargarSolicitudesAnulacion = async function(completo) {
   const btn = document.getElementById('btnCargarSolicitudes');
   const el  = document.getElementById('solicitudesResult');
   btn.disabled = true; btn.textContent = 'Cargando...';
   el.innerHTML = '';
   try {
-    const snap = await getDocs(query(collection(db, 'solicitudes_anulacion'), where('sucursal', '==', sucursal)));
-    if (snap.empty) { el.innerHTML = '<div class="empty">Sin solicitudes</div>'; btn.disabled = false; btn.textContent = 'Cargar solicitudes'; return; }
+    // v2.1: las pendientes siempre se muestran; las ya resueltas, solo de los últimos DIAS_HISTORIAL días
+    const vistos = {};
+    const docsSol = [];
+    const agregar = arr => arr.forEach(d => { if (!vistos[d.id] && d.data().sucursal === sucursal) { vistos[d.id] = 1; docsSol.push(d); } });
+    agregar((await getDocs(query(collection(db, 'solicitudes_anulacion'), where('estado', '==', 'pendiente')))).docs);
+    agregar(await leerHistorial('solicitudes_anulacion', 'fechaSolicitud', completo === true));
+    if (!docsSol.length) { el.innerHTML = '<div class="empty">Sin solicitudes' + (completo === true ? '' : ` en los últimos ${DIAS_HISTORIAL} días`) + '</div>' + botonHistorial('cargarSolicitudesAnulacion', completo); btn.disabled = false; btn.textContent = 'Cargar solicitudes'; return; }
 
-    const solicitudes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const solicitudes = docsSol.map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.fechaSolicitud?.seconds || 0) - (a.fechaSolicitud?.seconds || 0));
 
     const estadoLabel = { pendiente: '⏳ Pendiente', aprobada: '✅ Aprobada', rechazada: '❌ Rechazada' };
@@ -5507,6 +5581,7 @@ window.cargarSolicitudesAnulacion = async function() {
           ${acciones}
         </div>`;
     }).join('');
+    el.insertAdjacentHTML('beforeend', botonHistorial('cargarSolicitudesAnulacion', completo));
   } catch(e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
   btn.disabled = false; btn.textContent = 'Cargar solicitudes';
 };
@@ -5574,6 +5649,17 @@ window.aprobarSolicitud = async function(solicitudId) {
     // 4. Cerrar la solicitud
     await updateDoc(solicitudRef, { estado: 'aprobada', resueltoPor: usuario.email, fechaResolucion: Timestamp.now() });
 
+    // v2.1: si la caja ya estaba cerrada, su resumen se rehace sin la venta anulada
+    if (venta.cajaId) {
+      try {
+        const cajaRes = await getDoc(doc(db, 'cajas', venta.cajaId));
+        if (cajaRes.exists() && cajaRes.data().estado === 'cerrada') {
+          const vs = await getDocs(query(collection(db, 'ventas'), where('cajaId', '==', venta.cajaId)));
+          await guardarResumenCaja(venta.cajaId, cajaRes.data(), vs.docs);
+        }
+      } catch (e) { console.error('No se pudo actualizar el resumen de la caja', e); }
+    }
+
     await cargarSolicitudesAnulacion();
     if (cajaId) await cargarUltimasVentas();
     showToast('✅ Venta anulada correctamente');
@@ -5624,9 +5710,14 @@ async function exportarASheets(cajaDocId, cajaData, silencioso = false) {
       query(collection(db, 'ventas'), where('cajaId', '==', cajaDocId))
     );
 
+    // v2.1: resumen de la caja (lo usarán los informes y Sistema Fën). Si falla, no detiene la exportación.
+    await guardarResumenCaja(cajaDocId, cajaData, ventasSnap.docs);
+
     if (ventasSnap.empty) {
       if (!silencioso) console.log('Sin ventas para exportar.');
-      return;
+      // v2.1: una caja sin ventas no tiene nada que enviar; se marca para que no figure como pendiente
+      await updateDoc(doc(db, 'cajas', cajaDocId), { exportadaSheets: true, sinVentas: true, exportPendiente: false });
+      return true;
     }
 
     // 2. Armar filas: una por línea de venta
@@ -5695,27 +5786,190 @@ async function exportarASheets(cajaDocId, cajaData, silencioso = false) {
       filaCaja
     };
 
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' }, // text/plain evita el preflight CORS con Apps Script
-      body: JSON.stringify(payload)
-    });
+    // v2.1: hasta 3 intentos. El script reconoce un cierre que ya escribió (por su ID de caja)
+    // y no lo duplica, así que reintentar siempre es seguro.
+    let resultado = null, ultimoError = null;
+    for (let intento = 1; intento <= 3; intento++) {
+      try {
+        const resp = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' }, // text/plain evita el preflight CORS con Apps Script
+          body: JSON.stringify(payload)
+        });
+        resultado = await resp.json();
+        if (resultado && resultado.ok) break;
+        ultimoError = new Error((resultado && (resultado.error || resultado.msg)) || 'Respuesta inesperada del servidor');
+        if (resultado && ['sesion', 'permiso', 'formato'].includes(resultado.code)) break; // reintentar no lo arregla
+      } catch (e) { ultimoError = e; }
+      resultado = null;
+      if (intento < 3) await new Promise(r => setTimeout(r, 1500 * intento));
+    }
 
-    const resultado = await resp.json();
-
-    if (resultado.ok) {
+    if (resultado && resultado.ok) {
       if (!silencioso) console.log(`✅ Exportación a Sheets exitosa (${filas.length} líneas)`);
       // Marcar la caja como exportada en Firestore
-      await updateDoc(doc(db, 'cajas', cajaDocId), { exportadaSheets: true, exportFecha: Timestamp.now() });
-    } else {
-      throw new Error(resultado.error || 'Respuesta inesperada del servidor');
+      await updateDoc(doc(db, 'cajas', cajaDocId), { exportadaSheets: true, exportFecha: Timestamp.now(), exportPendiente: false });
+      return true;
     }
+    throw ultimoError || new Error('Respuesta inesperada del servidor');
 
   } catch (err) {
     console.error('❌ Error exportando a Sheets:', err);
-    if (!silencioso) alert('⚠️ La caja se cerró correctamente, pero hubo un error al exportar a Google Sheets.\nPor favor revisa la consola o vuelve a intentarlo manualmente.');
+    // v2.1: queda marcada como pendiente; se reintenta sola al abrir la caja y aparece
+    // en Reportes > Eval. caja > "Cierres sin pasar a planilla".
+    try { await updateDoc(doc(db, 'cajas', cajaDocId), { exportPendiente: true, exportError: String(err && err.message || err).slice(0, 200), exportIntento: Timestamp.now() }); } catch (e2) {}
+    if (!silencioso) alert('⚠️ La caja se cerró correctamente, pero el cierre no alcanzó a llegar a la planilla.\n\nQuedó guardado y se volverá a enviar solo la próxima vez que se abra la caja. También puedes reenviarlo en Reportes > Eval. caja.');
+    return false;
   }
 }
+
+// ─── v2.1: resumen de cada caja (por producto, área y medio de pago) ───
+// Se guarda en resumenes_caja/{cajaId}. Con él, los informes del mes leen unos
+// pocos resúmenes en vez de miles de ventas, y Sistema Fën obtiene las ventas sin exportar.
+async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
+  try {
+    const prods = await productosEnMemoria();
+    const infoProd = {};
+    prods.forEach(p => { infoProd[p.id] = { area: normalizarArea(p.area) || 'Otros', idRecetaFen: p.idRecetaFen || '' }; });
+    const neto = b => Math.round((parseInt(b) || 0) / 1.19);
+    const r = {
+      cajaId: cajaDocId,
+      sucursal: cajaData.sucursal || '',
+      fecha: normalizarFechaCaja(cajaData.fecha) || cajaData.fecha || '',
+      nVentas: 0, nAnuladas: 0, totalBruto: 0, totalNeto: 0,
+      porMedio: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 },
+      porArea: {}, porProducto: {},
+      version: 1, actualizado: Timestamp.now()
+    };
+    r.mes = (r.fecha || '').slice(0, 7);
+    ventasDocs.forEach(d => {
+      const v = d.data();
+      if (v.anulada === true) { r.nAnuladas++; return; }
+      r.nVentas++;
+      const total = parseInt(v.total) || 0;
+      r.totalBruto += total;
+      if (Array.isArray(v.pagos) && v.pagos.length) {
+        v.pagos.forEach(p => { if (p && p.medio) r.porMedio[p.medio] = (r.porMedio[p.medio] || 0) + (parseInt(p.monto) || 0); });
+      } else if (v.medioPago) {
+        r.porMedio[v.medioPago] = (r.porMedio[v.medioPago] || 0) + total;
+      }
+      (v.lineas || []).forEach(l => {
+        const key = l.id || ('sin-id:' + (l.nombre || ''));
+        const info = infoProd[l.id] || { area: 'Otros', idRecetaFen: '' };
+        const bruto = parseInt(l.total) || 0, cant = parseFloat(l.cantidad) || 0;
+        const pp = r.porProducto[key] || (r.porProducto[key] = { nombre: l.nombre || '', area: info.area, idRecetaFen: info.idRecetaFen, cantidad: 0, bruto: 0, neto: 0 });
+        pp.cantidad += cant; pp.bruto += bruto; pp.neto += neto(bruto);
+        const pa = r.porArea[info.area] || (r.porArea[info.area] = { cantidad: 0, bruto: 0, neto: 0 });
+        pa.cantidad += cant; pa.bruto += bruto; pa.neto += neto(bruto);
+      });
+    });
+    r.totalNeto = neto(r.totalBruto);
+    // Las claves de mapas en Firestore no admiten algunos caracteres: el ID de producto ya es seguro;
+    // los nombres sin ID se codifican.
+    const porProducto = {};
+    Object.keys(r.porProducto).forEach(k => { porProducto[k.startsWith('sin-id:') ? 'sin-id-' + encodeURIComponent(k.slice(7)).replace(/[.%]/g, '_') : k] = r.porProducto[k]; });
+    r.porProducto = porProducto;
+    await setDoc(doc(db, 'resumenes_caja', cajaDocId), r);
+    return true;
+  } catch (e) {
+    console.error('No se pudo guardar el resumen de la caja', cajaDocId, e);
+    return false;
+  }
+}
+
+// v2.1: reintenta en segundo plano los cierres que quedaron pendientes de llegar a la planilla.
+let _reintentoEnCurso = false;
+async function reintentarExportacionesPendientes() {
+  if (_reintentoEnCurso || esStockViewer) return;
+  _reintentoEnCurso = true;
+  try {
+    const sn = await getDocs(query(collection(db, 'cajas'), where('exportPendiente', '==', true)));
+    for (const d of sn.docs) {
+      const c = d.data();
+      if (c.estado !== 'cerrada' || c.exportadaSheets === true) continue;
+      await exportarASheets(d.id, c, true);
+    }
+  } catch (e) { console.error('Reintento de exportaciones pendientes:', e); }
+  _reintentoEnCurso = false;
+}
+
+// v2.1: Reportes > Eval. caja > "Cierres sin pasar a planilla" (cajas cerradas de los
+// últimos DIAS_HISTORIAL días que no tienen la marca de exportadas).
+window.renderCierresSinExportar = async function() {
+  const wrap = document.getElementById('cierresSinExportarWrap');
+  if (!wrap || !esAdmin) return;
+  wrap.innerHTML = '';
+  try {
+    const sn = await getDocs(query(collection(db, 'cajas'), where('apertura', '>=', tsHaceDias(DIAS_HISTORIAL))));
+    const pendientes = sn.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => c.estado === 'cerrada' && c.exportadaSheets !== true && (parseInt(c.nVentas) || 0) > 0)
+      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+    if (!pendientes.length) return;
+    wrap.innerHTML = `
+    <div class="card" style="border:1px solid #e0a3a3;background:#fff6f6">
+      <div class="card-title" style="color:#8a2b1e">📤 Cierres sin pasar a planilla</div>
+      <p style="font-size:12px;color:#8a2b1e;margin-bottom:10px">Estas cajas están cerradas en el sistema, pero su cierre no llegó a la planilla de caja. Reenviarlas no duplica filas: si ya estaban, no se vuelven a escribir.</p>
+      ${pendientes.map(c => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:0.5px solid #f0c9c9">
+          <div style="font-size:13px"><b>${escHtml(fechaDMY(c.fecha))}</b> <span style="color:#888;font-size:11px">(${escHtml(c.sucursal)} · ${escHtml(c.usuario)} · $${parseInt(c.totalVentas || 0).toLocaleString('es-CL')})${c.exportError ? ' · ' + escHtml(c.exportError) : ''}</span></div>
+          <button class="btn-sm btn-edit" onclick="reexportarCaja('${c.id}', this)">Reenviar</button>
+        </div>`).join('')}
+      <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="reexportarTodas(this)">Reenviar todas</button>
+    </div>`;
+  } catch (e) { wrap.innerHTML = `<div class="empty">Error buscando cierres sin exportar: ${e.message}</div>`; }
+};
+
+window.reexportarCaja = async function(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+  let ok = false;
+  try {
+    const sn = await getDoc(doc(db, 'cajas', id));
+    ok = sn.exists() ? await exportarASheets(id, sn.data(), true) : false;
+  } catch (e) { console.error(e); }
+  showToast(ok ? '✅ Cierre enviado a la planilla' : '⚠️ No se pudo enviar; intenta de nuevo en un rato');
+  renderCierresSinExportar();
+};
+
+window.reexportarTodas = async function(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+  let ok = 0, mal = 0;
+  let sn = { docs: [] };
+  try { sn = await getDocs(query(collection(db, 'cajas'), where('apertura', '>=', tsHaceDias(DIAS_HISTORIAL)))); } catch (e) { mal++; console.error(e); }
+  for (const d of sn.docs) {
+    const c = d.data();
+    if (c.estado !== 'cerrada' || c.exportadaSheets === true || !((parseInt(c.nVentas) || 0) > 0)) continue;
+    (await exportarASheets(d.id, c, true)) ? ok++ : mal++;
+  }
+  showToast(`Enviados: ${ok}${mal ? ' · con error: ' + mal : ''}`);
+  renderCierresSinExportar();
+};
+
+// v2.1: genera los resúmenes que falten de un mes (para meses anteriores a esta versión).
+// Lee una vez las ventas de las cajas que no tienen resumen.
+window.generarResumenesMes = async function() {
+  const inp = document.getElementById('resumenesMes');
+  const out = document.getElementById('resumenesMesResultado');
+  const mes = inp && inp.value; // YYYY-MM
+  if (!mes) { alert('Elige un mes'); return; }
+  out.textContent = 'Revisando cajas del mes...';
+  try {
+    const [y, m] = mes.split('-').map(Number);
+    const desde = Timestamp.fromDate(new Date(y, m - 1, 1, 0, 0, 0));
+    const hasta = Timestamp.fromDate(new Date(y, m, 1, 0, 0, 0));
+    const sn = await getDocs(query(collection(db, 'cajas'), where('apertura', '>=', desde), where('apertura', '<', hasta)));
+    let hechos = 0, yaEstaban = 0;
+    for (const d of sn.docs) {
+      const c = d.data();
+      if (c.estado !== 'cerrada') continue;
+      const ya = await getDoc(doc(db, 'resumenes_caja', d.id));
+      if (ya.exists()) { yaEstaban++; continue; }
+      const ventas = await getDocs(query(collection(db, 'ventas'), where('cajaId', '==', d.id)));
+      if (await guardarResumenCaja(d.id, c, ventas.docs)) hechos++;
+      out.textContent = `Generando... ${hechos} listos`;
+    }
+    out.textContent = `Listo: ${hechos} resúmenes nuevos, ${yaEstaban} ya existían.`;
+  } catch (e) { out.textContent = 'Error: ' + e.message; }
+};
 
 /**
  * Determina el turno según la hora de la venta.
@@ -5767,6 +6021,7 @@ async function programarRespaldoMedianoche() {
           await exportarASheets(cajaDoc.id, cajaDataFinal, true);
         }
       }
+      await reintentarExportacionesPendientes(); // v2.1
     } catch (err) {
       console.error('❌ Error en respaldo automático de medianoche:', err);
     }
