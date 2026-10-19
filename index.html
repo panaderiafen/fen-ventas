@@ -1249,7 +1249,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7eYgaVGK5NBFc
 // Script independiente, exclusivo para el envío mensual de ventas hacia fën-producción (no comparte planilla ni lógica con el de caja/merma de arriba)
 const APPS_SCRIPT_URL_VENTAS_FEN = 'https://script.google.com/macros/s/AKfycbxeA_xhOm83PlYgLzv7wP5N6AM-ogfrfTClrs91JzFWgi5HCSgIRwgzAuGIbd6WsukrNQ/exec';
 
-// ─── v2.1.1 · v2.0.0 (seguridad): toda llamada a los dos Apps Script de la caja lleva
+// ─── v2.2.0 · v2.0.0 (seguridad): toda llamada a los dos Apps Script de la caja lleva
 // el token de sesión de Firebase de quien está conectada, y una clave única
 // (idem) para que un envío repetido no se guarde dos veces. Si Google desvía
 // el POST (llega como GET sin datos), se reintenta por GET con los mismos datos.
@@ -4100,6 +4100,90 @@ async function marcarProductosConVenta(lineas) {
   }
 }
 
+// ─── v2.2.0: tarjeta, lotes y agotado en cada venta ───────────────────────────
+// Antes de guardar la venta se leen los mismos documentos de stock que ya se leían para
+// descontar (uno por producto) y se decide el descuento con la misma lógica de siempre
+// (permanente, lote elegido o FIFO dentro de la tarjeta). Así cada línea guarda en qué
+// tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
+// Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
+// como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
+const CAJA_VERSION = '2.2.0';
+function horaAgotadoCaja(ts) {
+  const d = ts && ts.toDate ? ts.toDate() : new Date();
+  return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+async function planearStockVenta(lineas, fechaVenta) {
+  try {
+    const hoyKey = fechaKeyHoy();
+    const hora = horaAgotadoCaja(fechaVenta);
+    const docs = {};
+    const plan = [];
+    for (const l of lineas) {
+      const prod = productos.find(p => p.id === l.id);
+      if (prod && prod.controlStock === false) { plan.push(null); continue; }
+      const esPerm = prod && prod.autoEliminar === false;
+      const stockKey = `${sucursal}_${l.id}`;
+      let d = docs[stockKey];
+      if (!d) {
+        const ref = doc(db, 'stock', stockKey);
+        const sn = await getDoc(ref);
+        const data = sn.exists() ? (sn.data() || {}) : null;
+        d = docs[stockKey] = { ref, existe: !!data, entradas: Object.assign({}, data && data.entradas), agotado: Object.assign({}, data && data.agotado) };
+      }
+      const p = { productoId: l.id, stockRef: d.ref, escrituras: [], campos: esPerm ? {} : { tarjeta: l.categoriaStock || 'hoy' } };
+      plan.push(p);
+      if (!d.existe) continue;
+      const entradas = d.entradas;
+      if (esPerm) {
+        const qtyActual = entradas['permanente'] || 0;
+        p.escrituras.push({ key: 'permanente', nuevo: Math.max(0, qtyActual - l.cantidad), cantidad: Math.min(qtyActual, l.cantidad) });
+      } else if (l.loteFecha) {
+        const qtyActual = entradas[l.loteFecha] || 0;
+        p.escrituras.push({ key: l.loteFecha, nuevo: Math.max(0, qtyActual - l.cantidad), cantidad: Math.min(qtyActual, l.cantidad) });
+      } else {
+        const cat = l.categoriaStock || 'hoy';
+        const entradasCat = Object.entries(entradas)
+          .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === cat)
+          .sort(([a], [b]) => a.localeCompare(b));
+        let toDeduct = l.cantidad;
+        for (const [key, qty] of entradasCat) {
+          if (toDeduct <= 0) break;
+          const deducir = Math.min(qty, toDeduct);
+          p.escrituras.push({ key, nuevo: Math.max(0, qty - deducir), cantidad: deducir });
+          toDeduct -= deducir;
+        }
+      }
+      for (const e of p.escrituras) {
+        const antes = entradas[e.key] || 0;
+        entradas[e.key] = e.nuevo;
+        if (esPerm) continue;
+        if (e.cantidad > 0) { p.campos.lotes = p.campos.lotes || {}; p.campos.lotes[e.key] = (p.campos.lotes[e.key] || 0) + e.cantidad; }
+        // El lote que entró HOY llega a 0 con esta venta: se anota la hora en la misma escritura
+        if (e.key === hoyKey && antes > 0 && e.nuevo === 0) {
+          if (d.agotado[hoyKey]) { e.extra = { [`reagotado.${hoyKey}`]: hora }; p.campos.reagotado = hora; }
+          else { e.extra = { [`agotado.${hoyKey}`]: hora }; d.agotado[hoyKey] = hora; p.campos.agotado = hora; }
+        }
+      }
+    }
+    return plan;
+  } catch (e) {
+    console.error('v2.2.0: no se pudo leer el stock antes de la venta; sigue como en la v2.1.1', e);
+    return null;
+  }
+}
+// Agrega tarjeta (y lotes, agotado) a las líneas que se guardan en ventas. Solo productos con stock.
+function agregarTarjetaYLotes(lineasVenta, lineasPedido, plan) {
+  try {
+    lineasVenta.forEach((vl, i) => {
+      if (plan) { if (plan[i]) Object.assign(vl, plan[i].campos); return; }
+      const l = lineasPedido[i] || {};
+      const prod = productos.find(p => p.id === l.id);
+      if (prod && (prod.controlStock === false || prod.autoEliminar === false)) return;
+      vl.tarjeta = l.categoriaStock || 'hoy';
+    });
+  } catch (e) { console.error('v2.2.0: no se pudo anotar la tarjeta', e); }
+}
+
 window.registrarVenta = async function() {
   if (pedidoLineas.length === 0) return;
   if (!cajaId) { alert('Debes abrir la caja primero'); return; }
@@ -4129,6 +4213,9 @@ window.registrarVenta = async function() {
     ...pagoData,
     cajaId
   };
+  // v2.2.0: tarjeta y lotes de cada línea (mismas lecturas de stock, antes de guardar)
+  const planStock = await planearStockVenta(pedidoLineas, venta.fecha);
+  agregarTarjetaYLotes(venta.lineas, pedidoLineas, planStock);
   try {
     const ventaRef = await addDoc(collection(db, 'ventas'), venta);
     await marcarProductosConVenta(venta.lineas);
@@ -4136,6 +4223,16 @@ window.registrarVenta = async function() {
     await incrementarTotalesCaja(pagoData, total);
     // v2.1.1: se anota de qué lote salió cada unidad, para devolverla ahí si la venta se anula
     const descontados = [];
+    if (planStock) {
+      // v2.2.0: el mismo descuento de siempre, ya decidido antes de guardar la venta
+      for (const p of planStock) {
+        if (!p) continue;
+        for (const e of p.escrituras) {
+          await updateDoc(p.stockRef, Object.assign({ [`entradas.${e.key}`]: e.nuevo }, e.extra || {}));
+          descontados.push({ productoId: p.productoId, key: e.key, cantidad: e.cantidad });
+        }
+      }
+    } else {
     // Descontar stock — FIFO por fechas (más antiguo primero dentro de la categoría)
     for (const l of pedidoLineas) {
       const prod = productos.find(p => p.id === l.id);
@@ -4171,6 +4268,7 @@ window.registrarVenta = async function() {
           toDeduct -= deducir;
         }
       }
+    }
     }
     await registrarMovimientoVenta(ventaRef.id, descontados);
     ultimaVentaRegistrada = venta;
@@ -4221,6 +4319,7 @@ window.cerrarYCobrarMesa = async function() {
     cajaId,
     origenMesa: mesaActivaId, mesaNombre: mesaActivaNombre
   };
+  agregarTarjetaYLotes(venta.lineas, pedidoLineas, null); // v2.2.0
   try {
     await addDoc(collection(db, 'ventas'), venta);
     await marcarProductosConVenta(venta.lineas);
@@ -5628,6 +5727,14 @@ async function devolverStockVenta(ventaId, venta) {
   for (const l of (venta.lineas || [])) {
     const prod = productos.find(p => p.id === l.id);
     if (prod && prod.controlStock === false) continue; // sin control de stock, nada que devolver
+    if (l.lotes && typeof l.lotes === 'object' && Object.keys(l.lotes).length) {
+      // v2.2.0: la línea trae los lotes exactos de los que salió
+      for (const [k, c] of Object.entries(l.lotes)) {
+        try { await updateDoc(doc(db, 'stock', `${suc}_${l.id}`), { [`entradas.${k}`]: increment(c) }); }
+        catch (e) { sinDevolver.push(`${l.nombre} × ${c}`); }
+      }
+      continue;
+    }
     const key = (prod && prod.autoEliminar === false) ? 'permanente' : (l.loteFecha || '');
     if (!key) { sinDevolver.push(`${l.nombre} × ${l.cantidad}`); continue; }
     try {
@@ -5888,6 +5995,8 @@ async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
       porArea: {}, porProducto: {},
       version: 1, actualizado: Timestamp.now()
     };
+    r.versionCaja = '2.2.0'; // v2.2.0 (formato del resumen: porTarjeta, agotadoHoy)
+    const tarj = {}, agot = {}, reagot = {}; // v2.2.0
     r.mes = (r.fecha || '').slice(0, 7);
     ventasDocs.forEach(d => {
       const v = d.data();
@@ -5908,9 +6017,28 @@ async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
         pp.cantidad += cant; pp.bruto += bruto; pp.neto += neto(bruto);
         const pa = r.porArea[info.area] || (r.porArea[info.area] = { cantidad: 0, bruto: 0, neto: 0 });
         pa.cantidad += cant; pa.bruto += bruto; pa.neto += neto(bruto);
+        // v2.2.0: por tarjeta y hora en que se agotó el lote de hoy
+        if (l.tarjeta) {
+          const t = (tarj[key] = tarj[key] || {});
+          const tt = t[l.tarjeta] || (t[l.tarjeta] = { cant: 0, monto: 0 });
+          tt.cant += cant; tt.monto += bruto;
+        }
+        if (l.agotado && (!agot[key] || l.agotado < agot[key])) agot[key] = l.agotado;
+        if (l.reagotado && (!reagot[key] || l.reagotado > reagot[key])) reagot[key] = l.reagotado;
       });
     });
     r.totalNeto = neto(r.totalBruto);
+    // v2.2.0: porTarjeta suma lo mismo que cantidad y bruto; lo vendido sin tarjeta anotada va a "sinDato"
+    Object.keys(tarj).forEach(k => {
+      const pp = r.porProducto[k]; if (!pp) return;
+      let sc = 0, sm = 0;
+      Object.values(tarj[k]).forEach(x => { sc += x.cant; sm += x.monto; });
+      const fc = Math.round((pp.cantidad - sc) * 1000) / 1000, fm = pp.bruto - sm;
+      if (fc || fm) tarj[k].sinDato = { cant: fc, monto: fm };
+      pp.porTarjeta = tarj[k];
+    });
+    Object.keys(agot).forEach(k => { if (r.porProducto[k]) r.porProducto[k].agotadoHoy = agot[k]; });
+    Object.keys(reagot).forEach(k => { if (r.porProducto[k]) r.porProducto[k].reagotadoHoy = reagot[k]; });
     // Las claves de mapas en Firestore no admiten algunos caracteres: el ID de producto ya es seguro;
     // los nombres sin ID se codifican.
     const porProducto = {};
