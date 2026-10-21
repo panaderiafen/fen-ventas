@@ -317,6 +317,27 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 /* BOTÓN CARGANDO */
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* v2.3.0 · Productos (solo para mirar) y Pedir producto */
+.pp-ayuda { font-size: 12px; color: #666; line-height: 1.45; }
+.pp-sub { font-size: 12px; font-weight: 700; color: #003a79; margin: 16px 0 6px; }
+.pp-version { font-size: 11px; color: #999; margin-top: 12px; text-align: right; }
+.pp-error { color: #c0392b; font-size: 12px; margin-top: 8px; }
+.pp-ok { color: #1D7A5F; font-size: 12px; margin-top: 8px; }
+.pp-modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+.pp-ped, .pp-prod { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 0.5px solid #eee; font-size: 12px; }
+.pp-ped-txt, .pp-prod-txt { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.pp-ped-resp, .pp-prod-meta { color: #777; font-size: 11px; margin-top: 2px; overflow-wrap: anywhere; }
+.pp-prod-nombre { font-weight: 600; color: #222; }
+.pp-prod-precio { font-weight: 700; color: #003a79; white-space: nowrap; }
+.pp-chip { flex-shrink: 0; align-self: flex-start; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 10px; white-space: nowrap; }
+.pp-pend { background: #FFF4D6; color: #8a6416; }
+.pp-apr { background: #E3F3EC; color: #1D7A5F; }
+.pp-rech { background: #fdeceb; color: #c0392b; }
+.pp-gris { background: #f0f0f0; color: #777; }
+.pp-sinarea { background: #fdeceb; color: #c0392b; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-top: 10px; }
+.pp-plegar { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
+/* v2.3.0: las pestañas con su nombre (Panadería, Reventa…) se desplazan dentro de la tarjeta, sin ensanchar la pantalla */
+@media (max-width: 800px) { .venta-left, .venta-right { width: 100%; } }
 .hidden { display: none !important; }
 </style>
 </head>
@@ -421,6 +442,10 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
             <button class="btn-sm" id="btnVistaGeneral" onclick="toggleVistaGeneral()"
                     style="white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px">
               📋 Vista general
+            </button>
+            <button class="btn-sm" id="btnPedirProducto" onclick="abrirPedirProducto()"
+                    style="white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px">
+              Pedir producto
             </button>
           </div>
 
@@ -666,126 +691,22 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     </div>
   </div>
 
-  <!-- PRODUCTOS -->
+  <!-- PRODUCTOS · v2.3.0: se crean y se cambian solo en Sistema Fën → Catálogo; aquí se piden -->
   <div class="section" id="sec-productos">
 
-    <!-- Formulario agregar/editar producto -->
-    <!-- Recetas sin producto en B2C — visible a cualquier cuenta, no solo admin -->
-    <div class="card">
-      <div class="card-title" style="margin-bottom:4px">🆕 Recetas sin producto en B2C</div>
-      <div style="font-size:11px;color:#888;margin-bottom:10px">Liberadas para venta desde producción, pero todavía no existen como producto acá. Crear uno igual requiere definir precio, control de stock, etc. — nada se crea solo.</div>
-      <button class="btn btn-secondary btn-full" id="btnSincronizarRecetasProd" onclick="sincronizarRecetasSinProductoProd()">🔄 Sincronizar</button>
-      <div id="recetasSinProductoProdLista" style="display:none;margin-top:10px"></div>
-    </div>
-
-    <div class="card" id="cardFormProd">
-      <div class="card-title" id="formProdTitulo">+ Nuevo producto</div>
-      <input type="hidden" id="prodId"/>
-      <label>Nombre *</label>
-      <input type="text" id="prodNombre" placeholder="Ej: Croissant clásico"/>
-      <label>Área</label>
-      <select id="prodArea" onchange="renderCategoriaSelect()"></select>
-      <label>Categoría (subcategoría visible en ventas)</label>
-      <select id="prodCategoria" onchange="toggleCategoriaNueva()"></select>
-      <input type="text" id="prodCategoriaNueva" placeholder="Escribe el nombre de la nueva categoría..." style="display:none;margin-top:6px"/>
-
-      <div style="margin-top:14px;padding:10px 0;border-top:0.5px solid #f0f0f0">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <label style="margin:0">🔗 Vinculación con fën-producción</label>
-          <button type="button" class="btn-sm btn-edit" onclick="cargarRecetasFen()">↻ Actualizar lista</button>
-        </div>
-        <input type="hidden" id="prodIdRecetaFen"/>
-        <button type="button" id="prodIdRecetaFenBtn" onclick="abrirModalVincularReceta()" style="width:100%;text-align:left;padding:10px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:13px;color:#333;cursor:pointer">— Sin vincular —</button>
-        <div id="recetasFenEstado" style="font-size:11px;color:#888;margin-top:4px"></div>
-      </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 0;border-top:0.5px solid #f0f0f0">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:#222">Requiere control de stock</div>
-          <div style="font-size:11px;color:#888">Desactiva para productos sin inventario (ej: cafetería)</div>
-        </div>
-        <label class="toggle-switch">
-          <input type="checkbox" id="prodControlStock" checked onchange="toggleCamposStock()"/>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div id="camposStockWrap">
-        <label style="margin-top:12px;font-size:13px;color:#003a79;font-weight:700">Precios por antigüedad de stock</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div><label>Precio hoy ($)</label><input type="number" id="prodPrecioHoy" placeholder="0" min="0"/></div>
-          <div><label>Precio ayer ($)</label><input type="number" id="prodPrecioAyer" placeholder="0" min="0"/></div>
-          <div><label>Precio ant. ($)</label><input type="number" id="prodPrecioAntesayer" placeholder="0" min="0"/></div>
-          <div><label>Precio 4to día ($)</label><input type="number" id="prodPrecioCuartoDia" placeholder="0" min="0"/></div>
-          <div><label>Precio últ. oferta ($)</label><input type="number" id="prodPrecioUltimaOferta" placeholder="0" min="0"/></div>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 0;border-top:0.5px solid #f0f0f0">
-          <div>
-            <div style="font-size:13px;font-weight:600;color:#222">Excepción horaria</div>
-            <div style="font-size:11px;color:#888">Vende a precio hoy hasta las 15:00, aunque sea de ayer</div>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="prodExcepcion"/>
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:0.5px solid #f0f0f0">
-          <div>
-            <div style="font-size:13px;font-weight:600;color:#222">Rota por fecha (Hoy → Últ. oferta)</div>
-            <div style="font-size:11px;color:#888">Envejece día a día hasta Última oferta (perecibles)</div>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="prodAutoEliminar" checked/>
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      </div>
-      <!-- Precio único cuando NO requiere control de stock -->
-      <div id="precioUnicoWrap" style="display:none">
-        <label style="margin-top:12px">Precio único ($)</label>
-        <input type="number" id="prodPrecioUnico" placeholder="0" min="0"/>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:14px">
-        <button class="btn btn-primary" style="flex:1" id="btnGuardarProd" onclick="guardarProducto()">✓ Guardar</button>
-        <button class="btn btn-secondary" id="btnCancelarEdit" style="display:none" onclick="cancelarEdicion()">✕ Cancelar</button>
-      </div>
-    </div>
-
-    <!-- ── Gestión de áreas ── -->
-    <div class="card">
-      <button onclick="toggleProdSection('areas')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
-        <span class="card-title" style="margin:0"><span id="prodSecIcon-areas">▸</span> 🏷️ Áreas de producción</span>
-      </button>
-      <div id="prodSec-areas" style="display:none;margin-top:12px">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-          <button class="btn-sm btn-edit" onclick="toggleAreaForm()">+ Nueva área</button>
-        </div>
-
-        <!-- Formulario add/edit (oculto por defecto) -->
-        <div id="areaFormWrap" style="display:none;margin-bottom:14px;padding:12px;background:#f8f9fa;border-radius:8px">
-          <input type="hidden" id="areaEditId"/>
-          <div style="display:grid;grid-template-columns:70px 1fr 52px;gap:8px;align-items:end">
-            <div>
-              <label>Código</label>
-              <input type="text" id="areaCodigo" placeholder="BOL" maxlength="6"
-                     oninput="this.value=this.value.toUpperCase()"/>
-            </div>
-            <div><label>Nombre</label><input type="text" id="areaNombre" placeholder="Bollería"/></div>
-            <div><label>Emoji</label><input type="text" id="areaEmoji" placeholder="🥐" maxlength="4"/></div>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:10px">
-            <button class="btn btn-primary" style="flex:1" id="btnGuardarArea" onclick="guardarArea()">✓ Guardar área</button>
-            <button class="btn btn-secondary" onclick="cancelarArea()">✕ Cancelar</button>
-          </div>
-        </div>
-
-        <!-- Lista dinámica de áreas -->
-        <div id="areasList"></div>
-      </div>
+    <div class="card" id="cardPedirProducto">
+      <div class="card-title" style="margin-bottom:4px">Productos de la caja</div>
+      <p class="pp-ayuda">Se administran en Sistema Fën → Catálogo: ahí se crean, se cambian los precios y se habilitan en la caja. Si falta un producto, pídelo aquí.</p>
+      <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="abrirPedirProducto()">Pedir producto</button>
+      <div class="pp-sub">Tus pedidos</div>
+      <div id="misPedidosProd"><div class="empty">Cargando…</div></div>
+      <div class="pp-version">Caja v2.3.0</div>
     </div>
 
     <!-- Tipos de leche (nota de café) -->
     <div class="card">
-      <button onclick="toggleProdSection('leche')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
-        <span class="card-title" style="margin:0"><span id="prodSecIcon-leche">▸</span> ☕ Tipos de leche (nota de café)</span>
+      <button class="pp-plegar" onclick="toggleProdSection('leche')" aria-controls="prodSec-leche">
+        <span class="card-title" style="margin:0"><span id="prodSecIcon-leche">▸</span> Tipos de leche (nota de café)</span>
       </button>
       <div id="prodSec-leche" style="display:none;margin-top:10px">
         <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen en la nota de café al armar un pedido.</div>
@@ -799,8 +720,8 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 
     <!-- Motivos de merma -->
     <div class="card">
-      <button onclick="toggleProdSection('motivos')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
-        <span class="card-title" style="margin:0"><span id="prodSecIcon-motivos">▸</span> 🗑️ Motivos de merma</span>
+      <button class="pp-plegar" onclick="toggleProdSection('motivos')" aria-controls="prodSec-motivos">
+        <span class="card-title" style="margin:0"><span id="prodSecIcon-motivos">▸</span> Motivos de merma</span>
       </button>
       <div id="prodSec-motivos" style="display:none;margin-top:10px">
         <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen al enviar un producto a Merma.</div>
@@ -812,62 +733,20 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       </div>
     </div>
 
-    <!-- Gestionar subcategorías -->
-    <div class="card">
-      <button onclick="toggleProdSection('subcat')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
-        <span class="card-title" style="margin:0"><span id="prodSecIcon-subcat">▸</span> Gestionar subcategorías</span>
-      </button>
-      <div id="prodSec-subcat" style="display:none;margin-top:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <div style="font-size:11px;color:#888">Crea, edita o elimina las subcategorías disponibles para asignar a los productos.</div>
-          <button class="btn-sm btn-edit" onclick="renderGestionCategorias()">↻</button>
-        </div>
-        <div id="gestionCategoriasLista"></div>
-      </div>
-    </div>
-
-    <!-- Lista de productos -->
-    <div class="card">
-      <button onclick="toggleProdSection('lista')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;cursor:pointer;text-align:left">
+    <!-- Lista de productos: solo administración, solo para mirar -->
+    <div class="card admin-only" id="cardListaProductos" style="display:none">
+      <button class="pp-plegar" onclick="toggleProdSection('lista')" aria-controls="prodSec-lista">
         <span class="card-title" style="margin:0"><span id="prodSecIcon-lista">▸</span> Lista de productos</span>
       </button>
+      <div id="prodSinAreaAviso"></div>
       <div id="prodSec-lista" style="display:none;margin-top:10px">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-          <button class="btn-sm btn-edit" onclick="cargarProdAdmin()">↻</button>
+        <p class="pp-ayuda">Solo para mirar: se administra en Sistema Fën → Catálogo.</p>
+        <div class="prod-search-bar" style="margin-top:10px">
+          <input type="text" id="prodBuscar" placeholder="Buscar producto" aria-label="Buscar producto" oninput="filtrarProdAdmin()"/>
+          <button class="btn-sm btn-edit" onclick="cargarProdAdmin()">Actualizar</button>
         </div>
-        <!-- Buscador y filtros -->
-        <div class="prod-search-bar">
-          <input type="text" id="prodBuscar" placeholder="🔍 Buscar producto..." oninput="filtrarProdAdmin()"/>
-        </div>
-        <div class="area-filter-btns" id="areaFilterBtns">
-          <button class="area-filter-btn active" data-area="" onclick="selAreaFilter(this, '')">Todos</button>
-          <button class="area-filter-btn" data-area="BOL" onclick="selAreaFilter(this, 'BOL')">BOL</button>
-          <button class="area-filter-btn" data-area="PAN" onclick="selAreaFilter(this, 'PAN')">PAN</button>
-          <button class="area-filter-btn" data-area="PAS" onclick="selAreaFilter(this, 'PAS')">PAS</button>
-          <button class="area-filter-btn" data-area="CAF" onclick="selAreaFilter(this, 'CAF')">CAF</button>
-        </div>
-        <div class="prod-table-wrap" style="margin-top:10px">
-          <table class="prod-table" id="prodTabla">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Área</th>
-                <th>Stock</th>
-                <th>$ Hoy</th>
-                <th>$ Ayer</th>
-                <th>$ Ant.</th>
-                <th>$ 4to</th>
-                <th>$ Últ.of.</th>
-                <th>Exc.15h</th>
-                <th>Rota</th>
-                <th id="thAcciones">Acc.</th>
-              </tr>
-            </thead>
-            <tbody id="prodLista">
-              <tr><td colspan="11" class="empty">Cargando...</td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="area-filter-btns" id="areaFilterBtns"></div>
+        <div id="prodLista" style="margin-top:10px"><div class="empty">Cargando...</div></div>
       </div>
     </div>
 
@@ -933,7 +812,6 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
     </div>
     <div id="repCaja" style="display:none">
       <div id="cajasSinCerrarWrap"></div>
-      <div id="cierresSinExportarWrap"></div>
       <div class="card">
         <div class="card-title">💵 Evaluación de cierre de caja</div>
         <p style="font-size:12px;color:#888;margin-bottom:10px">Comparación entre el conteo manual del cajero y los totales del sistema.</p>
@@ -964,40 +842,6 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 
 <!-- CONFIGURACIÓN -->
 <div class="section" id="sec-configuracion">
-
-  <!-- Conexión con fën-producción -->
-  <div class="card">
-    <div class="card-title" style="margin-bottom:4px">🥐 Conexión con fën-producción</div>
-    <div style="font-size:11px;color:#888;margin-bottom:10px">Revisa si el área de algún producto vinculado quedó desactualizada respecto a fën-producción, o si algún vínculo quedó roto (código que ya no aparece en la lista publicada). Nunca toca el nombre de venta, y nunca aplica cambios de área sin que los confirmes tú.</div>
-    <button class="btn btn-secondary btn-full" onclick="revisarSincronizacionFen()">🔍 Revisar sincronización</button>
-    <div id="syncFenResultado" style="margin-top:10px"></div>
-  </div>
-
-  <!-- Reconciliación de nombres históricos -->
-  <div class="card">
-    <div class="card-title" style="margin-bottom:4px">🔗 Reconciliación de nombres históricos</div>
-    <div style="font-size:11px;color:#888;margin-bottom:10px">Ventas y merma pasadas quedan siempre congeladas tal como se registraron. Esta herramienta es opcional: te deja emparejar nombres antiguos con la receta correcta de fën, y decidir caso a caso si solo guardas la equivalencia o si además reescribes esas filas puntuales.</div>
-
-    <label>Período a revisar</label>
-    <select id="reconciliarPeriodo"></select>
-    <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="analizarPeriodoReconciliacion()">🔍 Analizar período</button>
-    <div id="reconciliarResultado" style="margin-top:10px"></div>
-
-    <div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #f0f0f0">
-      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">Seguimiento por período</div>
-      <div id="reconciliarSeguimiento"></div>
-    </div>
-  </div>
-
-  <!-- Ventas mensuales hacia fën-producción -->
-  <div class="card">
-    <div class="card-title" style="margin-bottom:4px">📤 Ventas mensuales hacia fën-producción</div>
-    <div style="font-size:11px;color:#888;margin-bottom:10px">Genera la agregación mensual por receta vinculada (cantidad y monto neto, sin IVA y después de descuentos) y la publica en la planilla que fën lee con su botón "Sincronizar ventas". No es automático — se corre cuando quieras actualizar el dato, típicamente una vez al mes.</div>
-    <label>Período a enviar</label>
-    <select id="exportVentasPeriodo"></select>
-    <button class="btn btn-primary btn-full" style="margin-top:8px" id="btnExportVentasFen" onclick="generarVentasMensualesFen()">📤 Generar y enviar</button>
-    <div id="exportVentasFenResultado" style="margin-top:10px"></div>
-  </div>
 
   <!-- Tiempos de pago por sucursal -->
   <div class="card">
@@ -1154,16 +998,25 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
   </div>
 </div>
 
-<div class="modal-overlay" id="modalVincularReceta">
-  <div class="modal">
-    <div class="modal-title">🔗 Vincular con fën-producción</div>
-    <div id="modalVincularSubtitulo" style="font-size:12px;color:#888;margin-bottom:8px"></div>
-    <input type="text" id="buscarRecetaFen" placeholder="Buscar por nombre, código o área..." oninput="filtrarRecetasFenModal()" style="margin-bottom:10px"/>
-    <div id="recetasFenModalLista" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
-    <div class="modal-btns" style="margin-top:14px">
-      <button class="btn btn-secondary" style="flex:1" onclick="elegirRecetaFen('')">— Sin vincular —</button>
-      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalVincularReceta').classList.remove('open')">Cancelar</button>
+<!-- MODAL PEDIR PRODUCTO (v2.3.0) -->
+<div class="modal-overlay" id="modalPedirProducto" role="dialog" aria-modal="true" aria-labelledby="pedirTitulo">
+  <div class="modal pp-modal">
+    <div class="modal-title" id="pedirTitulo">Pedir producto</div>
+    <p class="pp-ayuda">Lo revisa la administración en Sistema Fën → Catálogo. Cuando lo habilite, aparece en la caja al recargarla.</p>
+    <label for="pedirNombre">Nombre del producto *</label>
+    <input type="text" id="pedirNombre" maxlength="120" placeholder="Ej: Pan de pascua chico" autocomplete="off" oninput="limpiarAvisoPedido()"/>
+    <label for="pedirPrecio">Precio sugerido (con IVA, opcional)</label>
+    <input type="number" id="pedirPrecio" min="0" step="10" inputmode="numeric" placeholder="0" oninput="limpiarAvisoPedido()"/>
+    <label for="pedirNota">Nota (opcional)</label>
+    <textarea id="pedirNota" rows="2" maxlength="300" placeholder="Ej: lo piden los clientes en la mañana" style="font-family:inherit;resize:vertical"></textarea>
+    <div class="pp-error" id="pedirError" role="alert"></div>
+    <div class="pp-ok" id="pedirOk" role="status"></div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" style="flex:1" onclick="cerrarPedirProducto()">Cerrar</button>
+      <button class="btn btn-primary" style="flex:2" id="btnEnviarPedido" onclick="enviarPedidoProducto()">Enviar pedido</button>
     </div>
+    <div class="pp-sub">Tus pedidos</div>
+    <div id="misPedidosLista"></div>
   </div>
 </div>
 
@@ -1242,38 +1095,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// ═══════════════════════════
-// CONFIGURACIÓN EXPORTACIÓN
-// ═══════════════════════════
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7eYgaVGK5NBFcmX5rVr2H_QiLIuRKS7oBwiVfy5_74icgNnKvD_WEkYD92dU-fddv1A/exec';
-// Script independiente, exclusivo para el envío mensual de ventas hacia fën-producción (no comparte planilla ni lógica con el de caja/merma de arriba)
-const APPS_SCRIPT_URL_VENTAS_FEN = 'https://script.google.com/macros/s/AKfycbxeA_xhOm83PlYgLzv7wP5N6AM-ogfrfTClrs91JzFWgi5HCSgIRwgzAuGIbd6WsukrNQ/exec';
-
-// ─── v2.2.0 · v2.0.0 (seguridad): toda llamada a los dos Apps Script de la caja lleva
-// el token de sesión de Firebase de quien está conectada, y una clave única
-// (idem) para que un envío repetido no se guarde dos veces. Si Google desvía
-// el POST (llega como GET sin datos), se reintenta por GET con los mismos datos.
-const _fetchOriginalCaja = window.fetch.bind(window);
-window.fetch = async function (recurso, init) {
-  const url = typeof recurso === 'string' ? recurso : (recurso && recurso.url) || '';
-  const esScriptCaja = url === APPS_SCRIPT_URL || url === APPS_SCRIPT_URL_VENTAS_FEN;
-  if (!esScriptCaja || !init || typeof init.body !== 'string') return _fetchOriginalCaja(recurso, init);
-  let datos;
-  try { datos = JSON.parse(init.body); } catch (e) { return _fetchOriginalCaja(recurso, init); }
-  if (auth.currentUser) datos.idToken = await auth.currentUser.getIdToken();
-  // Clave estable cuando hay un id propio: si la cajera reintenta el mismo
-  // cierre o la misma solicitud, el script la reconoce y no la duplica.
-  if (!datos.idem && datos.filaCaja && datos.filaCaja.cajaId && !datos.tipo) datos.idem = ('caja-' + datos.filaCaja.cajaId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64);
-  if (!datos.idem && datos.tipo === 'solicitud_anulacion' && datos.solicitudId) datos.idem = ('anul-' + datos.solicitudId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64);
-  datos.idem = datos.idem || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12));
-  const cuerpo = JSON.stringify(datos);
-  const res = await _fetchOriginalCaja(url, Object.assign({}, init, { body: cuerpo }));
-  try {
-    const d = await res.clone().json();
-    if (d && d.code === 'version') return _fetchOriginalCaja(url + '?p=' + encodeURIComponent(cuerpo));
-  } catch (e) {}
-  return res;
-};
+// ─── v2.3.0: la caja ya no llama a Apps Script ──────────────────────────────
+// Los cierres, la merma, las anulaciones y los descuadres quedan solo en Firestore (Sistema Fën los lee de ahí).
+// Los productos se crean y se cambian solo en Sistema Fën → Catálogo; la caja los pide (solicitudes_producto).
 
 // ─── v2.1.0 ────────────────────────────────────────────────────────────────
 // Historiales: por defecto solo los últimos DIAS_HISTORIAL días. Antes cada
@@ -1353,10 +1177,7 @@ onAuthStateChanged(auth, async (user) => {
     if (esAdmin) document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
     await cargarTiposLeche();
     await cargarMotivosMerma();
-    await cargarSubcategorias();
-    await cargarAreas(); // necesario ANTES de cargarRecetasFen(): normaliza el área de cada receta contra la lista real de áreas
-    cargarRecetasFen();
-    cargarRecetasOcultas(); // para todos, no solo admin: que lo ya descartado no vuelva a aparecer en Productos
+    await cargarAreas(); // v2.3.0: la lista fija de Sistema Fën (no lee ni escribe Firestore)
     // Verificar si es visor de stock
     const viewerDoc = await getDoc(doc(db, 'stock_viewers', user.uid));
     esStockViewer = viewerDoc.exists() && !esAdmin; // admin siempre tiene prioridad
@@ -1469,7 +1290,7 @@ function renderResumenVisor() {
   // Actualizar filtros de área
   if (areasBtns) {
     areasBtns.innerHTML = `<button class="area-filter-btn${_visorResumenArea === '' ? ' active' : ''}" onclick="selVisorResumenArea(this,'')">Todos</button>` +
-      AREAS.map(a => `<button class="area-filter-btn${_visorResumenArea === a.id ? ' active' : ''}" onclick="selVisorResumenArea(this,'${a.id}')">${a.emoji} ${a.id}</button>`).join('');
+      areasVisibles().map(a => `<button class="area-filter-btn${_visorResumenArea === a.id ? ' active' : ''}" onclick="selVisorResumenArea(this,'${a.id}')">${a.nombre}</button>`).join('');
   }
 
   const CATS = ['hoy', 'ayer', 'antesayer', 'cuartoDia'];
@@ -1608,7 +1429,7 @@ window.selSucursal = async function(s) {
   await cargarProductos();
   await verificarCaja();
   cargarStockLista();
-  reintentarExportacionesPendientes(); // v2.1: cierres que no alcanzaron a llegar a la planilla
+  reintentarResumenesPendientes(); // v2.3.0: cierres cuyo resumen no alcanzó a guardarse
 };
 
 // ═══════════════════════════
@@ -1620,14 +1441,9 @@ window.showSection = function(id, el) {
   document.getElementById('sec-' + id).classList.add('active');
   if (el) el.classList.add('active');
   if (id === 'stock')     { cargarStockPorCategoria(); renderStockIngresoGrid(); inicializarFechaStock(); }
-  if (id === 'productos') { cargarProdAdmin(); renderAllAreaUIs(); }
+  if (id === 'productos') { cargarMisPedidos(); if (esAdmin) cargarProdAdmin(); renderAllAreaUIs(); }
   if (id === 'caja')      { cargarSaldoSugerido(); }
-  if (id === 'configuracion') {
-    cargarSeguimientoReconciliacion().then(renderPeriodosReconciliacion);
-    cargarRecetasOcultas();
-    renderPeriodosExportVentas();
-    cargarTiemposPago();
-  }
+  if (id === 'configuracion') { cargarTiemposPago(); }
 };
 
 // ═══════════════════════════
@@ -1635,7 +1451,16 @@ window.showSection = function(id, el) {
 // ═══════════════════════════
 
 // ── Definición de áreas ──
-let AREAS = []; // cargado desde Firestore colección 'areas'
+// v2.3.0: una sola lista de áreas, la de Sistema Fën (areas.js). La caja ya no crea ni cambia áreas.
+const SIN_AREA = 'SIN';
+const AREAS_CAJA = [
+  { id: 'PAN', nombre: 'Panadería', emoji: '' },
+  { id: 'BOL', nombre: 'Bollería', emoji: '' },
+  { id: 'PAS', nombre: 'Pastelería', emoji: '' },
+  { id: 'CAF', nombre: 'Cafetería', emoji: '' },
+  { id: 'REVENTA', nombre: 'Reventa', emoji: '' }
+];
+let AREAS = [...AREAS_CAJA, { id: SIN_AREA, nombre: 'Sin área', emoji: '' }];
 let TIPOS_LECHE = ['Entera', 'Descremada', 'Sin lactosa', 'Entera sin lactosa']; // default hasta cargar desde Firestore
 let MOTIVOS_MERMA = ['Llegó dañado', 'Se cayó', 'Vencido / pasado de fecha', 'Error de producción', 'Quemado', 'Otro']; // default hasta cargar desde Firestore
 
@@ -1752,15 +1577,26 @@ window.eliminarTipoLeche = function(i) {
   guardarTiposLeche();
 };
 // Compatibilidad con productos guardados con nombre de área antiguo
-const AREA_COMPAT = { 'Panadería':'PAN','Bollería':'BOL','Sándwiches':'PAN','Cafetería':'CAF','Pastelería':'PAS','Chocolatería':'PAS' };
-function normalizarArea(a) { return AREAS.find(x=>x.id===a) ? a : (AREA_COMPAT[a] || (AREAS[0]?.id || 'GEN')); }
+// v2.3.0: "REV" (la pestaña antigua de reventa) es el mismo REVENTA. Un área que no está en la lista, o vacía, es "Sin área".
+const AREA_COMPAT = { 'Panadería':'PAN','Bollería':'BOL','Sándwiches':'PAN','Cafetería':'CAF','Pastelería':'PAS','Chocolatería':'PAS','REV':'REVENTA','Reventa':'REVENTA' };
+function normalizarArea(a) {
+  const t = String(a == null ? '' : a).trim(), u = t.toUpperCase();
+  if (AREAS_CAJA.some(x => x.id === u)) return u;
+  return AREA_COMPAT[t] || AREA_COMPAT[u] || SIN_AREA;
+}
+// Las áreas que se muestran como botones: "Sin área" solo si algún producto cae ahí
+function areasVisibles(lista) {
+  const ps = lista || productos;
+  return AREAS.filter(a => a.id !== SIN_AREA || ps.some(p => normalizarArea(p.area) === SIN_AREA));
+}
 
 // Paleta de colores por área, la misma que usa fën-producción — para identidad visual consistente entre sistemas.
 const AREA_COLORES = {
   PAN: { principal: '#E65100', fondo: '#FFF8E1' },
   BOL: { principal: '#6A1B9A', fondo: '#F3E5F5' },
   PAS: { principal: '#1B5E20', fondo: '#E8F5E9' },
-  CAF: { principal: '#B71C1C', fondo: '#FFEBEE' }
+  CAF: { principal: '#B71C1C', fondo: '#FFEBEE' },
+  REVENTA: { principal: '#00695C', fondo: '#E0F2F1' }
 };
 // Aclara un color hexadecimal mezclándolo hacia blanco (0 = igual, 1 = blanco puro) — para derivar
 // tonos más suaves del mismo color sin tener que definir uno nuevo a mano por cada área.
@@ -1788,9 +1624,10 @@ async function cargarProductos() {
   const snap = await getDocs(collection(db, 'productos'));
   productos = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.activo !== false);
   // Área inicial: primera con productos
-  const areasConProd = AREAS.filter(a => productos.some(p => p.area === a.id));
-  if (areasConProd.length > 0) areaActiva = areasConProd[0].id;
+  const areasConProd = AREAS.filter(a => productos.some(p => normalizarArea(p.area) === a.id));
+  if (areasConProd.length > 0 && !areasConProd.some(a => a.id === areaActiva)) areaActiva = areasConProd[0].id;
   catActiva = 'TODOS';
+  renderAllAreaUIs(); // v2.3.0: "Sin área" aparece solo si algún producto cae ahí
   // Cargar stock para mostrar badges
   await cargarStockMap();
   renderAreas();
@@ -2012,7 +1849,7 @@ function renderAreas() {
     const activa = a.id === areaActiva;
     const { principal, fondo } = colorDeArea(a.id);
     const estilo = activa ? `border-color:${principal};background:${fondo};color:${principal}` : '';
-    return `<button class="area-tab${activa ? ' active' : ''}" style="${estilo}" onclick="filtrarArea('${a.id}')">${a.emoji} ${a.id}</button>`;
+    return `<button class="area-tab${activa ? ' active' : ''}" style="${estilo}" onclick="filtrarArea('${a.id}')">${a.nombre}</button>`;
   }).join('');
 }
 
@@ -2171,554 +2008,20 @@ function renderVistaGeneral() {
 }
 
 // ══════════════════════════════════
-// ÁREAS — CRUD DINÁMICO
+// ÁREAS — v2.3.0: lista fija (la de Sistema Fën)
 // ══════════════════════════════════
-
-const AREAS_DEFAULT = [
-  { id: 'BOL', nombre: 'Bollería',   emoji: '🥐' },
-  { id: 'PAN', nombre: 'Panadería',  emoji: '🥖' },
-  { id: 'PAS', nombre: 'Pastelería', emoji: '🎂' },
-  { id: 'CAF', nombre: 'Cafetería',  emoji: '☕' },
-];
-
 async function cargarAreas() {
-  const snap = await getDocs(collection(db, 'areas'));
-  if (snap.empty) {
-    // Sembrar áreas por defecto la primera vez
-    for (const a of AREAS_DEFAULT) {
-      await setDoc(doc(db, 'areas', a.id), a);
-    }
-    AREAS = [...AREAS_DEFAULT];
-  } else {
-    AREAS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => a.id.localeCompare(b.id));
-  }
+  AREAS = [...AREAS_CAJA, { id: SIN_AREA, nombre: 'Sin área', emoji: '' }];
   renderAllAreaUIs();
 }
 
 // Actualiza todos los elementos que dependen de AREAS
 function renderAllAreaUIs() {
-  renderAreaSelect();
-  renderAreasList();
   renderStockAreaBtns();
   renderStockListaAreaBtns();
   renderAreaFilterBtns();
 }
 
-// Popula <select id="prodArea">
-function renderAreaSelect(valorActual) {
-  const sel = document.getElementById('prodArea');
-  if (!sel) return;
-  const prev = valorActual || sel.value;
-  sel.innerHTML = AREAS.map(a =>
-    `<option value="${a.id}">${a.emoji} ${a.id} — ${a.nombre}</option>`
-  ).join('');
-  if (prev) sel.value = prev;
-}
-
-const CATEGORIA_NUEVA = '__nueva__';
-
-// ── Vinculación con fën-producción (Maestro_recetas publicado como CSV) ──
-// Fuente de verdad para nombres de producción — nunca se usa para sobreescribir el nombre de venta acá.
-const FEN_PRODUCCION_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKvAbWUlwxbcCx54T3lfdMa8XxPD-F2lSE05-vMfdv_UpFVpDi6pbAJOpM7O6LBLmdfkz5804lzMYn/pub?gid=1370945279&single=true&output=csv';
-let RECETAS_FEN = []; // [{idReceta, nombre, area, estado}]
-let RECETAS_OCULTAS = []; // ids de recetas marcadas "no corresponde en B2C" — reversible, guardado en config/recetasOcultas
-
-async function cargarRecetasOcultas() {
-  try {
-    const snap = await getDoc(doc(db, 'config', 'recetasOcultas'));
-    RECETAS_OCULTAS = snap.exists() ? (snap.data().ids || []) : [];
-  } catch (e) { console.error('Error cargando recetas ocultas:', e); RECETAS_OCULTAS = []; }
-}
-
-// Parser CSV simple, soporta campos entre comillas con comas adentro (ej. nombres con comas)
-function parseCSV(texto) {
-  const filas = [];
-  let fila = [], campo = '', enComillas = false;
-  for (let i = 0; i < texto.length; i++) {
-    const c = texto[i], sig = texto[i+1];
-    if (enComillas) {
-      if (c === '"' && sig === '"') { campo += '"'; i++; }
-      else if (c === '"') { enComillas = false; }
-      else { campo += c; }
-    } else {
-      if (c === '"') enComillas = true;
-      else if (c === ',') { fila.push(campo); campo = ''; }
-      else if (c === '\n' || c === '\r') {
-        if (c === '\r' && sig === '\n') continue;
-        fila.push(campo); campo = '';
-        if (fila.length > 1 || fila[0] !== '') filas.push(fila);
-        fila = [];
-      } else { campo += c; }
-    }
-  }
-  if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila); }
-  return filas;
-}
-
-async function cargarRecetasFen() {
-  const estadoEl = document.getElementById('recetasFenEstado');
-  if (estadoEl) estadoEl.textContent = 'Cargando lista de fën-producción...';
-  try {
-    const res = await fetch(FEN_PRODUCCION_CSV_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const texto = await res.text();
-    const filas = parseCSV(texto);
-    const header = (filas[0] || []).map(h => h.trim().toLowerCase());
-    const iId = header.indexOf('id_receta'), iNom = header.indexOf('nombre'), iArea = header.indexOf('área') !== -1 ? header.indexOf('área') : header.indexOf('area'), iEstado = header.indexOf('estado');
-    const iCodigoArea = header.indexOf('código_área') !== -1 ? header.indexOf('código_área') : header.indexOf('codigo_area');
-    RECETAS_FEN = filas.slice(1)
-      .filter(f => f[iId])
-      .map(f => {
-        // "código_área" es la fuente confiable (código corto, ej. "REV") — "área" (nombre completo) queda
-        // solo como respaldo por si la columna nueva llegara vacía en alguna fila.
-        const areaRaw = (iCodigoArea !== -1 ? (f[iCodigoArea] || '').trim() : '') || (f[iArea] || '').trim();
-        const areaNombreCompleto = (f[iArea] || '').trim(); // nombre completo, ej. "Reventa" — solo como sugerencia al crear el área
-        // No forzamos el área a una de las conocidas en B2C — si "REV" (o cualquier otra) no existe acá,
-        // se detecta como área nueva en vez de asignarse por error a otra área existente.
-        const area = AREAS.some(a => a.id === areaRaw) ? areaRaw : (AREA_COMPAT[areaRaw] || areaRaw);
-        return { idReceta: (f[iId]||'').trim(), nombre: (f[iNom]||'').trim(), area, areaNombreCompleto, estado: (f[iEstado]||'').trim() };
-      });
-    if (estadoEl) estadoEl.textContent = `✅ ${RECETAS_FEN.length} recetas cargadas de fën-producción`;
-  } catch (e) {
-    console.error('Error cargando recetas fën:', e);
-    if (estadoEl) estadoEl.textContent = '⚠️ No se pudo cargar la lista (revisa conexión). Puedes reintentar con "Actualizar lista".';
-  }
-  renderIdRecetaSelect();
-}
-
-// Actualiza el campo oculto y el botón visible con la receta vinculada (mismo nombre de función
-// que antes para no tener que tocar los demás lugares que ya la llaman: editarProducto, cancelarEdicion, cargarRecetasFen)
-function renderIdRecetaSelect(valorActual) {
-  const hidden = document.getElementById('prodIdRecetaFen');
-  const btn = document.getElementById('prodIdRecetaFenBtn');
-  if (!hidden || !btn) return;
-  const val = valorActual !== undefined ? valorActual : hidden.value;
-  hidden.value = val || '';
-  if (!val) { btn.textContent = '— Sin vincular —'; return; }
-  const receta = RECETAS_FEN.find(r => r.idReceta === val);
-  btn.textContent = receta ? `🔗 ${receta.idReceta} — ${receta.nombre} (${receta.area})` : `🔗 ${val} (no encontrado en la lista actual)`;
-}
-
-// El modal de vinculación se usa en dos modos: 'form' (dentro del formulario, guarda al confirmar
-// el producto completo) y 'directo' (desde la lista, guarda al toque sin abrir el formulario).
-let modalVincularContexto = { modo: 'form' };
-
-// Abre el buscador de recetas fën para vincular el producto que se está creando/editando
-window.abrirModalVincularReceta = function() {
-  modalVincularContexto = { modo: 'form' };
-  document.getElementById('modalVincularSubtitulo').textContent = '';
-  document.getElementById('buscarRecetaFen').value = '';
-  filtrarRecetasFenModal();
-  document.getElementById('modalVincularReceta').classList.add('open');
-};
-
-// Abre el mismo buscador directo desde la Lista de productos, sin pasar por el formulario de edición
-window.abrirModalVincularRecetaDirecto = function(productoId, nombre) {
-  modalVincularContexto = { modo: 'directo', productoId, nombre };
-  document.getElementById('modalVincularSubtitulo').textContent = `Para: ${nombre}`;
-  document.getElementById('buscarRecetaFen').value = '';
-  filtrarRecetasFenModal();
-  document.getElementById('modalVincularReceta').classList.add('open');
-};
-
-window.filtrarRecetasFenModal = function() {
-  const q = (document.getElementById('buscarRecetaFen').value || '').toLowerCase().trim();
-  const wrap = document.getElementById('recetasFenModalLista');
-  if (!wrap) return;
-  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const idActual = modalVincularContexto.modo === 'directo' ? modalVincularContexto.productoId : document.getElementById('prodId').value;
-
-  const ordenadas = [...RECETAS_FEN].sort((a, b) => (a.area + a.nombre).localeCompare(b.area + b.nombre));
-  const filtradas = q ? ordenadas.filter(r => (r.idReceta + ' ' + r.nombre + ' ' + r.area).toLowerCase().includes(q)) : ordenadas;
-
-  if (!filtradas.length) { wrap.innerHTML = '<div class="empty">Sin resultados</div>'; return; }
-
-  wrap.innerHTML = filtradas.map(r => {
-    // Varios productos B2C pueden compartir la misma receta (misma pieza, distinta presentación) — está permitido,
-    // solo se muestra como referencia para que el admin vea qué más ya está vinculado a este código.
-    const otrosVinculados = fuente.filter(p => p.idRecetaFen === r.idReceta && p.id !== idActual).map(p => p.nombre);
-    return `<button type="button" onclick="elegirRecetaFen('${r.idReceta}')" style="text-align:left;padding:10px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer">
-      <div style="font-weight:600;font-size:13px">${r.idReceta} — ${r.nombre}</div>
-      <div style="font-size:11px;color:#888;margin-top:2px">${r.area}${otrosVinculados.length ? ` · también vinculado a: ${otrosVinculados.join(', ')}` : ''}</div>
-    </button>`;
-  }).join('');
-};
-
-window.elegirRecetaFen = async function(idReceta) {
-  if (modalVincularContexto.modo === 'directo') {
-    await updateDoc(doc(db, 'productos', modalVincularContexto.productoId), { idRecetaFen: idReceta || '' });
-    document.getElementById('modalVincularReceta').classList.remove('open');
-    await cargarProductos();
-    await cargarProdAdmin();
-    showToast(idReceta ? '🔗 Vinculado' : '✅ Desvinculado');
-    return;
-  }
-  renderIdRecetaSelect(idReceta);
-  document.getElementById('modalVincularReceta').classList.remove('open');
-};
-
-// ── Revisión de sincronización: compara productos vinculados contra la lista publicada por fën ──
-// Nunca toca el nombre. Los cambios de área requieren confirmación explícita (afecta en qué pestaña
-// aparece el producto al vender), nunca se aplican solos.
-window.revisarSincronizacionFen = function() {
-  const wrap = document.getElementById('syncFenResultado');
-  if (!wrap) return;
-  if (!RECETAS_FEN.length) {
-    wrap.innerHTML = '<div class="empty">Primero carga la lista de fën-producción (botón "↻ Actualizar lista" en el formulario de producto, o espera unos segundos a que cargue sola).</div>';
-    return;
-  }
-
-  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const vinculados = fuente.filter(p => p.idRecetaFen);
-  const sinVincular = fuente.filter(p => !p.idRecetaFen);
-  const recetaPorId = {};
-  RECETAS_FEN.forEach(r => { recetaPorId[r.idReceta] = r; });
-
-  // El CSV publicado por fën solo lista recetas activas — si una receta se descontinúa,
-  // deja de aparecer ahí (no cambia de "estado", directamente desaparece). Por eso "ya no está
-  // en la lista actual" es la única señal real de que algo se descontinuó o nunca existió.
-  const desajustesArea = [], yaNoEnListaFen = [], areasNuevas = {}, areasNuevasNombreSugerido = {}, productosAreaHuerfana = [];
-  vinculados.forEach(p => {
-    const receta = recetaPorId[p.idRecetaFen];
-    if (!receta) { yaNoEnListaFen.push(p); return; }
-    if (!AREAS.some(a => a.id === receta.area)) {
-      // El área que dice fën no existe todavía en B2C — nunca se ofrece "Aplicar" a algo que no existe
-      if (!areasNuevas[receta.area]) areasNuevas[receta.area] = [];
-      areasNuevas[receta.area].push(p);
-      if (!areasNuevasNombreSugerido[receta.area]) areasNuevasNombreSugerido[receta.area] = receta.areaNombreCompleto || receta.area;
-      return;
-    }
-    if (!AREAS.some(a => a.id === p.area)) {
-      // El producto tiene guardada un área que ya no existe en B2C (se eliminó) — no comparar con
-      // normalizarArea acá, porque disfrazaría el problema mostrando otra área como si fuera la real.
-      productosAreaHuerfana.push(p);
-      return;
-    }
-    if (p.area !== receta.area) desajustesArea.push({ p, receta });
-  });
-
-  // Recetas liberadas para venta en fën que todavía no tienen producto acá — candidatas a crear.
-  const idsVinculados = new Set(vinculados.map(p => p.idRecetaFen));
-  const recetasSinProducto = RECETAS_FEN.filter(r => !idsVinculados.has(r.idReceta));
-  const recetasVisibles = recetasSinProducto.filter(r => !RECETAS_OCULTAS.includes(r.idReceta));
-  const recetasOcultas  = recetasSinProducto.filter(r => RECETAS_OCULTAS.includes(r.idReceta));
-  const areasNuevasKeys = Object.keys(areasNuevas);
-
-  if (!desajustesArea.length && !yaNoEnListaFen.length && !sinVincular.length && !recetasVisibles.length && !areasNuevasKeys.length && !productosAreaHuerfana.length) {
-    wrap.innerHTML = `<div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a">✅ Todo sincronizado — ${vinculados.length} producto(s) vinculado(s), sin diferencias.</div>`;
-    return;
-  }
-
-  let html = '';
-  if (areasNuevasKeys.length) {
-    html += `<div style="margin-top:6px">
-      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">🆕 Área nueva detectada en fën (${areasNuevasKeys.length})</div>
-      ${areasNuevasKeys.map(areaId => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#eef6fb;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
-          <div><b>"${areaId}"</b> no existe todavía como área en B2C — afecta a: ${areasNuevas[areaId].map(p => p.nombre).join(', ')}</div>
-          <button class="btn-sm btn-edit" style="flex-shrink:0" onclick="crearAreaDesdeRecetaFen('${areaId}','${(areasNuevasNombreSugerido[areaId]||'').replace(/'/g,"\\'")}')">+ Crear área ahora</button>
-        </div>`).join('')}
-      <div style="font-size:11px;color:#888;margin-top:4px">Nada se crea sola — "+ Crear área ahora" solo te pide confirmar nombre y emoji antes de guardarla. Una vez creada, "Revisar sincronización" de nuevo va a ofrecerte aplicar el cambio de área a estos productos.</div>
-    </div>`;
-  }
-  if (productosAreaHuerfana.length) {
-    html += `<div style="margin-top:14px">
-      <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">⚠️ Área eliminada, producto huérfano (${productosAreaHuerfana.length})</div>
-      ${productosAreaHuerfana.map(p => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
-          <span>${p.nombre} — el área "${p.area}" ya no existe</span>
-          <button class="btn-sm btn-edit" onclick="editarProducto('${p.id}')">Editar producto</button>
-        </div>`).join('')}
-      <div style="font-size:11px;color:#888;margin-top:4px">El área guardada en este producto se eliminó de "Áreas de producción". Puedes volver a crear esa área con el mismo código, o editar el producto y asignarle una distinta.</div>
-    </div>`;
-  }
-  if (desajustesArea.length) {
-    html += `<div style="margin-top:6px">
-      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">📍 Área desactualizada (${desajustesArea.length})</div>
-      ${desajustesArea.map(({p, receta}) => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#fff8ec;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
-          <div>${p.nombre} <span style="color:#888">— ${normalizarArea(p.area)} → <b>${receta.area}</b></span></div>
-          <button class="btn-sm btn-edit" onclick="aplicarAreaFen('${p.id}','${receta.area}')">Aplicar</button>
-        </div>`).join('')}
-      ${desajustesArea.length > 1 ? `<button class="btn-sm btn-edit" style="width:100%" onclick="aplicarTodasAreasFen()">Aplicar todos (${desajustesArea.length})</button>` : ''}
-    </div>`;
-  }
-  if (yaNoEnListaFen.length) {
-    html += `<div style="margin-top:14px">
-      <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">⚠️ Vinculado a un código que ya no está en la lista de fën (${yaNoEnListaFen.length})</div>
-      ${yaNoEnListaFen.map(p => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#fdeceb;border-radius:8px;margin-bottom:6px;font-size:12px;color:#c0392b;gap:8px">
-          <span>${p.nombre} — ${p.idRecetaFen}</span>
-          <button class="btn-sm btn-del" onclick="desvincularRecetaFen('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">✕ Desvincular</button>
-        </div>`).join('')}
-      <div style="font-size:11px;color:#888;margin-top:4px">No se desvincula solo — nunca se toca sin que lo confirmes. Puede ser que la receta fue descontinuada del lado de fën, se vinculó por error, o el código nunca existió. Usa "Desvincular" y vuelve a elegir la correcta cuando esté disponible.</div>
-    </div>`;
-  }
-  if (sinVincular.length) {
-    html += `<div style="margin-top:14px">
-      <div style="font-size:12px;font-weight:700;color:#8a6416;margin-bottom:6px">❓ Sin vincular todavía (${sinVincular.length})</div>
-      <div style="font-size:11px;color:#888;margin-bottom:6px">Este producto se vende acá pero no está conectado a ninguna receta de fën. La vinculación siempre es manual — nunca se adivina por nombre.</div>
-      ${sinVincular.map(p => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#fffaf0;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
-          <div>${p.nombre} <span style="color:#888">— ${normalizarArea(p.area)}</span></div>
-          <button class="btn-sm btn-edit" onclick="abrirModalVincularRecetaDirecto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">Vincular ahora</button>
-        </div>`).join('')}
-    </div>`;
-  }
-  if (recetasVisibles.length || recetasOcultas.length) {
-    html += `<div style="margin-top:14px">
-      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">🆕 Recetas sin producto en B2C (${recetasVisibles.length})</div>
-      <div style="font-size:11px;color:#888;margin-bottom:6px">Liberadas para venta desde producción, pero todavía no existen como producto acá. Crear uno igual requiere definir precio, control de stock, etc. — nada se crea solo.</div>
-      ${recetasVisibles.length ? recetasVisibles.map(r => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#eef6fb;border-radius:8px;margin-bottom:6px;font-size:12px;gap:6px">
-          <span>${r.idReceta} — ${r.nombre} (${r.area})</span>
-          <div style="display:flex;gap:4px;flex-shrink:0">
-            <button class="btn-sm btn-edit" onclick="crearProductoDesdeReceta('${r.idReceta}')">+ Crear</button>
-            <button class="btn-sm" style="background:#fff;border:1px solid #ddd;color:#888" onclick="ocultarRecetaFen('${r.idReceta}')" title="No corresponde acá (ej. es B2B) — se puede volver a mostrar cuando quieras">🙈</button>
-          </div>
-        </div>`).join('') : '<div class="empty" style="font-size:11px">Ninguna pendiente por ahora.</div>'}
-      ${recetasOcultas.length ? `
-        <button type="button" onclick="toggleRecetasOcultas()" style="background:none;border:none;color:#888;font-size:11px;cursor:pointer;padding:4px 0"><span id="recetasOcultasIcon">▸</span> Ocultos (${recetasOcultas.length})</button>
-        <div id="recetasOcultasLista" style="display:none">
-          ${recetasOcultas.map(r => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#f5f5f5;border-radius:8px;margin-bottom:6px;font-size:12px;color:#888;gap:6px">
-              <span>${r.idReceta} — ${r.nombre} (${r.area})</span>
-              <button class="btn-sm" style="background:#fff;border:1px solid #ddd" onclick="mostrarRecetaFen('${r.idReceta}')">↩️ Volver a mostrar</button>
-            </div>`).join('')}
-        </div>` : ''}
-    </div>`;
-  }
-  wrap.innerHTML = html;
-};
-
-window.toggleRecetasOcultas = function() {
-  const el = document.getElementById('recetasOcultasLista');
-  const icon = document.getElementById('recetasOcultasIcon');
-  if (!el) return;
-  const abierto = el.style.display !== 'none';
-  el.style.display = abierto ? 'none' : '';
-  if (icon) icon.textContent = abierto ? '▸' : '▾';
-};
-
-// Oculta una receta de la lista "sin producto en B2C" — reversible, nunca se pierde, solo se pliega
-window.ocultarRecetaFen = async function(idReceta) {
-  if (!RECETAS_OCULTAS.includes(idReceta)) RECETAS_OCULTAS.push(idReceta);
-  await setDoc(doc(db, 'config', 'recetasOcultas'), { ids: RECETAS_OCULTAS });
-  revisarSincronizacionFen();
-};
-
-window.mostrarRecetaFen = async function(idReceta) {
-  RECETAS_OCULTAS = RECETAS_OCULTAS.filter(id => id !== idReceta);
-  await setDoc(doc(db, 'config', 'recetasOcultas'), { ids: RECETAS_OCULTAS });
-  revisarSincronizacionFen();
-};
-
-// Abre el formulario de "Nuevo producto" precargado con nombre/área/vínculo de la receta elegida.
-// Nada se guarda solo — el admin completa precio, control de stock, etc. y confirma con "Guardar".
-window.crearProductoDesdeReceta = function(idReceta) {
-  const receta = RECETAS_FEN.find(r => r.idReceta === idReceta);
-  if (!receta) return;
-  cancelarEdicion();
-  const navProductos = document.querySelector('.nav-btn[onclick*="productos"]');
-  showSection('productos', navProductos);
-  document.getElementById('prodNombre').value = receta.nombre;
-  document.getElementById('prodArea').value = receta.area;
-  renderCategoriaSelect('');
-  renderIdRecetaSelect(receta.idReceta);
-  const card = document.getElementById('cardFormProd');
-  if (card) card.scrollIntoView({ behavior: 'smooth' });
-  document.getElementById('prodNombre').focus();
-};
-
-// Similitud simple entre dos nombres (0 a 1) — normaliza tildes/mayúsculas y compara por palabras en común.
-// No es perfecta, pero alcanza para avisar "esto podría ya existir" antes de crear un duplicado.
-function similitudNombres(a, b) {
-  const norm = s => (s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  const na = norm(a), nb = norm(b);
-  if (!na || !nb) return 0;
-  if (na === nb) return 1;
-  if (na.includes(nb) || nb.includes(na)) return 0.85;
-  const wa = new Set(na.split(' ')), wb = new Set(nb.split(' '));
-  const interseccion = [...wa].filter(w => wb.has(w)).length;
-  const union = new Set([...wa, ...wb]).size;
-  return union ? interseccion / union : 0;
-}
-
-// Versión de "Recetas sin producto en B2C" para Productos — accesible a cualquier cuenta (no solo admin),
-// para que el equipo pueda crear productos que llegan de fën sin depender de que un admin esté conectado.
-window.sincronizarRecetasSinProductoProd = async function() {
-  const btn = document.getElementById('btnSincronizarRecetasProd');
-  const wrap = document.getElementById('recetasSinProductoProdLista');
-  if (!btn || !wrap) return;
-  const textoOriginal = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Sincronizando...';
-
-  try {
-    await cargarRecetasFen();
-    await cargarProductos();
-
-    const idsVinculados = new Set(productos.filter(p => p.idRecetaFen).map(p => p.idRecetaFen));
-    const sinProducto = RECETAS_FEN.filter(r => !idsVinculados.has(r.idReceta) && !RECETAS_OCULTAS.includes(r.idReceta));
-
-    if (!sinProducto.length) {
-      wrap.innerHTML = '<div class="empty">No hay recetas pendientes por crear — todo al día.</div>';
-    } else {
-      wrap.innerHTML = sinProducto.map(r => {
-        // Antes de ofrecer "crear", se revisa si ya existe un producto con nombre parecido (una versión
-        // vieja o distinta apuntando a lo mismo) — si es así, se pide contactar al admin en vez de crear.
-        const posibleDuplicado = productos.find(p => similitudNombres(p.nombre, r.nombre) >= 0.6);
-        if (posibleDuplicado) {
-          return `<div style="padding:8px;background:#fff3e0;border-radius:8px;margin-bottom:6px;font-size:12px">
-            <div><b>${r.idReceta} — ${r.nombre}</b> <span style="color:#888">(${r.area})</span></div>
-            <div style="color:#8a6416;margin-top:4px">⚠️ Ya existe algo parecido: "${posibleDuplicado.nombre}". Antes de crear uno nuevo, avísale al admin para confirmar si es el mismo producto o uno distinto de verdad.</div>
-          </div>`;
-        }
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#eef6fb;border-radius:8px;margin-bottom:6px;font-size:12px;gap:8px">
-          <span>${r.idReceta} — ${r.nombre} <span style="color:#888">(${r.area})</span></span>
-          <button class="btn-sm btn-edit" style="flex-shrink:0" onclick="crearProductoDesdeReceta('${r.idReceta}')">+ Crear</button>
-        </div>`;
-      }).join('');
-    }
-    wrap.style.display = '';
-  } catch (e) {
-    wrap.innerHTML = `<div class="empty">Error al sincronizar: ${e.message}</div>`;
-    wrap.style.display = '';
-  }
-
-  btn.disabled = false;
-  btn.textContent = textoOriginal;
-};
-
-// Crea un área nueva directo desde la detección de sincronización — mismo formato que el CRUD normal
-// de "Áreas de producción" (código/nombre/emoji), solo que sin salir de esta pantalla.
-window.crearAreaDesdeRecetaFen = async function(codigo, nombreSugerido) {
-  if (AREAS.find(a => a.id === codigo)) { showToast('⚠️ Esa área ya existe'); revisarSincronizacionFen(); return; }
-  const nombre = prompt(`Nombre para el área "${codigo}":`, nombreSugerido || codigo);
-  if (!nombre || !nombre.trim()) return;
-  const emoji = prompt('Emoji para esta área (opcional, se puede dejar en blanco):', '📦') || '📦';
-  try {
-    await setDoc(doc(db, 'areas', codigo), { id: codigo, nombre: nombre.trim(), emoji: emoji.trim() || '📦' });
-    await cargarAreas();
-    showToast(`✅ Área "${nombre.trim()}" creada`);
-    revisarSincronizacionFen();
-  } catch (e) {
-    alert('Error al crear el área: ' + e.message);
-  }
-};
-
-window.aplicarAreaFen = async function(productoId, nuevaArea) {
-  if (!confirm(`¿Actualizar el área de este producto a "${nuevaArea}"? Esto puede cambiar en qué pestaña aparece al vender.`)) return;
-  await updateDoc(doc(db, 'productos', productoId), { area: nuevaArea });
-  await cargarProductos();
-  await cargarProdAdmin();
-  revisarSincronizacionFen();
-  showToast('✅ Área actualizada');
-};
-
-window.aplicarTodasAreasFen = async function() {
-  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const recetaPorId = {};
-  RECETAS_FEN.forEach(r => { recetaPorId[r.idReceta] = r; });
-  const desajustes = fuente.filter(p => p.idRecetaFen && recetaPorId[p.idRecetaFen] && normalizarArea(p.area) !== recetaPorId[p.idRecetaFen].area);
-  if (!desajustes.length) return;
-  if (!confirm(`¿Actualizar el área de los ${desajustes.length} productos detectados? Esto puede cambiar en qué pestaña aparecen al vender.`)) return;
-  for (const p of desajustes) {
-    await updateDoc(doc(db, 'productos', p.id), { area: recetaPorId[p.idRecetaFen].area });
-  }
-  await cargarProductos();
-  await cargarProdAdmin();
-  revisarSincronizacionFen();
-  showToast(`✅ ${desajustes.length} área(s) actualizadas`);
-};
-
-// Quita un vínculo roto/erróneo, dejando el producto sin idRecetaFen — para volver a vincularlo
-// cuando exista la receta correcta del lado de fën.
-window.desvincularRecetaFen = async function(productoId, nombre) {
-  if (!confirm(`¿Quitar el vínculo de "${nombre}" con fën-producción? El producto queda sin vincular hasta que elijas una receta correcta.`)) return;
-  await updateDoc(doc(db, 'productos', productoId), { idRecetaFen: '' });
-  await cargarProductos();
-  await cargarProdAdmin();
-  revisarSincronizacionFen();
-  showToast('✅ Desvinculado');
-};
-
-// ── Reconciliación de nombres históricos (ventas y merma) ──
-// Nunca reescribe en bloque. El período va del mes actual hacia atrás hasta enero de este año.
-let PERIODOS_SEGUIMIENTO = {}; // cache de config/reconciliacionPeriodos
-
-function listaPeriodosReconciliacion() {
-  const hoy = new Date();
-  const anio = hoy.getFullYear();
-  const mesActual = hoy.getMonth() + 1;
-  const periodos = [];
-  for (let m = mesActual; m >= 1; m--) periodos.push(`${anio}-${String(m).padStart(2,'0')}`);
-  return periodos;
-}
-
-const NOMBRES_MESES = ['', 'Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-function etiquetaPeriodo(periodo) {
-  const [y, m] = periodo.split('-');
-  return `${NOMBRES_MESES[parseInt(m)]} ${y}`;
-}
-
-function rangoPeriodo(periodo) {
-  const [y, m] = periodo.split('-').map(Number);
-  const desde = new Date(y, m - 1, 1, 0, 0, 0);
-  const hasta = new Date(y, m, 0, 23, 59, 59); // día 0 del mes siguiente = último día de este mes
-  return {
-    tsDesde: Timestamp.fromDate(desde), tsHasta: Timestamp.fromDate(hasta),
-    fEnvioDesde: fechaStr(desde), fEnvioHasta: fechaStr(hasta)
-  };
-}
-
-async function cargarSeguimientoReconciliacion() {
-  try {
-    const snap = await getDoc(doc(db, 'config', 'reconciliacionPeriodos'));
-    PERIODOS_SEGUIMIENTO = snap.exists() ? (snap.data().periodos || {}) : {};
-  } catch (e) { console.error(e); PERIODOS_SEGUIMIENTO = {}; }
-}
-
-function renderPeriodosReconciliacion() {
-  const sel = document.getElementById('reconciliarPeriodo');
-  if (sel && !sel.dataset.armado) {
-    sel.innerHTML = listaPeriodosReconciliacion().map(p =>
-      `<option value="${p}">${etiquetaPeriodo(p)}${PERIODOS_SEGUIMIENTO[p]?.revisado ? ' ✅' : ''}</option>`
-    ).join('');
-    sel.dataset.armado = '1';
-  }
-  const segWrap = document.getElementById('reconciliarSeguimiento');
-  if (segWrap) {
-    segWrap.innerHTML = listaPeriodosReconciliacion().map(p => {
-      const rev = PERIODOS_SEGUIMIENTO[p];
-      return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px">
-        <span>${etiquetaPeriodo(p)}</span>
-        <span style="color:${rev?.revisado ? '#2a8a4a' : '#aaa'}">${rev?.revisado ? '✅ Revisado' : '⏳ Pendiente'}</span>
-      </div>`;
-    }).join('');
-  }
-}
-
-window.marcarPeriodoRevisado = async function(periodo) {
-  PERIODOS_SEGUIMIENTO[periodo] = { revisado: true, fecha: fechaLocalHoy(), usuario: usuario.email };
-  await setDoc(doc(db, 'config', 'reconciliacionPeriodos'), { periodos: PERIODOS_SEGUIMIENTO });
-  renderPeriodosReconciliacion();
-  showToast('✅ Período marcado como revisado');
-};
-
-function renderPeriodosExportVentas() {
-  const sel = document.getElementById('exportVentasPeriodo');
-  if (sel && !sel.dataset.armado) {
-    sel.innerHTML = listaPeriodosReconciliacion().map(p => `<option value="${p}">${etiquetaPeriodo(p)}</option>`).join('');
-    sel.dataset.armado = '1';
-  }
-}
-
-// Agrega ventas del mes por idRecetaFen (cantidad + monto neto: sin IVA y después de descuento de línea)
-// y lo publica en Sheets, mismo patrón que ya usamos para caja y merma.
-// Genera un documento imprimible (PDF vía diálogo de impresión) con los productos activos
-// agrupados por área, ordenados de menor a mayor precio, mostrando el precio de "Hoy" (primer día).
 // Tiempos de pago por sucursal (días hasta que el dinero está disponible según cada medio).
 // Barros Arana queda fijo en 0 (convenio de pago inmediato, ya confirmado) — solo Ainavillo es editable,
 // hasta que se confirme el tiempo real con el procesador.
@@ -2772,7 +2075,7 @@ window.exportarPreciosPorArea = function() {
       .sort((x, y) => (x.precioHoy || x.precio || 0) - (y.precioHoy || y.precio || 0));
     if (!prods.length) return;
     html += `
-      <div style="margin-top:18px;margin-bottom:6px;font-size:15px;font-weight:700;border-bottom:2px solid #333;padding-bottom:4px">${a.emoji} ${a.nombre}</div>
+      <div style="margin-top:18px;margin-bottom:6px;font-size:15px;font-weight:700;border-bottom:2px solid #333;padding-bottom:4px">${a.nombre}</div>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         ${prods.map(p => `
           <tr style="border-bottom:1px solid #eee">
@@ -2787,276 +2090,6 @@ window.exportarPreciosPorArea = function() {
   window.print();
 };
 
-window.generarVentasMensualesFen = async function() {
-  const periodo = document.getElementById('exportVentasPeriodo').value;
-  const btn = document.getElementById('btnExportVentasFen');
-  const resultEl = document.getElementById('exportVentasFenResultado');
-  if (!periodo) return;
-  if (btn) { btn.disabled = true; btn.textContent = 'Calculando...'; }
-  resultEl.innerHTML = '';
-
-  try {
-    const { tsDesde, tsHasta } = rangoPeriodo(periodo);
-    const ventasSnap = await getDocs(query(collection(db, 'ventas'), where('fecha', '>=', tsDesde), where('fecha', '<=', tsHasta)));
-
-    const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-    const idToRecetaFen = {};
-    fuente.forEach(p => { idToRecetaFen[p.id] = p.idRecetaFen || ''; });
-
-    // Tiempos de pago configurados (días hasta disponibilidad), para el flujo de caja proyectado
-    const tiemposSnap = await getDoc(doc(db, 'config', 'tiemposPago'));
-    const tiemposPago = tiemposSnap.exists() ? tiemposSnap.data() : {};
-
-    const porReceta = {}; // { idRecetaFen: {cantidad, montoNeto} }
-    const sinVincularMonto = {}; // { nombreProducto: {cantidad, montoNeto} } — explica la diferencia vs. verificación
-    const verificacionPorSucursal = {}; // { ainavillo: neto, barros_arana: neto } — total real, sin filtrar por vinculación
-    const flujoCajaMapa = {}; // "mesVenta|mesDisponible|sucursal|medio" -> monto neto
-    let huerfanas = 0;
-    let huerfanasMonto = 0;
-
-    ventasSnap.docs.forEach(d => {
-      const venta = d.data();
-      if (venta.anulada === true) return; // excluir ventas anuladas — no son ingreso real
-
-      const sucursalKey = venta.sucursal === 'ainavillo' ? 'ainavillo' : 'barros_arana';
-      const fechaVenta = venta.fecha?.toDate ? venta.fecha.toDate() : new Date();
-
-      // Detalle por receta vinculada (como ya existía)
-      (venta.lineas || []).forEach(l => {
-        const idRecetaFen = idToRecetaFen[l.id];
-        if (idRecetaFen === undefined) { huerfanas++; huerfanasMonto += (l.total || 0) / 1.19; return; } // producto ya no existe (eliminado antes de este cambio)
-        if (!idRecetaFen) {
-          // Sin vincular todavía — fuera del detalle por receta (no es error), pero se registra
-          // para poder explicar la diferencia contra el total de verificación.
-          if (!sinVincularMonto[l.nombre]) sinVincularMonto[l.nombre] = { cantidad: 0, montoNeto: 0 };
-          sinVincularMonto[l.nombre].cantidad += l.cantidad;
-          sinVincularMonto[l.nombre].montoNeto += (l.total || 0) / 1.19;
-          return;
-        }
-        if (!porReceta[idRecetaFen]) porReceta[idRecetaFen] = { cantidad: 0, montoNeto: 0 };
-        porReceta[idRecetaFen].cantidad += l.cantidad;
-        porReceta[idRecetaFen].montoNeto += (l.total || 0) / 1.19; // neto: post-descuento de línea, sin IVA
-      });
-
-      // Total neto real de la venta completa, SIN filtrar por vinculación — para el CSV de verificación
-      const totalLineasVenta = (venta.lineas || []).reduce((a, l) => a + (l.total || 0), 0);
-      const netoVenta = totalLineasVenta / 1.19;
-      verificacionPorSucursal[sucursalKey] = (verificacionPorSucursal[sucursalKey] || 0) + netoVenta;
-
-      // Flujo de caja proyectado: por cada medio de pago de la venta (uno solo, o varios si el pago fue dividido),
-      // se calcula a qué mes queda disponible el dinero según el convenio configurado para esa sucursal.
-      const pagos = (venta.pagos && venta.pagos.length) ? venta.pagos : [{ medio: venta.medioPago || 'efectivo', monto: venta.total || totalLineasVenta }];
-      pagos.forEach(pago => {
-        const dias = pago.medio === 'efectivo' ? 0 : (tiemposPago[sucursalKey]?.[pago.medio] ?? 0);
-        const fechaDisponible = new Date(fechaVenta);
-        fechaDisponible.setDate(fechaDisponible.getDate() + dias);
-        const mesDisponible = `${fechaDisponible.getFullYear()}-${String(fechaDisponible.getMonth() + 1).padStart(2, '0')}`;
-        const montoNetoPago = (pago.monto || 0) / 1.19;
-        const clave = `${periodo}|${mesDisponible}|${sucursalKey}|${pago.medio}`;
-        flujoCajaMapa[clave] = (flujoCajaMapa[clave] || 0) + montoNetoPago;
-      });
-    });
-
-    const filas = Object.entries(porReceta).map(([idRecetaFen, d]) => ({
-      idRecetaFen, mes: periodo, cantidad_vendida: d.cantidad, monto_neto: Math.round(d.montoNeto)
-    }));
-
-    const totalConsolidado = Object.values(verificacionPorSucursal).reduce((a, b) => a + b, 0);
-    const verificacion = [
-      ...Object.entries(verificacionPorSucursal).map(([suc, neto]) => ({
-        mes: periodo, sucursal: suc === 'ainavillo' ? 'Ainavillo' : 'Barros Arana', total_neto: Math.round(neto)
-      })),
-      { mes: periodo, sucursal: 'TOTAL', total_neto: Math.round(totalConsolidado) }
-    ];
-
-    const flujoCaja = Object.entries(flujoCajaMapa).map(([clave, monto]) => {
-      const [mesVenta, mesDisponible, suc, medio] = clave.split('|');
-      return { mes_venta: mesVenta, mes_disponible: mesDisponible, sucursal: suc === 'ainavillo' ? 'Ainavillo' : 'Barros Arana', medio_pago: medio, monto_neto: Math.round(monto) };
-    });
-
-    if (!filas.length && totalConsolidado === 0) {
-      resultEl.innerHTML = `<div class="empty">No hay ventas registradas en ${etiquetaPeriodo(periodo)}.</div>`;
-      if (btn) { btn.disabled = false; btn.textContent = '📤 Generar y enviar'; }
-      return;
-    }
-
-    const res = await fetch(APPS_SCRIPT_URL_VENTAS_FEN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ tipo: 'ventas_mensuales_fen', periodo, filas, verificacion, flujoCaja })
-    });
-    const resultado = await res.json().catch(() => null);
-
-    if (!res.ok || !resultado || resultado.ok !== true) {
-      const detalle = resultado?.error || `HTTP ${res.status}`;
-      resultEl.innerHTML = `<div style="padding:10px;background:#fdeceb;border-radius:8px;font-size:12px;color:#c0392b">
-        ❌ El script no confirmó haber guardado los datos (${detalle}). No des por hecho que se envió — revisa el registro de ejecución en Apps Script antes de reintentar.
-      </div>`;
-      showToast('❌ No se pudo confirmar el envío');
-      if (btn) { btn.disabled = false; btn.textContent = '📤 Generar y enviar'; }
-      return;
-    }
-
-    const totalMonto = filas.reduce((a, f) => a + f.monto_neto, 0);
-    const gapReal = totalConsolidado - totalMonto;
-    const sumaSinVincular = Object.values(sinVincularMonto).reduce((a, d) => a + d.montoNeto, 0);
-    const sumaExplicada = sumaSinVincular + huerfanasMonto;
-    const diferenciaSinExplicar = gapReal - sumaExplicada;
-
-    resultEl.innerHTML = `
-      <div style="padding:10px;background:#eafaf0;border-radius:8px;font-size:12px;color:#2a7a4a;margin-bottom:8px">
-        ✅ Enviado y confirmado — ${filas.length} receta(s), $${totalMonto.toLocaleString('es-CL')} neto (por receta) en ${etiquetaPeriodo(periodo)}.<br/>
-        Verificación: Ainavillo $${Math.round(verificacionPorSucursal.ainavillo || 0).toLocaleString('es-CL')} · Barros Arana $${Math.round(verificacionPorSucursal.barros_arana || 0).toLocaleString('es-CL')} · Total $${Math.round(totalConsolidado).toLocaleString('es-CL')}
-      </div>
-      ${huerfanas > 0 ? `<div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:12px;color:#8a6416">⚠️ ${huerfanas} línea(s) de venta pertenecen a productos que ya no existen (fueron eliminados), por $${Math.round(huerfanasMonto).toLocaleString('es-CL')}. No se pudieron atribuir a ninguna receta — quedan fuera del detalle por receta, pero sí están incluidas en el total de verificación.</div>` : ''}
-      ${Object.keys(sinVincularMonto).length ? `<div style="padding:10px;background:#eef6fb;border-radius:8px;font-size:12px;color:#1a4a7a;margin-top:8px">
-        <b>Esto explica la diferencia con el total de verificación</b> — productos vendidos en ${etiquetaPeriodo(periodo)} que todavía no están vinculados a una receta de fën:
-        ${Object.entries(sinVincularMonto).sort((a,b) => b[1].montoNeto - a[1].montoNeto).map(([nombre, d]) =>
-          `<div style="display:flex;justify-content:space-between;padding:3px 0">
-            <span>${nombre} (${d.cantidad} u.)</span>
-            <span>$${Math.round(d.montoNeto).toLocaleString('es-CL')}</span>
-          </div>`).join('')}
-        <div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid #cfe0f0;font-weight:700">
-          <span>Total sin vincular</span>
-          <span>$${Math.round(sumaSinVincular).toLocaleString('es-CL')}</span>
-        </div>
-        <div style="margin-top:6px;font-size:11px;color:#888">Vincúlalos en Productos → toca el nombre → elige la receta correspondiente.</div>
-      </div>` : ''}
-      ${Math.abs(diferenciaSinExplicar) > 10 ? `<div style="padding:10px;background:#fdeceb;border-radius:8px;font-size:12px;color:#c0392b;margin-top:8px">
-        ⚠️ La suma de "sin vincular" + "huérfanas" no explica toda la diferencia — quedan <b>$${Math.round(Math.abs(diferenciaSinExplicar)).toLocaleString('es-CL')}</b> sin identificar. Puede haber otra causa (ej. una venta con datos incompletos, un descuento aplicado distinto al esperado). Vale la pena revisar manualmente antes de confiar en el número de este mes.
-      </div>` : (gapReal !== 0 ? `<div style="padding:8px;font-size:11px;color:#2a7a4a;margin-top:4px">✅ La diferencia queda completamente explicada por lo de arriba — no hay nada más sin identificar.</div>` : '')}
-    `;
-    showToast('✅ Ventas mensuales enviadas a fën');
-  } catch (e) {
-    resultEl.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
-  }
-  if (btn) { btn.disabled = false; btn.textContent = '📤 Generar y enviar'; }
-};
-
-// Analiza un período: agrupa nombres distintos usados en ventas y merma, con cuántas filas afecta cada uno
-window.analizarPeriodoReconciliacion = async function() {
-  const periodo = document.getElementById('reconciliarPeriodo').value;
-  const wrap = document.getElementById('reconciliarResultado');
-  if (!periodo || !wrap) return;
-  wrap.innerHTML = '<div class="empty">Analizando período, puede tardar unos segundos...</div>';
-
-  const { tsDesde, tsHasta, fEnvioDesde, fEnvioHasta } = rangoPeriodo(periodo);
-
-  const [ventasSnap, mermaSnap, equivSnap] = await Promise.all([
-    getDocs(query(collection(db, 'ventas'), where('fecha', '>=', tsDesde), where('fecha', '<=', tsHasta))),
-    getDocs(query(collection(db, 'merma'), where('fechaEnvio', '>=', fEnvioDesde), where('fechaEnvio', '<=', fEnvioHasta))),
-    getDocs(collection(db, 'equivalenciasNombres'))
-  ]);
-
-  const equivalencias = {};
-  equivSnap.docs.forEach(d => { equivalencias[d.data().nombreOriginal] = d.data(); });
-
-  // Agrupar por nombre: cuántas líneas de venta y cuántos registros de merma usan ese nombre exacto
-  const porNombre = {};
-  ventasSnap.docs.forEach(d => {
-    (d.data().lineas || []).forEach(l => {
-      if (!l.nombre) return;
-      if (!porNombre[l.nombre]) porNombre[l.nombre] = { ventas: 0, merma: 0 };
-      porNombre[l.nombre].ventas++;
-    });
-  });
-  mermaSnap.docs.forEach(d => {
-    const n = d.data().nombreProducto;
-    if (!n) return;
-    if (!porNombre[n]) porNombre[n] = { ventas: 0, merma: 0 };
-    porNombre[n].merma++;
-  });
-
-  const nombres = Object.keys(porNombre).sort();
-  if (!nombres.length) {
-    wrap.innerHTML = '<div class="empty">No hay ventas ni merma registradas en este período.</div>';
-    return;
-  }
-
-  const opcionesRecetas = RECETAS_FEN.slice().sort((a,b) => (a.area+a.nombre).localeCompare(b.area+b.nombre))
-    .map(r => `<option value="${r.idReceta}">${r.idReceta} — ${r.nombre} (${r.area})</option>`).join('');
-
-  wrap.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:8px">${nombres.length} nombre(s) distinto(s) encontrados en ${etiquetaPeriodo(periodo)}.</div>` +
-    nombres.map((n, i) => {
-      const info = porNombre[n];
-      const equivPrevia = equivalencias[n]?.idRecetaFen || '';
-      const idInput = `reconc-${i}`;
-      return `<div style="padding:10px;background:#f8f9fa;border-radius:8px;margin-bottom:8px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${n}</div>
-        <div style="font-size:11px;color:#888;margin-bottom:6px">${info.ventas} línea(s) de venta · ${info.merma} registro(s) de merma</div>
-        <select id="${idInput}" style="width:100%;margin-bottom:6px">
-          <option value="">— Sin emparejar —</option>
-          ${opcionesRecetas}
-        </select>
-        <div style="display:flex;gap:6px">
-          <button class="btn-sm btn-edit" style="flex:1" onclick="guardarEquivalenciaNombre('${idInput}','${n.replace(/'/g,"\\'")}')">💾 Guardar equivalencia</button>
-          <button class="btn-sm btn-del" style="flex:1" onclick="reescribirNombreHistorico('${idInput}','${n.replace(/'/g,"\\'")}','${periodo}',${info.ventas},${info.merma})">✏️ Reescribir estas filas</button>
-        </div>
-      </div>`;
-    }).join('') +
-    `<button class="btn btn-secondary btn-full" style="margin-top:6px" onclick="marcarPeriodoRevisado('${periodo}')">✅ Marcar ${etiquetaPeriodo(periodo)} como revisado</button>`;
-
-  // Preseleccionar equivalencias ya guardadas de antes
-  nombres.forEach((n, i) => {
-    const equivPrevia = equivalencias[n]?.idRecetaFen;
-    if (equivPrevia) { const el = document.getElementById(`reconc-${i}`); if (el) el.value = equivPrevia; }
-  });
-};
-
-// Solo guarda la equivalencia (nombre viejo → receta correcta). No toca ningún documento histórico.
-window.guardarEquivalenciaNombre = async function(selectId, nombreOriginal) {
-  const idRecetaFen = document.getElementById(selectId).value;
-  if (!idRecetaFen) { alert('Elige una receta primero'); return; }
-  const receta = RECETAS_FEN.find(r => r.idReceta === idRecetaFen);
-  await setDoc(doc(db, 'equivalenciasNombres', encodeURIComponent(nombreOriginal)), {
-    nombreOriginal, idRecetaFen, area: receta?.area || '', fechaAsignado: fechaLocalHoy(), usuario: usuario.email
-  });
-  showToast('💾 Equivalencia guardada (no se tocó ningún registro histórico)');
-};
-
-// Reescribe el nombre en las filas puntuales de ese período exacto (ventas.lineas[] y merma.nombreProducto)
-window.reescribirNombreHistorico = async function(selectId, nombreOriginal, periodo, cantVentas, cantMerma) {
-  const idRecetaFen = document.getElementById(selectId).value;
-  if (!idRecetaFen) { alert('Elige una receta primero'); return; }
-  const receta = RECETAS_FEN.find(r => r.idReceta === idRecetaFen);
-  if (!receta) return;
-  const nombreNuevo = receta.nombre;
-
-  if (!confirm(`Vas a reescribir "${nombreOriginal}" → "${nombreNuevo}" en:\n\n• ${cantVentas} línea(s) de venta\n• ${cantMerma} registro(s) de merma\n\nSolo dentro de ${etiquetaPeriodo(periodo)}. Esto SÍ modifica el histórico. ¿Confirmas?`)) return;
-
-  const { tsDesde, tsHasta, fEnvioDesde, fEnvioHasta } = rangoPeriodo(periodo);
-  let filasVentas = 0, filasMerma = 0;
-
-  const ventasSnap = await getDocs(query(collection(db, 'ventas'), where('fecha', '>=', tsDesde), where('fecha', '<=', tsHasta)));
-  for (const d of ventasSnap.docs) {
-    const venta = d.data();
-    if (!venta.lineas) continue;
-    let cambiado = false;
-    const nuevasLineas = venta.lineas.map(l => {
-      if (l.nombre === nombreOriginal) { cambiado = true; filasVentas++; return { ...l, nombre: nombreNuevo }; }
-      return l;
-    });
-    if (cambiado) await updateDoc(doc(db, 'ventas', d.id), { lineas: nuevasLineas });
-  }
-
-  const mermaSnap = await getDocs(query(collection(db, 'merma'), where('fechaEnvio', '>=', fEnvioDesde), where('fechaEnvio', '<=', fEnvioHasta)));
-  for (const d of mermaSnap.docs) {
-    if (d.data().nombreProducto === nombreOriginal) {
-      await updateDoc(doc(db, 'merma', d.id), { nombreProducto: nombreNuevo });
-      filasMerma++;
-    }
-  }
-
-  // También queda guardada la equivalencia, para períodos futuros
-  await setDoc(doc(db, 'equivalenciasNombres', encodeURIComponent(nombreOriginal)), {
-    nombreOriginal, idRecetaFen, area: receta.area || '', fechaAsignado: fechaLocalHoy(), usuario: usuario.email
-  });
-
-  showToast(`✅ Reescrito: ${filasVentas} venta(s), ${filasMerma} merma(s)`);
-  analizarPeriodoReconciliacion();
-};
-
-
 // Alterna visibilidad de las secciones colapsables del panel Productos (Áreas, Tipos de leche, Motivos de merma, Subcategorías, Lista)
 window.toggleProdSection = function(id) {
   const el = document.getElementById(`prodSec-${id}`);
@@ -3067,175 +2100,13 @@ window.toggleProdSection = function(id) {
   if (icon) icon.textContent = abierto ? '▸' : '▾';
 };
 
-let SUBCATEGORIAS = {}; // { BOL: [...], PAN: [...], PAS: [...], CAF: [...] } — lista maestra, cargada desde Firestore
-
-async function cargarSubcategorias() {
-  try {
-    const snap = await getDoc(doc(db, 'config', 'subcategorias'));
-    SUBCATEGORIAS = (snap.exists() && snap.data().porArea) ? snap.data().porArea : {};
-  } catch(e) { console.error('Error cargando subcategorías:', e); SUBCATEGORIAS = {}; }
-  renderCategoriaSelect();
-  renderGestionCategorias();
-}
-
-async function guardarSubcategorias() {
-  try { await setDoc(doc(db, 'config', 'subcategorias'), { porArea: SUBCATEGORIAS }); }
-  catch(e) { console.error('Error guardando subcategorías:', e); }
-}
-
-// Si se escribió una subcategoría nueva desde el formulario de producto, se agrega a la lista
-// maestra automáticamente, para no tener que repetir el paso en el gestor por separado.
-async function asegurarSubcategoriaEnLista(area, nombre) {
-  if (!area || !nombre) return;
-  if (!SUBCATEGORIAS[area]) SUBCATEGORIAS[area] = [];
-  if (!SUBCATEGORIAS[area].includes(nombre)) {
-    SUBCATEGORIAS[area].push(nombre);
-    await guardarSubcategorias();
-  }
-}
-
-// Popula <select id="prodCategoria"> con la lista maestra de subcategorías del área elegida
-function renderCategoriaSelect(valorActual) {
-  const sel = document.getElementById('prodCategoria');
-  if (!sel) return;
-  const prev = valorActual !== undefined ? valorActual : sel.value;
-  const area = document.getElementById('prodArea')?.value;
-  const cats = (area && SUBCATEGORIAS[area]) ? SUBCATEGORIAS[area] : [];
-
-  sel.innerHTML = [
-    `<option value="">— Sin subcategoría —</option>`,
-    ...cats.map(c => `<option value="${c}">${c}</option>`),
-    `<option value="${CATEGORIA_NUEVA}">+ Nueva subcategoría...</option>`
-  ].join('');
-
-  if (prev === CATEGORIA_NUEVA) {
-    sel.value = CATEGORIA_NUEVA;
-  } else if (prev && !cats.includes(prev)) {
-    // Valor guardado que ya no está en la lista maestra (ej. se eliminó desde el gestor): se muestra igual, marcado
-    const opt = document.createElement('option');
-    opt.value = prev; opt.textContent = `${prev} (fuera de lista)`;
-    sel.insertBefore(opt, sel.lastElementChild);
-    sel.value = prev;
-  } else {
-    sel.value = prev || '';
-  }
-  toggleCategoriaNueva();
-}
-
-// Muestra/oculta el campo de texto libre cuando se elige "+ Nueva subcategoría..."
-window.toggleCategoriaNueva = function() {
-  const sel = document.getElementById('prodCategoria');
-  const nueva = document.getElementById('prodCategoriaNueva');
-  if (!sel || !nueva) return;
-  const esNueva = sel.value === CATEGORIA_NUEVA;
-  nueva.style.display = esNueva ? '' : 'none';
-  if (!esNueva) nueva.value = '';
-};
-
-// ── Gestor de la lista maestra de subcategorías, por área ──
-window.renderGestionCategorias = function() {
-  const wrap = document.getElementById('gestionCategoriasLista');
-  if (!wrap) return;
-
-  wrap.innerHTML = AREAS.map(a => `
-    <div style="margin-bottom:14px">
-      <div style="font-size:12px;font-weight:700;color:#003a79;margin-bottom:6px">${a.emoji} ${a.id} — ${a.nombre}</div>
-      ${(SUBCATEGORIAS[a.id] || []).length
-        ? SUBCATEGORIAS[a.id].map((c, i) => `
-          <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
-            <input type="text" value="${c}" onchange="editarSubcategoria('${a.id}',${i},this.value)"
-                   style="flex:1;font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px"/>
-            <button class="btn-sm btn-del" onclick="eliminarSubcategoria('${a.id}',${i})">🗑️</button>
-          </div>`).join('')
-        : '<div class="empty" style="padding:6px 0;font-size:11px">Sin subcategorías todavía</div>'}
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <input type="text" id="nuevaSubcat-${a.id}" placeholder="Nueva subcategoría en ${a.id}..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
-        <button class="btn-sm btn-edit" onclick="agregarSubcategoriaManager('${a.id}')">+ Agregar</button>
-      </div>
-    </div>
-  `).join('')
-  + `<button class="btn-sm btn-del" style="width:100%;margin-top:6px" onclick="eliminarTodasSubcategorias()">🗑️ Eliminar TODAS las subcategorías</button>
-  <div id="limpiezaCategoriasFantasma" style="margin-top:10px"></div>`;
-
-  renderLimpiezaCategoriasFantasma();
-};
-
-window.agregarSubcategoriaManager = function(area) {
-  const input = document.getElementById(`nuevaSubcat-${area}`);
-  const val = input.value.trim();
-  if (!val) return;
-  if (!SUBCATEGORIAS[area]) SUBCATEGORIAS[area] = [];
-  if (SUBCATEGORIAS[area].includes(val)) { alert('Esa subcategoría ya existe en esta área'); return; }
-  SUBCATEGORIAS[area].push(val);
-  input.value = '';
-  renderGestionCategorias();
-  guardarSubcategorias();
-  renderCategoriaSelect();
-};
-
-window.editarSubcategoria = function(area, i, val) {
-  const nuevo = val.trim();
-  if (!SUBCATEGORIAS[area]) return;
-  if (!nuevo) { renderGestionCategorias(); return; }
-  SUBCATEGORIAS[area][i] = nuevo;
-  guardarSubcategorias();
-  renderCategoriaSelect();
-};
-
-window.eliminarSubcategoria = function(area, i) {
-  if (!SUBCATEGORIAS[area]) return;
-  if (!confirm(`¿Eliminar "${SUBCATEGORIAS[area][i]}" de la lista? Los productos que ya la tenían asignada no cambian solos — hay que reasignarlos a mano si quieres.`)) return;
-  SUBCATEGORIAS[area].splice(i, 1);
-  renderGestionCategorias();
-  guardarSubcategorias();
-  renderCategoriaSelect();
-};
-
-window.eliminarTodasSubcategorias = function() {
-  if (!confirm('¿Eliminar TODAS las subcategorías de todas las áreas? Esto no borra ni modifica productos — solo la lista de opciones disponibles para elegir. Vas a poder crear las nuevas y asignarlas producto por producto.')) return;
-  SUBCATEGORIAS = {};
-  renderGestionCategorias();
-  guardarSubcategorias();
-  renderCategoriaSelect();
-  showToast('🗑️ Subcategorías eliminadas');
-};
-
-// Detecta productos con un problema de una versión anterior: la subcategoría quedó guardada
-// igual al código del área (ej. categoria:"BOL" en un producto de área BOL) — no es una
-// subcategoría real, era un valor por defecto que no se podía editar ni borrar.
-function renderLimpiezaCategoriasFantasma() {
-  const wrap = document.getElementById('limpiezaCategoriasFantasma');
-  if (!wrap) return;
-  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const afectados = fuente.filter(p => p.categoria && p.categoria === normalizarArea(p.area));
-  if (!afectados.length) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = `
-    <div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:12px;color:#8a6416">
-      Se detectaron ${afectados.length} producto(s) con una subcategoría "fantasma" (igual al código del área, de un problema ya corregido) — no son subcategorías reales.
-      <button class="btn-sm btn-edit" style="margin-top:6px;display:block" onclick="limpiarCategoriasFantasma()">🧹 Limpiar ahora</button>
-    </div>`;
-}
-
-window.limpiarCategoriasFantasma = async function() {
-  const fuente = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const afectados = fuente.filter(p => p.categoria && p.categoria === normalizarArea(p.area));
-  if (!afectados.length) return;
-  if (!confirm(`¿Limpiar la subcategoría fantasma de ${afectados.length} producto(s)? Quedarán sin subcategoría — podrás asignarles una real cuando quieras.`)) return;
-  for (const p of afectados) {
-    await updateDoc(doc(db, 'productos', p.id), { categoria: '' });
-  }
-  await cargarProductos();
-  await cargarProdAdmin();
-  showToast('✅ Categorías fantasma limpiadas');
-};
-
 // Botones de área en stock ingreso
 function renderStockAreaBtns() {
   const wrap = document.getElementById('stockAreaBtns');
   if (!wrap) return;
   wrap.innerHTML = `<button class="stock-area-btn active" onclick="selStockArea(this,'')">Todos</button>` +
-    AREAS.map(a =>
-      `<button class="stock-area-btn" onclick="selStockArea(this,'${a.id}')">${a.emoji} ${a.id}</button>`
+    areasVisibles().map(a =>
+      `<button class="stock-area-btn" onclick="selStockArea(this,'${a.id}')">${a.nombre}</button>`
     ).join('');
 }
 
@@ -3244,8 +2115,8 @@ function renderStockListaAreaBtns() {
   const wrap = document.getElementById('stockListaAreaBtns');
   if (!wrap) return;
   wrap.innerHTML = `<button class="stock-area-btn${_stockListaArea === '' ? ' active' : ''}" onclick="selStockListaArea(this,'')">Todos</button>` +
-    AREAS.map(a =>
-      `<button class="stock-area-btn${_stockListaArea === a.id ? ' active' : ''}" onclick="selStockListaArea(this,'${a.id}')">${a.emoji} ${a.id}</button>`
+    areasVisibles().map(a =>
+      `<button class="stock-area-btn${_stockListaArea === a.id ? ' active' : ''}" onclick="selStockListaArea(this,'${a.id}')">${a.nombre}</button>`
     ).join('');
 }
 
@@ -3260,305 +2131,133 @@ window.selStockListaArea = function(btn, area) {
 function renderAreaFilterBtns() {
   const wrap = document.getElementById('areaFilterBtns');
   if (!wrap) return;
-  wrap.innerHTML = `<button class="area-filter-btn active" data-area="" onclick="selAreaFilter(this,'')">Todos</button>` +
-    AREAS.map(a =>
-      `<button class="area-filter-btn" data-area="${a.id}" onclick="selAreaFilter(this,'${a.id}')">${a.emoji} ${a.id}</button>`
+  const lista = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
+  wrap.innerHTML = `<button class="area-filter-btn${_areaFiltroAdmin === '' ? ' active' : ''}" data-area="" onclick="selAreaFilter(this,'')">Todos</button>` +
+    areasVisibles(lista).map(a =>
+      `<button class="area-filter-btn${_areaFiltroAdmin === a.id ? ' active' : ''}" data-area="${a.id}" onclick="selAreaFilter(this,'${a.id}')">${a.nombre}</button>`
     ).join('');
 }
 
-// Lista de áreas en la card de gestión
-function renderAreasList() {
-  const el = document.getElementById('areasList');
-  if (!el) return;
-  if (AREAS.length === 0) { el.innerHTML = '<div class="empty">Sin áreas definidas</div>'; return; }
-  el.innerHTML = AREAS.map(a => `
-    <div class="prod-row">
-      <span style="font-size:22px">${a.emoji}</span>
-      <div class="prod-info">
-        <div class="prod-nombre">${a.nombre}</div>
-        <div class="prod-meta">${a.id}</div>
-      </div>
-      ${esAdmin ? `
-        <button class="btn-sm btn-edit" onclick="editarArea('${a.id}')">✏️</button>
-        <button class="btn-sm btn-del"  onclick="eliminarArea('${a.id}','${a.nombre.replace(/'/g,"\\'")}')">🗑️</button>
-      ` : ''}
-    </div>
-  `).join('');
-}
-
-window.toggleAreaForm = function() {
-  const wrap = document.getElementById('areaFormWrap');
-  const visible = wrap.style.display !== 'none';
-  if (visible) cancelarArea();
-  else wrap.style.display = '';
-};
-
-window.editarArea = function(id) {
-  const a = AREAS.find(x => x.id === id);
-  if (!a) return;
-  document.getElementById('areaEditId').value  = id;
-  document.getElementById('areaCodigo').value  = a.id;
-  document.getElementById('areaNombre').value  = a.nombre;
-  document.getElementById('areaEmoji').value   = a.emoji;
-  document.getElementById('areaCodigo').disabled = true; // no cambiar el ID
-  document.getElementById('areaFormWrap').style.display = '';
-  document.getElementById('areaFormWrap').scrollIntoView({ behavior: 'smooth' });
-};
-
-window.cancelarArea = function() {
-  document.getElementById('areaEditId').value = '';
-  document.getElementById('areaCodigo').value = '';
-  document.getElementById('areaNombre').value = '';
-  document.getElementById('areaEmoji').value  = '';
-  document.getElementById('areaCodigo').disabled = false;
-  document.getElementById('areaFormWrap').style.display = 'none';
-};
-
-window.guardarArea = async function() {
-  const btn      = document.getElementById('btnGuardarArea');
-  const editId   = document.getElementById('areaEditId').value.trim();
-  const codigo   = document.getElementById('areaCodigo').value.trim().toUpperCase();
-  const nombre   = document.getElementById('areaNombre').value.trim();
-  const emoji    = document.getElementById('areaEmoji').value.trim() || '📦';
-  if (!codigo || !nombre) { alert('Código y nombre son obligatorios'); return; }
-  if (!editId && AREAS.find(a => a.id === codigo)) {
-    alert(`Ya existe un área con el código "${codigo}"`); return;
-  }
-  btn.disabled = true; btn.textContent = 'Guardando...';
-  try {
-    const docId = editId || codigo;
-    await setDoc(doc(db, 'areas', docId), { id: docId, nombre, emoji });
-    await cargarAreas();
-    cancelarArea();
-    showToast('✅ Área guardada');
-  } catch(e) { alert('Error: ' + e.message); }
-  btn.disabled = false; btn.textContent = '✓ Guardar área';
-};
-
-window.eliminarArea = async function(id, nombre) {
-  const enUso = productos.some(p => normalizarArea(p.area) === id);
-  const msg = enUso
-    ? `⚠️ El área "${nombre}" tiene productos asignados.\n¿Eliminarla de todas formas? (los productos quedarán sin área válida)`
-    : `¿Eliminar el área "${nombre}"?`;
-  if (!confirm(msg)) return;
-  const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-  await deleteDoc(doc(db, 'areas', id));
-  await cargarAreas();
-  showToast('✅ Área eliminada');
-};
-
 // ══════════════════════════════════
-// PRODUCTOS — ADMIN
+// PRODUCTOS — v2.3.0: se administran en Sistema Fën → Catálogo. Aquí la lista solo para mirar (administración)
+// y "Pedir producto" (todas las cuentas), que escribe en solicitudes_producto lo que lee Sistema Fën.
 // ══════════════════════════════════
-
+const pesosCL = v => '$' + (parseInt(v) || 0).toLocaleString('es-CL');
 window.cargarProdAdmin = async function() {
-  const snap = await getDocs(collection(db, 'productos'));
-  _todosProdsAdmin = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const lista = document.getElementById('prodLista');
+  if (!lista || !esAdmin) return;
+  try {
+    const snap = await getDocs(collection(db, 'productos'));
+    _todosProdsAdmin = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) { lista.innerHTML = `<div class="empty">No se pudo leer la lista: ${escHtml(e.message)}</div>`; return; }
+  renderAreaFilterBtns();
   renderTablaProductos();
-  renderCategoriaSelect();
-  renderGestionCategorias();
 };
 
 function renderTablaProductos() {
-  const busqueda = (document.getElementById('prodBuscar')?.value || '').toLowerCase();
-  let lista = _todosProdsAdmin;
+  const busqueda = (document.getElementById('prodBuscar')?.value || '').toLowerCase().trim();
+  const aviso = document.getElementById('prodSinAreaAviso');
+  const sinArea = _todosProdsAdmin.filter(p => p.activo !== false && normalizarArea(p.area) === SIN_AREA);
+  if (aviso) aviso.innerHTML = sinArea.length
+    ? `<div class="pp-sinarea" id="prodSinAreaTxt"><b>${sinArea.length} ${sinArea.length === 1 ? 'producto sin área' : 'productos sin área'}</b>: ${sinArea.map(p => escHtml(p.nombre || p.id)).join(', ')}. En la venta salen en la pestaña "Sin área". Corrígelos en Sistema Fën → Catálogo.</div>`
+    : '';
+  let lista = _todosProdsAdmin.slice();
   if (_areaFiltroAdmin) lista = lista.filter(p => normalizarArea(p.area) === _areaFiltroAdmin);
-  if (busqueda)         lista = lista.filter(p => p.nombre.toLowerCase().includes(busqueda));
-
-  const tbody = document.getElementById('prodLista');
-  if (!tbody) return;
-  if (lista.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="empty">Sin productos</td></tr>`; return; }
-
-  tbody.innerHTML = lista.map(p => {
-    const areaExiste = AREAS.some(a => a.id === p.area);
-    const areaCode = areaExiste ? p.area : normalizarArea(p.area); // solo cae al respaldo para el resto de la fila (precios, etc.), no para lo que se muestra
-    const conControl = p.controlStock !== false;
-    const precHoy  = parseInt(p.precioHoy || p.precio || 0).toLocaleString('es-CL');
-    const precAyer = parseInt(p.precioAyer || 0).toLocaleString('es-CL');
-    const precAnt  = parseInt(p.precioAntesayer || 0).toLocaleString('es-CL');
-    const prec4to  = parseInt(p.precioCuartoDia || 0).toLocaleString('es-CL');
-    const precUlt  = parseInt(p.precioUltimaOferta || 0).toLocaleString('es-CL');
-    const inactivo = p.activo === false;
-    const accs = esAdmin
-      ? `<button class="btn-sm btn-edit" onclick="editarProducto('${p.id}')">✏️</button>
-         ${inactivo
-            ? `<button class="btn-sm btn-edit" onclick="reactivarProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">↩️</button>`
-            : `<button class="btn-sm btn-del"  onclick="eliminarProducto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">🗑️</button>`}`
-      : '—';
-    return `<tr style="${inactivo ? 'opacity:0.5' : ''}">
-      <td>
-        <div onclick="abrirModalVincularRecetaDirecto('${p.id}','${p.nombre.replace(/'/g,"\\'")}')" style="cursor:pointer">
-          ${p.nombre}${inactivo ? ' <span style="font-size:10px;color:#888">(inactivo)</span>' : ''}
-          <div style="font-size:10px;color:${p.idRecetaFen ? '#2a8a4a' : '#c77'};margin-top:2px">
-            ${p.idRecetaFen ? `🔗 ${p.idRecetaFen}` : '⚠️ sin vincular'}
-          </div>
-        </div>
-      </td>
-      <td>${areaExiste
-        ? `<span class="area-code">${areaCode}</span>`
-        : `<span class="area-code" style="background:#fdeceb;color:#c0392b" title="El área &quot;${p.area||''}&quot; ya no existe (fue eliminada, o nunca se creó) — edita el producto para asignarle un área válida">⚠️ ${p.area || 'sin área'}</span>`}</td>
-      <td style="text-align:center">${conControl ? '✅' : '<span style="color:#888">Sin stock</span>'}</td>
-      ${conControl ? `
-        <td>$${precHoy}</td>
-        <td>$${precAyer}</td>
-        <td>$${precAnt}</td>
-        <td>$${prec4to}</td>
-        <td>$${precUlt}</td>
-        <td style="text-align:center">${p.excepcionHoraria ? '✅' : '—'}</td>
-        <td style="text-align:center">${p.autoEliminar !== false ? '✅' : '—'}</td>
-      ` : `
-        <td colspan="6" style="color:#888">Precio único: $${parseInt(p.precioHoy||p.precio||0).toLocaleString('es-CL')}</td>
-      `}
-      <td>${accs}</td>
-    </tr>`;
+  if (busqueda) lista = lista.filter(p => String(p.nombre || '').toLowerCase().includes(busqueda) || String(p.catalogoId || '').toLowerCase().includes(busqueda));
+  lista.sort((a, b) => (a.activo === false) - (b.activo === false) || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+  const wrap = document.getElementById('prodLista');
+  if (!wrap) return;
+  if (!lista.length) { wrap.innerHTML = '<div class="empty">Sin productos</div>'; return; }
+  wrap.innerHTML = lista.map(p => {
+    const area = normalizarArea(p.area), info = AREAS.find(a => a.id === area) || { nombre: area };
+    const conControl = p.controlStock !== false, inactivo = p.activo === false;
+    const precios = conControl
+      ? [['Hoy', p.precioHoy || p.precio], ['Ayer', p.precioAyer], ['Ant.', p.precioAntesayer], ['4to', p.precioCuartoDia], ['Últ.', p.precioUltimaOferta]].filter(([, v]) => parseInt(v) > 0).map(([t, v]) => `${t} ${pesosCL(v)}`).join(' · ')
+      : `Precio único ${pesosCL(p.precioHoy || p.precio)}`;
+    return `<div class="pp-prod" style="${inactivo ? 'opacity:0.55' : ''}">
+      <div class="pp-prod-txt">
+        <div class="pp-prod-nombre">${escHtml(p.nombre || p.id)}</div>
+        <div class="pp-prod-meta">${area === SIN_AREA ? '<span class="pp-chip pp-rech">Sin área</span> ' : escHtml(info.nombre) + ' · '}${conControl ? (p.autoEliminar === false ? 'Sin vencimiento' : 'Con stock') : 'Sin control de stock'}${p.catalogoId ? ' · ' + escHtml(p.catalogoId) : ' · sin catálogo'}${inactivo ? ' · inactivo' : ''}</div>
+        <div class="pp-prod-meta">${precios || 'Sin precio'}</div>
+      </div>
+    </div>`;
   }).join('');
-};
+}
 
 window.selAreaFilter = function(btn, area) {
   _areaFiltroAdmin = area;
-  document.querySelectorAll('.area-filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#areaFilterBtns .area-filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderTablaProductos();
 };
 
 window.filtrarProdAdmin = function() { renderTablaProductos(); };
 
-window.toggleCamposStock = function() {
-  const conControl = document.getElementById('prodControlStock').checked;
-  document.getElementById('camposStockWrap').style.display = conControl ? '' : 'none';
-  document.getElementById('precioUnicoWrap').style.display = conControl ? 'none' : '';
+// ── Pedir producto ──
+// fen-ventas solicitudes_producto/{id} = { tipo 'producto', nombre, sucursal, precioSugerido (con IVA) | null, nota, estado 'pendiente', por, en }
+// Sistema Fën (Catálogo → Productos → Pedidos) lo resuelve: estado 'aprobada' | 'rechazada', catalogoId, productoId, respuesta, resuelta.
+const ESTADO_PEDIDO = { pendiente: ['Pendiente', 'pp-pend'], aprobada: ['Aprobado', 'pp-apr'], rechazada: ['Rechazado', 'pp-rech'] };
+window.abrirPedirProducto = function() {
+  ['pedirNombre', 'pedirPrecio', 'pedirNota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('pedirError').textContent = '';
+  document.getElementById('pedirOk').textContent = '';
+  document.getElementById('modalPedirProducto').classList.add('open');
+  cargarMisPedidos();
+  setTimeout(() => { const n = document.getElementById('pedirNombre'); if (n) n.focus(); }, 50);
 };
-
-window.editarProducto = function(id) {
-  const all = _todosProdsAdmin.length ? _todosProdsAdmin : productos;
-  const p = all.find(x => x.id === id) || {};
-  const conControl = p.controlStock !== false;
-  document.getElementById('prodId').value = id;
-  document.getElementById('prodNombre').value       = p.nombre || '';
-  document.getElementById('prodArea').value         = normalizarArea(p.area) || 'BOL';
-  renderCategoriaSelect(p.categoria || '');
-  document.getElementById('prodControlStock').checked   = conControl;
-  document.getElementById('prodPrecioHoy').value           = p.precioHoy || p.precio || '';
-  document.getElementById('prodPrecioAyer').value          = p.precioAyer || '';
-  document.getElementById('prodPrecioAntesayer').value     = p.precioAntesayer || '';
-  document.getElementById('prodPrecioCuartoDia').value     = p.precioCuartoDia || '';
-  document.getElementById('prodPrecioUltimaOferta').value  = p.precioUltimaOferta || '';
-  document.getElementById('prodPrecioUnico').value         = p.precioHoy || p.precio || '';
-  document.getElementById('prodExcepcion').checked     = !!p.excepcionHoraria;
-  document.getElementById('prodAutoEliminar').checked  = p.autoEliminar !== false;
-  renderIdRecetaSelect(p.idRecetaFen || '');
-  toggleCamposStock();
-  document.getElementById('formProdTitulo').textContent = '✏️ Editar producto';
-  document.getElementById('btnCancelarEdit').style.display = '';
-  document.getElementById('cardFormProd').scrollIntoView({ behavior: 'smooth' });
+window.limpiarAvisoPedido = function() { document.getElementById('pedirError').textContent = ''; document.getElementById('pedirOk').textContent = ''; };
+window.cerrarPedirProducto = function() {
+  document.getElementById('modalPedirProducto').classList.remove('open');
 };
-
-window.cancelarEdicion = function() {
-  document.getElementById('prodId').value = '';
-  document.getElementById('prodNombre').value = '';
-  renderCategoriaSelect('');
-  document.getElementById('prodControlStock').checked = true;
-  document.getElementById('prodPrecioHoy').value = '';
-  document.getElementById('prodPrecioAyer').value = '';
-  document.getElementById('prodPrecioAntesayer').value = '';
-  document.getElementById('prodPrecioCuartoDia').value = '';
-  document.getElementById('prodPrecioUltimaOferta').value = '';
-  document.getElementById('prodPrecioUnico').value = '';
-  document.getElementById('prodExcepcion').checked = false;
-  document.getElementById('prodAutoEliminar').checked = true;
-  renderIdRecetaSelect('');
-  toggleCamposStock();
-  document.getElementById('formProdTitulo').textContent = '+ Nuevo producto';
-  document.getElementById('btnCancelarEdit').style.display = 'none';
-};
-
-window.reactivarProducto = async function(id, nombre) {
-  if (!confirm(`¿Reactivar "${nombre}"? Vuelve a aparecer disponible para vender.`)) return;
-  await updateDoc(doc(db, 'productos', id), { activo: true });
-  await cargarProductos();
-  await cargarProdAdmin();
-  showToast('✅ Producto reactivado');
-};
-
-window.eliminarProducto = async function(id, nombre) {
-  const prod = _todosProdsAdmin.find(p => p.id === id) || productos.find(p => p.id === id);
-  if (prod?.tuvoVentas) {
-    if (!confirm(`"${nombre}" ya tiene ventas registradas — no se puede eliminar del todo, se perdería la trazabilidad con esas ventas y con fën-producción.\n\n¿Marcarlo como inactivo en su lugar? Deja de aparecer para vender, pero su historial y vínculo con fën se conservan intactos.`)) return;
-    await updateDoc(doc(db, 'productos', id), { activo: false });
-    await cargarProductos();
-    await cargarProdAdmin();
-    showToast('✅ Producto marcado como inactivo');
-    return;
-  }
-  if (!confirm(`¿Eliminar "${nombre}"? Nunca tuvo ventas registradas, así que se puede borrar por completo.`)) return;
-  const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-  await deleteDoc(doc(db, 'productos', id));
-  await cargarProductos();
-  await cargarProdAdmin();
-  showToast('✅ Producto eliminado');
-};
-
-window.guardarProducto = async function() {
-  const btn = document.getElementById('btnGuardarProd');
-  const id        = document.getElementById('prodId').value.trim();
-  const nombre    = document.getElementById('prodNombre').value.trim();
-  const area      = document.getElementById('prodArea').value;
-  const catSel     = document.getElementById('prodCategoria').value;
-  const categoria  = catSel === CATEGORIA_NUEVA
-    ? document.getElementById('prodCategoriaNueva').value.trim()
-    : catSel;
-  const controlStock = document.getElementById('prodControlStock').checked;
-  const idRecetaFen = document.getElementById('prodIdRecetaFen').value || '';
-
-  let precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta, excepcionHoraria, autoEliminar;
-  if (controlStock) {
-    precioHoy           = parseInt(document.getElementById('prodPrecioHoy').value)           || 0;
-    precioAyer          = parseInt(document.getElementById('prodPrecioAyer').value)          || 0;
-    precioAntesayer     = parseInt(document.getElementById('prodPrecioAntesayer').value)     || 0;
-    precioCuartoDia     = parseInt(document.getElementById('prodPrecioCuartoDia').value)     || 0;
-    precioUltimaOferta  = parseInt(document.getElementById('prodPrecioUltimaOferta').value)  || 0;
-    excepcionHoraria    = document.getElementById('prodExcepcion').checked;
-    autoEliminar     = document.getElementById('prodAutoEliminar').checked;
-  } else {
-    // Producto sin control de stock: un único precio fijo
-    const precioUnico = parseInt(document.getElementById('prodPrecioUnico').value) || 0;
-    precioHoy = precioAyer = precioAntesayer = precioCuartoDia = precioUltimaOferta = precioUnico;
-    excepcionHoraria = false;
-    autoEliminar = false;
-  }
-
-  if (!nombre) { alert('El nombre es obligatorio'); return; }
-  if (id && !esAdmin) { alert('Sin permisos para editar productos existentes'); return; }
-  if (!id) {
-    // Verificar duplicado
-    const existe = _todosProdsAdmin.find(p => p.nombre.toLowerCase() === nombre.toLowerCase());
-    if (existe) { alert(`Ya existe un producto con el nombre "${nombre}"`); return; }
-  }
-
-  btn.disabled = true; btn.textContent = 'Guardando...';
-  const data = {
-    nombre, area, categoria, activo: true,
-    precio: precioHoy,
-    precioHoy, precioAyer, precioAntesayer, precioCuartoDia, precioUltimaOferta,
-    excepcionHoraria, autoEliminar, controlStock, idRecetaFen
-  };
+window.enviarPedidoProducto = async function() {
+  const err = document.getElementById('pedirError'), ok = document.getElementById('pedirOk'), btn = document.getElementById('btnEnviarPedido');
+  err.textContent = ''; ok.textContent = '';
+  const nombre = document.getElementById('pedirNombre').value.trim().replace(/\s+/g, ' ').slice(0, 120);
+  const precioTxt = String(document.getElementById('pedirPrecio').value || '').trim();
+  const nota = document.getElementById('pedirNota').value.trim().slice(0, 300);
+  if (nombre.length < 2) { err.textContent = 'Escribe el nombre del producto.'; document.getElementById('pedirNombre').focus(); return; }
+  const precio = precioTxt === '' ? null : Math.round(Number(precioTxt));
+  if (precio !== null && !(precio > 0 && precio < 10000000)) { err.textContent = 'El precio sugerido es un número mayor que 0 (o déjalo vacío).'; return; }
+  btn.disabled = true; btn.textContent = 'Enviando...';
   try {
-    if (id) {
-      await setDoc(doc(db, 'productos', id), data, { merge: true });
-    } else {
-      const autoId = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-      await setDoc(doc(db, 'productos', autoId), data);
-    }
-    if (catSel === CATEGORIA_NUEVA && categoria) await asegurarSubcategoriaEnLista(area, categoria);
-    cancelarEdicion();
-    await cargarProductos();
-    await cargarProdAdmin();
-    showToast('✅ Producto guardado');
-  } catch(e) {
-    alert('Error al guardar: ' + e.message);
+    await addDoc(collection(db, 'solicitudes_producto'), {
+      tipo: 'producto', nombre, sucursal: sucursal || '', precioSugerido: precio, nota,
+      estado: 'pendiente', por: usuario.email, en: Timestamp.now()
+    });
+    ['pedirNombre', 'pedirPrecio', 'pedirNota'].forEach(id => { document.getElementById(id).value = ''; });
+    ok.textContent = `Pedido enviado: ${nombre}. Aquí verás la respuesta.`;
+    showToast('Pedido enviado');
+    await cargarMisPedidos();
+  } catch (e) {
+    err.textContent = e && e.code === 'permission-denied'
+      ? 'No se pudo enviar: falta publicar las reglas de Firestore v1.5.0 (avísale a la administración).'
+      : 'No se pudo enviar: ' + (e && e.message ? e.message : e);
   }
-  btn.disabled = false; btn.textContent = '✓ Guardar';
+  btn.disabled = false; btn.textContent = 'Enviar pedido';
 };
+// Los pedidos de quien está conectada (los 8 más nuevos), con su estado y la respuesta de Sistema Fën
+async function cargarMisPedidos() {
+  const wraps = ['misPedidosLista', 'misPedidosProd'].map(id => document.getElementById(id)).filter(Boolean);
+  if (!wraps.length || !usuario) return;
+  let html;
+  try {
+    const snap = await getDocs(query(collection(db, 'solicitudes_producto'), where('por', '==', usuario.email)));
+    const ms = x => (x && x.toMillis ? x.toMillis() : x && x.seconds ? x.seconds * 1000 : 0);
+    const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => ms(b.en) - ms(a.en)).slice(0, 8);
+    html = lista.length ? lista.map(x => {
+      const [txt, cls] = ESTADO_PEDIDO[x.estado] || [escHtml(x.estado || 'Pendiente'), 'pp-gris'];
+      const f = x.en && x.en.toDate ? x.en.toDate().toLocaleDateString('es-CL') : '';
+      return `<div class="pp-ped" data-pedido="${escHtml(x.id)}">
+        <div class="pp-ped-txt"><b>${escHtml(x.nombre)}</b>${x.precioSugerido ? ' · ' + pesosCL(x.precioSugerido) : ''}
+          <div class="pp-ped-resp">${escHtml(f)}${x.sucursal ? ' · ' + (x.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana') : ''}${x.nota ? ' · ' + escHtml(x.nota) : ''}</div>
+          ${x.respuesta ? `<div class="pp-ped-resp">Respuesta: ${escHtml(x.respuesta)}</div>` : ''}</div>
+        <span class="pp-chip ${cls}">${txt}</span></div>`;
+    }).join('') : '<div class="empty" style="padding:12px">Todavía no pides productos.</div>';
+  } catch (e) {
+    html = `<div class="empty" style="padding:12px">${e && e.code === 'permission-denied' ? 'Para ver tus pedidos falta publicar las reglas de Firestore v1.5.0.' : 'No se pudieron leer tus pedidos.'}</div>`;
+  }
+  wraps.forEach(w => { w.innerHTML = html; });
+}
 
 // ═══════════════════════════
 // MESAS
@@ -4107,7 +2806,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.2.0';
+const CAJA_VERSION = '2.3.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -4184,6 +2883,24 @@ function agregarTarjetaYLotes(lineasVenta, lineasPedido, plan) {
   } catch (e) { console.error('v2.2.0: no se pudo anotar la tarjeta', e); }
 }
 
+// ─── v2.3.0: la venta guarda su foto ──────────────────────────────────────────
+// Cada línea lleva lo que el Catálogo de Sistema Fën dice del producto AL VENDER: su ID del catálogo, de dónde sale
+// (receta, reventa o cargo), su área y su receta o reventa. Si el producto cambia después, la venta sigue diciendo lo que era.
+// Un producto anterior al catálogo (sin tipo) usa su ID de receta de siempre (idRecetaFen).
+function fotoProductoCaja(id) {
+  const p = productos.find(x => x.id === id) || (_todosProdsAdmin || []).find(x => x.id === id) || {};
+  const tipo = String(p.tipo || '').trim();
+  const idRec = String(p.idRecetaFen || '').trim();
+  const area = normalizarArea(p.area);
+  const esReventa = tipo === 'reventa' || (!tipo && /^REV\d+$/i.test(idRec));
+  return {
+    catalogoId: String(p.catalogoId || '').trim(), tipo, area: area === SIN_AREA ? '' : area,
+    recetaId: esReventa || tipo === 'cargo' ? '' : String(p.recetaId || idRec).trim(),
+    reventaId: esReventa ? String(p.reventaId || idRec).trim() : '',
+    ...(Number(p.unidadesPorVenta) > 0 ? { unidadesPorVenta: Number(p.unidadesPorVenta) } : {})
+  };
+}
+
 window.registrarVenta = async function() {
   if (pedidoLineas.length === 0) return;
   if (!cajaId) { alert('Debes abrir la caja primero'); return; }
@@ -4207,7 +2924,8 @@ window.registrarVenta = async function() {
       id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
       totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
       descMonto: l.descMonto, total: l.total, loteFecha: l.loteFecha || '',
-      clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
+      clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || '',
+      ...fotoProductoCaja(l.id) // v2.3.0: la foto de la venta
     })),
     subtotal, descuento, total,
     ...pagoData,
@@ -4312,7 +3030,8 @@ window.cerrarYCobrarMesa = async function() {
       id: l.id, nombre: l.nombre, precio: l.precio, cantidad: l.cantidad,
       totalBruto: l.totalBruto, descTipo: l.descTipo, descVal: l.descVal,
       descMonto: l.descMonto, total: l.total, loteFecha: l.loteFecha || '',
-      clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
+      clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || '',
+      ...fotoProductoCaja(l.id) // v2.3.0: la foto de la venta
     })),
     subtotal, descuento, total,
     ...pagoData,
@@ -4470,8 +3189,8 @@ async function avisarCajaAnterior() {
     if (!viejas.length) return;
     wrap.innerHTML = `
     <div class="card" style="border:1px solid #f0ad4e;background:#fffaf0">
-      <div class="card-title" style="color:#8a6416">⚠️ Caja anterior sin cerrar</div>
-      <p style="font-size:12px;color:#8a6416;margin-bottom:10px">Quedó abierta una caja de un día anterior. Ciérrala con el conteo de ese turno para que su cierre llegue a la planilla.</p>
+      <div class="card-title" style="color:#8a6416">Caja anterior sin cerrar</div>
+      <p style="font-size:12px;color:#8a6416;margin-bottom:10px">Quedó abierta una caja de un día anterior. Ciérrala con el conteo de ese turno para que su cierre quede con su resumen.</p>
       ${viejas.map(c => `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:0.5px solid #f0d9a0">
           <div style="font-size:13px"><b>${escHtml(fechaDMY(c.fecha))}</b> <span style="color:#888;font-size:11px">(${escHtml(c.usuario)} · $${parseInt(c.totalVentas || 0).toLocaleString('es-CL')} vendidos)</span></div>
@@ -4662,23 +3381,8 @@ window.confirmarSolicitudAnulacion = async function() {
     // 2. Marcar la venta como con solicitud pendiente (solo visual, no se anula aún)
     await updateDoc(ventaRef, { solicitudAnulacionPendiente: true });
 
-    // 3. Notificar al admin por correo vía Apps Script (no aprueba nada, solo avisa)
-    try {
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          tipo: 'solicitud_anulacion',
-          sucursal, solicitante: usuario.email, motivo,
-          total: venta.total, medioPago: venta.medioPago,
-          lineasResumen: (venta.lineas || []).map(l => `${l.nombre} x${l.cantidad}`).join(', '),
-          solicitudId: solicitudRef.id
-        })
-      });
-    } catch(emailErr) {
-      console.error('No se pudo enviar el correo de notificación:', emailErr);
-      // No bloqueamos el flujo: la solicitud queda igual en el sistema para que el admin la vea
-    }
+    // v2.3.0: sin correo por Apps Script. La administración la ve en Reportes → Solicitudes y en Sistema Fën (Hoy).
+    void solicitudRef;
 
     cerrarModalAnulacion();
     await cargarUltimasVentas();
@@ -4919,31 +3623,10 @@ window.confirmarCierreCiego = async function() {
     }
     showToast('✅ Caja cerrada correctamente');
 
-    // Exportar a Sheets
+    // v2.3.0: el resumen del cierre (resumenes_caja). Ya no se copia a la planilla ni se avisa por Apps Script:
+    // la diferencia y su nota quedan en evaluacion_caja (Sistema Fën la muestra en Hoy).
     const cajaDataFinal = (await getDoc(doc(db, 'cajas', cajaDocId))).data();
-    if (hayDiferencia) {
-      cajaDataFinal.notaDescuadre = notaDescuadre;
-      cajaDataFinal.difEfectivo = difEfectivo;
-      cajaDataFinal.difDebito = difDebito;
-      cajaDataFinal.difCredito = difCredito;
-      cajaDataFinal.difTransfer = difTransfer;
-      cajaDataFinal.difTotal = difTotal;
-      // Aviso por correo del descuadre — mismo proyecto/URL que ya usa la exportación de ventas mensuales
-      fetch(APPS_SCRIPT_URL_VENTAS_FEN, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          tipo: 'descuadre_caja',
-          filaCaja: {
-            sucursal: cajaDataFinal.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana',
-            fecha: fechaDMY(cajaDataFinal.fecha || fechaLocalHoy()), // v2.1: la fecha de la caja, no la de hoy
-            usuario: cajaDataFinal.usuario || usuario.email,
-            difTotal, difEfectivo, notaDescuadre
-          }
-        })
-      }).catch(e => console.error('Error enviando aviso de descuadre:', e));
-    }
-    await exportarASheets(cajaDocId, cajaDataFinal, false);
+    await cerrarResumen(cajaDocId, cajaDataFinal);
   } catch(e) {
     alert('Error al cerrar caja: ' + e.message);
     btn.disabled = false; btn.textContent = '🔒 Confirmar cierre';
@@ -4969,7 +3652,7 @@ window.selRepTab = function(btn, id) {
   }
   if (id === 'repStock')       cargarValorStock();
   if (id === 'repMerma')       cargarMerma();
-  if (id === 'repCaja') { cargarEvaluacionesCaja(); renderCajasSinCerrar(); renderCierresSinExportar(); }
+  if (id === 'repCaja') { cargarEvaluacionesCaja(); renderCajasSinCerrar(); }
   if (id === 'repSolicitudes') cargarSolicitudesAnulacion();
 };
 
@@ -5158,7 +3841,7 @@ window.cargarMerma = async function(completo) {
     // (v2.1: usa los productos ya leídos en esta sesión)
     const idToArea = {};
     (await productosEnMemoria()).forEach(p => { idToArea[p.id] = normalizarArea(p.area) || 'Otros'; });
-    const areaInfo = a => AREAS.find(x => x.id === a) || { id: a, nombre: a, emoji: '📦' };
+    const areaInfo = a => AREAS.find(x => x.id === normalizarArea(a)) || { id: a, nombre: a, emoji: '' };
 
     function resumenPorArea(items) {
       const porArea = {};
@@ -5579,9 +4262,10 @@ window.cerrarCajaSinArqueo = async function(cajaDocId) {
       cerradoPor: usuario.email
     });
 
+    await cerrarResumen(cajaDocId, { ...cajaData, estado: 'cerrada' }); // v2.3.0: también con su resumen
     renderCajasSinCerrar();
     cargarEvaluacionesCaja();
-    showToast('✅ Caja cerrada sin arqueo');
+    showToast('Caja cerrada sin arqueo');
   } catch(e) { alert('Error al cerrar caja: ' + e.message); }
 };
 
@@ -5848,131 +4532,19 @@ window.rechazarSolicitud = async function(solicitudId) {
 };
 
 // ═══════════════════════════
-// EXPORTACIÓN A GOOGLE SHEETS
+// RESUMEN DEL CIERRE (v2.3.0: ya no se exporta a Google Sheets)
 // ═══════════════════════════
-
-/**
- * Exporta todas las ventas del día a Google Sheets vía Apps Script.
- * @param {string} cajaDocId - ID del documento de caja en Firestore
- * @param {object} cajaData - Datos del documento de caja
- * @param {boolean} [silencioso=false] - Si true, no muestra alertas al usuario
- */
-async function exportarASheets(cajaDocId, cajaData, silencioso = false) {
+// Lee las ventas de esa caja una vez y guarda su resumen. Si no se puede, la caja queda con resumenPendiente: true
+// y se reintenta sola al elegir la sucursal y a medianoche. → true | false
+async function cerrarResumen(cajaDocId, cajaData) {
   try {
-    // 1. Obtener todas las ventas de esa caja
-    const ventasSnap = await getDocs(
-      query(collection(db, 'ventas'), where('cajaId', '==', cajaDocId))
-    );
-
-    // v2.1: resumen de la caja (lo usarán los informes y Sistema Fën). Si falla, no detiene la exportación.
-    await guardarResumenCaja(cajaDocId, cajaData, ventasSnap.docs);
-
-    if (ventasSnap.empty) {
-      if (!silencioso) console.log('Sin ventas para exportar.');
-      // v2.1: una caja sin ventas no tiene nada que enviar; se marca para que no figure como pendiente
-      await updateDoc(doc(db, 'cajas', cajaDocId), { exportadaSheets: true, sinVentas: true, exportPendiente: false });
-      return true;
-    }
-
-    // 2. Armar filas: una por línea de venta
-    const filas = [];
-    const IVA_FACTOR = 0.19;
-
-    ventasSnap.docs.forEach(doc => {
-      const v = doc.data();
-      if (v.anulada === true) return; // no exportar ventas anuladas
-      const fechaVenta = v.fecha?.toDate ? v.fecha.toDate() : new Date();
-      const fechaStr = fechaVenta.toLocaleDateString('es-CL');
-      const nVenta = doc.id.slice(-6).toUpperCase(); // últimos 6 chars del ID como N° venta
-
-      (v.lineas || []).forEach(linea => {
-        const brutoLinea = parseInt(linea.totalBruto || linea.total) || 0;
-        const ivaLinea   = Math.round(brutoLinea * IVA_FACTOR / (1 + IVA_FACTOR));
-        const netoLinea  = brutoLinea - ivaLinea;
-
-        filas.push({
-          fecha:       fechaStr,
-          nVenta:      nVenta,
-          producto:    linea.nombre  || '',
-          cantidad:    linea.cantidad || 1,
-          precioUnit:  parseInt(linea.precio) || 0,
-          tipoDesc:    linea.descTipo || '-',
-          descuento:   parseInt(linea.descMonto) || 0,
-          brutoLinea:  brutoLinea,
-          netoLinea:   netoLinea,
-          ivaLinea:    ivaLinea,
-          medioPago:   v.medioPago   || '',
-          usuario:     v.usuario     || '',
-          turno:       cajaData.turno || determinarTurno(fechaVenta)
-        });
-      });
-    });
-
-    // 3. Armar fila de caja
-    const apertura = cajaData.apertura?.toDate ? cajaData.apertura.toDate() : null;
-    const cierre   = cajaData.cierre?.toDate   ? cajaData.cierre.toDate()   : new Date();
-    const t = cajaData.totales || {};
-
-    const filaCaja = {
-      fecha:          apertura ? apertura.toLocaleDateString('es-CL') : new Date().toLocaleDateString('es-CL'),
-      sucursal:       cajaData.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana',
-      usuario:        cajaData.usuario   || '',
-      apertura:       apertura ? apertura.toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}) : '',
-      cierre:         cierre.toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}),
-      montoInicial:   parseInt(cajaData.montoInicial)  || 0,
-      totalEfectivo:  parseInt(t.efectivo)              || 0,
-      totalDebito:    parseInt(t.debito)                || 0,
-      totalCredito:   parseInt(t.credito)               || 0,
-      totalTransfer:  parseInt(t.transferencia)         || 0,
-      totalVentas:    parseInt(cajaData.totalVentas)    || 0,
-      nVentas:        parseInt(cajaData.nVentas)        || 0,
-      cajaId:         cajaDocId,
-      // Diferencia y nota de justificación (solo presentes si hubo diferencia al cerrar)
-      difEfectivo:    cajaData.difEfectivo || 0,
-      difTotal:       cajaData.difTotal || 0,
-      notaDescuadre:  cajaData.notaDescuadre || ''
-    };
-
-    // 4. Enviar al Apps Script
-    const payload = {
-      sucursal: cajaData.sucursal, // 'ainavillo' | 'barros_arana'
-      filas,
-      filaCaja
-    };
-
-    // v2.1: hasta 3 intentos. El script reconoce un cierre que ya escribió (por su ID de caja)
-    // y no lo duplica, así que reintentar siempre es seguro.
-    let resultado = null, ultimoError = null;
-    for (let intento = 1; intento <= 3; intento++) {
-      try {
-        const resp = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' }, // text/plain evita el preflight CORS con Apps Script
-          body: JSON.stringify(payload)
-        });
-        resultado = await resp.json();
-        if (resultado && resultado.ok) break;
-        ultimoError = new Error((resultado && (resultado.error || resultado.msg)) || 'Respuesta inesperada del servidor');
-        if (resultado && ['sesion', 'permiso', 'formato'].includes(resultado.code)) break; // reintentar no lo arregla
-      } catch (e) { ultimoError = e; }
-      resultado = null;
-      if (intento < 3) await new Promise(r => setTimeout(r, 1500 * intento));
-    }
-
-    if (resultado && resultado.ok) {
-      if (!silencioso) console.log(`✅ Exportación a Sheets exitosa (${filas.length} líneas)`);
-      // Marcar la caja como exportada en Firestore
-      await updateDoc(doc(db, 'cajas', cajaDocId), { exportadaSheets: true, exportFecha: Timestamp.now(), exportPendiente: false });
-      return true;
-    }
-    throw ultimoError || new Error('Respuesta inesperada del servidor');
-
+    const ventasSnap = await getDocs(query(collection(db, 'ventas'), where('cajaId', '==', cajaDocId)));
+    if (!(await guardarResumenCaja(cajaDocId, cajaData, ventasSnap.docs))) throw new Error('No se pudo guardar el resumen');
+    if (cajaData && cajaData.resumenPendiente) await updateDoc(doc(db, 'cajas', cajaDocId), { resumenPendiente: false });
+    return true;
   } catch (err) {
-    console.error('❌ Error exportando a Sheets:', err);
-    // v2.1: queda marcada como pendiente; se reintenta sola al abrir la caja y aparece
-    // en Reportes > Eval. caja > "Cierres sin pasar a planilla".
-    try { await updateDoc(doc(db, 'cajas', cajaDocId), { exportPendiente: true, exportError: String(err && err.message || err).slice(0, 200), exportIntento: Timestamp.now() }); } catch (e2) {}
-    if (!silencioso) alert('⚠️ La caja se cerró correctamente, pero el cierre no alcanzó a llegar a la planilla.\n\nQuedó guardado y se volverá a enviar solo la próxima vez que se abra la caja. También puedes reenviarlo en Reportes > Eval. caja.');
+    console.error('Resumen del cierre pendiente:', cajaDocId, err);
+    try { await updateDoc(doc(db, 'cajas', cajaDocId), { resumenPendiente: true }); } catch (e2) {}
     return false;
   }
 }
@@ -5984,7 +4556,10 @@ async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
   try {
     const prods = await productosEnMemoria();
     const infoProd = {};
-    prods.forEach(p => { infoProd[p.id] = { area: normalizarArea(p.area) || 'Otros', idRecetaFen: p.idRecetaFen || '' }; });
+    // v2.3.0: área de la lista de Sistema Fën (REV = REVENTA; sin área = 'Otros') y la foto del catálogo
+    const areaRes = a => { const c = normalizarArea(a); return c === SIN_AREA ? 'Otros' : c; };
+    prods.forEach(p => { const f = (function () { const t = String(p.tipo || '').trim(), r = String(p.idRecetaFen || '').trim(), rv = t === 'reventa' || (!t && /^REV\d+$/i.test(r)); return { catalogoId: String(p.catalogoId || ''), tipo: t, recetaId: rv || t === 'cargo' ? '' : r, reventaId: rv ? String(p.reventaId || r) : '', unidadesPorVenta: Number(p.unidadesPorVenta) > 0 ? Number(p.unidadesPorVenta) : null }; })();
+      infoProd[p.id] = { area: areaRes(p.area), idRecetaFen: p.idRecetaFen || '', ...f }; });
     const neto = b => Math.round((parseInt(b) || 0) / 1.19);
     const r = {
       cajaId: cajaDocId,
@@ -5995,7 +4570,7 @@ async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
       porArea: {}, porProducto: {},
       version: 1, actualizado: Timestamp.now()
     };
-    r.versionCaja = '2.2.0'; // v2.2.0 (formato del resumen: porTarjeta, agotadoHoy)
+    r.versionCaja = '2.3.0'; // v2.3.0 (porProducto con catalogoId, tipo, recetaId, reventaId) · v2.2.0 (porTarjeta, agotadoHoy)
     const tarj = {}, agot = {}, reagot = {}; // v2.2.0
     r.mes = (r.fecha || '').slice(0, 7);
     ventasDocs.forEach(d => {
@@ -6011,9 +4586,11 @@ async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
       }
       (v.lineas || []).forEach(l => {
         const key = l.id || ('sin-id:' + (l.nombre || ''));
-        const info = infoProd[l.id] || { area: 'Otros', idRecetaFen: '' };
+        const info0 = infoProd[l.id] || { area: 'Otros', idRecetaFen: '', catalogoId: '', tipo: '', recetaId: '', reventaId: '' };
+        // v2.3.0: la foto de la línea (al vender) manda; si no la tiene (venta anterior), el producto de hoy
+        const info = l.catalogoId || l.tipo ? { ...info0, area: l.area ? areaRes(l.area) : info0.area, catalogoId: l.catalogoId || '', tipo: l.tipo || '', recetaId: l.recetaId || '', reventaId: l.reventaId || '', unidadesPorVenta: Number(l.unidadesPorVenta) > 0 ? Number(l.unidadesPorVenta) : info0.unidadesPorVenta } : info0;
         const bruto = parseInt(l.total) || 0, cant = parseFloat(l.cantidad) || 0;
-        const pp = r.porProducto[key] || (r.porProducto[key] = { nombre: l.nombre || '', area: info.area, idRecetaFen: info.idRecetaFen, cantidad: 0, bruto: 0, neto: 0 });
+        const pp = r.porProducto[key] || (r.porProducto[key] = { nombre: l.nombre || '', area: info.area, idRecetaFen: info.idRecetaFen, catalogoId: info.catalogoId || '', tipo: info.tipo || '', recetaId: info.recetaId || '', reventaId: info.reventaId || '', ...(info.unidadesPorVenta > 0 ? { unidadesPorVenta: info.unidadesPorVenta } : {}), cantidad: 0, bruto: 0, neto: 0 });
         pp.cantidad += cant; pp.bruto += bruto; pp.neto += neto(bruto);
         const pa = r.porArea[info.area] || (r.porArea[info.area] = { cantidad: 0, bruto: 0, neto: 0 });
         pa.cantidad += cant; pa.bruto += bruto; pa.neto += neto(bruto);
@@ -6052,72 +4629,21 @@ async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
   }
 }
 
-// v2.1: reintenta en segundo plano los cierres que quedaron pendientes de llegar a la planilla.
+// v2.3.0: reintenta en segundo plano los resúmenes que no alcanzaron a guardarse al cerrar.
 let _reintentoEnCurso = false;
-async function reintentarExportacionesPendientes() {
+async function reintentarResumenesPendientes() {
   if (_reintentoEnCurso || esStockViewer) return;
   _reintentoEnCurso = true;
   try {
-    const sn = await getDocs(query(collection(db, 'cajas'), where('exportPendiente', '==', true)));
+    const sn = await getDocs(query(collection(db, 'cajas'), where('resumenPendiente', '==', true)));
     for (const d of sn.docs) {
       const c = d.data();
-      if (c.estado !== 'cerrada' || c.exportadaSheets === true) continue;
-      await exportarASheets(d.id, c, true);
+      if (c.estado !== 'cerrada') continue;
+      await cerrarResumen(d.id, c);
     }
-  } catch (e) { console.error('Reintento de exportaciones pendientes:', e); }
+  } catch (e) { console.error('Reintento de resúmenes pendientes:', e); }
   _reintentoEnCurso = false;
 }
-
-// v2.1: Reportes > Eval. caja > "Cierres sin pasar a planilla" (cajas cerradas de los
-// últimos DIAS_HISTORIAL días que no tienen la marca de exportadas).
-window.renderCierresSinExportar = async function() {
-  const wrap = document.getElementById('cierresSinExportarWrap');
-  if (!wrap || !esAdmin) return;
-  wrap.innerHTML = '';
-  try {
-    const sn = await getDocs(query(collection(db, 'cajas'), where('apertura', '>=', tsHaceDias(DIAS_HISTORIAL))));
-    const pendientes = sn.docs.map(d => ({ id: d.id, ...d.data() }))
-      .filter(c => c.estado === 'cerrada' && c.exportadaSheets !== true && (parseInt(c.nVentas) || 0) > 0)
-      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
-    if (!pendientes.length) return;
-    wrap.innerHTML = `
-    <div class="card" style="border:1px solid #e0a3a3;background:#fff6f6">
-      <div class="card-title" style="color:#8a2b1e">📤 Cierres sin pasar a planilla</div>
-      <p style="font-size:12px;color:#8a2b1e;margin-bottom:10px">Estas cajas están cerradas en el sistema, pero su cierre no llegó a la planilla de caja. Reenviarlas no duplica filas: si ya estaban, no se vuelven a escribir.</p>
-      ${pendientes.map(c => `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:0.5px solid #f0c9c9">
-          <div style="font-size:13px"><b>${escHtml(fechaDMY(c.fecha))}</b> <span style="color:#888;font-size:11px">(${escHtml(c.sucursal)} · ${escHtml(c.usuario)} · $${parseInt(c.totalVentas || 0).toLocaleString('es-CL')})${c.exportError ? ' · ' + escHtml(c.exportError) : ''}</span></div>
-          <button class="btn-sm btn-edit" onclick="reexportarCaja('${c.id}', this)">Reenviar</button>
-        </div>`).join('')}
-      <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="reexportarTodas(this)">Reenviar todas</button>
-    </div>`;
-  } catch (e) { wrap.innerHTML = `<div class="empty">Error buscando cierres sin exportar: ${e.message}</div>`; }
-};
-
-window.reexportarCaja = async function(id, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
-  let ok = false;
-  try {
-    const sn = await getDoc(doc(db, 'cajas', id));
-    ok = sn.exists() ? await exportarASheets(id, sn.data(), true) : false;
-  } catch (e) { console.error(e); }
-  showToast(ok ? '✅ Cierre enviado a la planilla' : '⚠️ No se pudo enviar; intenta de nuevo en un rato');
-  renderCierresSinExportar();
-};
-
-window.reexportarTodas = async function(btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
-  let ok = 0, mal = 0;
-  let sn = { docs: [] };
-  try { sn = await getDocs(query(collection(db, 'cajas'), where('apertura', '>=', tsHaceDias(DIAS_HISTORIAL)))); } catch (e) { mal++; console.error(e); }
-  for (const d of sn.docs) {
-    const c = d.data();
-    if (c.estado !== 'cerrada' || c.exportadaSheets === true || !((parseInt(c.nVentas) || 0) > 0)) continue;
-    (await exportarASheets(d.id, c, true)) ? ok++ : mal++;
-  }
-  showToast(`Enviados: ${ok}${mal ? ' · con error: ' + mal : ''}`);
-  renderCierresSinExportar();
-};
 
 // v2.1: genera los resúmenes que falten de un mes (para meses anteriores a esta versión).
 // Lee una vez las ventas de las cajas que no tienen resumen.
@@ -6182,21 +4708,18 @@ async function programarRespaldoMedianoche() {
 
       for (const cajaDoc of cajasSnap.docs) {
         const data = cajaDoc.data();
-        if (!data.exportadaSheets) {
-          console.log(`🕛 Respaldo medianoche: exportando caja ${cajaDoc.id} (${data.sucursal})`);
-          // Si la caja sigue abierta, la cerramos primero en Firestore
-          if (data.estado !== 'cerrada') {
-            await updateDoc(doc(db, 'cajas', cajaDoc.id), {
-              estado: 'cerrada',
-              cierre: Timestamp.now(),
-              cierreAutomatico: true
-            });
-          }
+        // v2.3.0: la caja que sigue abierta se cierra y queda con su resumen (ya no se exporta a la planilla)
+        if (data.estado !== 'cerrada') {
+          await updateDoc(doc(db, 'cajas', cajaDoc.id), {
+            estado: 'cerrada',
+            cierre: Timestamp.now(),
+            cierreAutomatico: true
+          });
           const cajaDataFinal = (await getDoc(doc(db, 'cajas', cajaDoc.id))).data();
-          await exportarASheets(cajaDoc.id, cajaDataFinal, true);
+          await cerrarResumen(cajaDoc.id, cajaDataFinal);
         }
       }
-      await reintentarExportacionesPendientes(); // v2.1
+      await reintentarResumenesPendientes(); // v2.3.0
     } catch (err) {
       console.error('❌ Error en respaldo automático de medianoche:', err);
     }
@@ -6205,7 +4728,7 @@ async function programarRespaldoMedianoche() {
     programarRespaldoMedianoche();
   }, msHastaMedianoche);
 
-  console.log(`🕛 Respaldo automático programado en ${Math.round(msHastaMedianoche / 60000)} minutos`);
+  console.log(`Cierre automático programado en ${Math.round(msHastaMedianoche / 60000)} minutos`);
 }
 
 // Iniciar el respaldo automático al cargar la app
@@ -6496,10 +5019,9 @@ async function cargarStockLista() { await cargarStockPorCategoria(); }
 
 
 
-// Admin: registra la merma en Sheets y la elimina del stock en Firestore
-// Registra merma en Sheets y elimina del stock (soporta formato nuevo y legacy)
+// Admin: registra la merma (Firestore: informe de merma y Sistema Fën) y la saca del stock. v2.3.0: ya no va a la planilla.
 window.registrarMermaItem = async function(productoId, nombre, cantidad, precioOriginal) {
-  if (!confirm(`¿Registrar merma de ${cantidad} ud. de "${nombre}"?\n\nSe exportará a la pestaña Merma en Sheets y se eliminará del stock.`)) return;
+  if (!confirm(`¿Registrar merma de ${cantidad} ud. de "${nombre}"?\n\nQueda en el informe de merma y sale del stock.`)) return;
   try {
     const stockRef  = doc(db, 'stock', `${sucursal}_${productoId}`);
     const stockSnap = await getDoc(stockRef);
@@ -6536,21 +5058,10 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
 
     for (const [fEnvio, info] of Object.entries(porFechaEnvio)) {
       const motivo = info.motivos.map(m => `${m.motivo} (${m.cantidad})`).join(' · ');
-      const area = normalizarArea(productos.find(p => p.id === productoId)?.area) || '';
+      const area0 = normalizarArea(productos.find(p => p.id === productoId)?.area), area = area0 === SIN_AREA ? '' : area0;
       // fEnvio viene en formato YYYY-MM-DD; se convierte a DD-MM-YYYY para poder compararla con fechaIngreso
       const fEnvioDMY = fEnvio.split('-').reverse().join('-');
       const diasEnStock = diasEntreDMY(fechaIngreso, fEnvioDMY);
-
-      // Exportar a Sheets
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          tipo: 'merma', sucursal, producto: nombre, area, cantidad: info.cantidad,
-          precioOriginal, monto: info.cantidad * precioOriginal,
-          fechaIngreso, fechaMerma: fEnvio, fechaRegistro, diasEnStock, motivo
-        })
-      });
 
       // Guardar también en Firestore, para verla y analizarla desde Reportes > Merma.
       // fechaEnvio = cuándo se mandó a merma desde Stock (lo relevante para análisis).
@@ -6569,7 +5080,7 @@ window.registrarMermaItem = async function(productoId, nombre, cantidad, precioO
     entradasMerma.forEach(([k]) => { updates[`entradas.${k}`] = 0; });
     await updateDoc(stockRef, updates);
     await cargarStockPorCategoria();
-    showToast('✅ Merma registrada en Sheets');
+    showToast('Merma registrada');
   } catch(e) {
     alert('Error al registrar merma: ' + e.message);
   }
@@ -7103,7 +5614,7 @@ window.generarReporte = async function() {
     });
   });
 
-  const areaInfo = a => AREAS.find(x => x.id === a) || { id: a, nombre: a, emoji: '📦' };
+  const areaInfo = a => AREAS.find(x => x.id === normalizarArea(a)) || { id: a, nombre: a, emoji: '' };
   const paletaColores = ['#003a79', '#1D9E75', '#D85A30', '#7F77DD', '#D4537E', '#BA7517', '#5DCAA5', '#888780'];
 
   document.getElementById('reporteResultado').innerHTML = `
@@ -7185,8 +5696,7 @@ window.generarReporte = async function() {
             if (idReceta === '__sin_vincular__') {
               return `<div class="resumen-row" style="color:#c0392b"><span>⚠️ Sin vincular a fën (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`;
             }
-            const receta = RECETAS_FEN.find(r => r.idReceta === idReceta);
-            const etiqueta = receta ? `${idReceta} — ${receta.nombre}` : `${idReceta} (no encontrado en la lista actual)`;
+            const etiqueta = idReceta; // v2.3.0: el nombre de la receta está en Sistema Fën
             return `<div class="resumen-row"><span>${etiqueta} (${d.cantidad} u.)</span><span>$${d.total.toLocaleString('es-CL')}</span></div>`;
           }).join('')}
         </div>
