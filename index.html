@@ -140,6 +140,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* MODAL */
 .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; padding: 16px; }
+#modalNotaDescuadre { z-index: 210; } /* v2.3.1: la nota del descuadre va encima de la ventana del cierre */
 .modal-overlay.open { display: flex; }
 .modal { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 420px; }
 .modal-title { font-size: 16px; font-weight: 700; color: #003a79; margin-bottom: 16px; }
@@ -700,7 +701,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="abrirPedirProducto()">Pedir producto</button>
       <div class="pp-sub">Tus pedidos</div>
       <div id="misPedidosProd"><div class="empty">Cargando…</div></div>
-      <div class="pp-version">Caja v2.3.0</div>
+      <div class="pp-version">Caja v2.3.1</div>
     </div>
 
     <!-- Tipos de leche (nota de café) -->
@@ -1098,6 +1099,32 @@ const db = getFirestore(app);
 // ─── v2.3.0: la caja ya no llama a Apps Script ──────────────────────────────
 // Los cierres, la merma, las anulaciones y los descuadres quedan solo en Firestore (Sistema Fën los lee de ahí).
 // Los productos se crean y se cambian solo en Sistema Fën → Catálogo; la caja los pide (solicitudes_producto).
+
+// ─── v2.3.1: vuelven solo los dos correos a la administración ───────────────
+// El de la solicitud de anulación y el del descuadre al cerrar caja. Nada más va a Apps Script (ni planillas ni CSV).
+// Script de caja/merma/anulaciones (caja/webhook-caja): aquí solo el correo de la solicitud de anulación
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7eYgaVGK5NBFcmX5rVr2H_QiLIuRKS7oBwiVfy5_74icgNnKvD_WEkYD92dU-fddv1A/exec';
+// Script de ventas mensuales y descuadres (caja/webhook-ventas): aquí solo el correo del descuadre
+const APPS_SCRIPT_URL_VENTAS_FEN = 'https://script.google.com/macros/s/AKfycbxeA_xhOm83PlYgLzv7wP5N6AM-ogfrfTClrs91JzFWgi5HCSgIRwgzAuGIbd6WsukrNQ/exec';
+
+// Envía un aviso por correo sin esperar: no devuelve nada ni lanza errores, así el cierre y la anulación siguen
+// aunque el script no responda (los datos ya están en Firestore). Como en la v2.2.0: lleva el token de sesión de
+// Firebase de quien está conectada y una clave única (idem) para que un envío repetido no llegue dos veces; si Google
+// desvía el POST (llega como GET sin datos, code 'version'), se reintenta por GET con los mismos datos.
+function avisarPorCorreo(url, datos) {
+  (async () => {
+    if (url !== APPS_SCRIPT_URL && url !== APPS_SCRIPT_URL_VENTAS_FEN) return;
+    if (auth.currentUser) datos.idToken = await auth.currentUser.getIdToken();
+    if (!datos.idem && datos.tipo === 'solicitud_anulacion' && datos.solicitudId) datos.idem = ('anul-' + datos.solicitudId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64);
+    datos.idem = datos.idem || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12));
+    const cuerpo = JSON.stringify(datos);
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: cuerpo });
+    try {
+      const d = await res.clone().json();
+      if (d && d.code === 'version') await fetch(url + '?p=' + encodeURIComponent(cuerpo));
+    } catch (e) {}
+  })().catch(e => console.error('No se pudo enviar el aviso por correo (' + (datos && datos.tipo) + '):', e));
+}
 
 // ─── v2.1.0 ────────────────────────────────────────────────────────────────
 // Historiales: por defecto solo los últimos DIAS_HISTORIAL días. Antes cada
@@ -2806,7 +2833,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.3.0';
+const CAJA_VERSION = '2.3.1';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3381,8 +3408,15 @@ window.confirmarSolicitudAnulacion = async function() {
     // 2. Marcar la venta como con solicitud pendiente (solo visual, no se anula aún)
     await updateDoc(ventaRef, { solicitudAnulacionPendiente: true });
 
-    // v2.3.0: sin correo por Apps Script. La administración la ve en Reportes → Solicitudes y en Sistema Fën (Hoy).
-    void solicitudRef;
+    // 3. v2.3.1: aviso por correo a la administración (no aprueba nada, solo avisa). Sale sin esperar: si falla, la
+    //    solicitud queda igual en Firestore (Reportes → Solicitudes y Sistema Fën → Hoy).
+    avisarPorCorreo(APPS_SCRIPT_URL, {
+      tipo: 'solicitud_anulacion',
+      sucursal, solicitante: usuario.email, motivo,
+      total: venta.total, medioPago: venta.medioPago,
+      lineasResumen: (venta.lineas || []).map(l => `${l.nombre} x${l.cantidad}`).join(', '),
+      solicitudId: solicitudRef.id
+    });
 
     cerrarModalAnulacion();
     await cargarUltimasVentas();
@@ -3623,8 +3657,19 @@ window.confirmarCierreCiego = async function() {
     }
     showToast('✅ Caja cerrada correctamente');
 
-    // v2.3.0: el resumen del cierre (resumenes_caja). Ya no se copia a la planilla ni se avisa por Apps Script:
-    // la diferencia y su nota quedan en evaluacion_caja (Sistema Fën la muestra en Hoy).
+    // v2.3.1: aviso por correo del descuadre (como en la v2.2.0). Sale sin esperar: el cierre no depende de él.
+    if (hayDiferencia) avisarPorCorreo(APPS_SCRIPT_URL_VENTAS_FEN, {
+      tipo: 'descuadre_caja',
+      filaCaja: {
+        sucursal: cajaData.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana',
+        fecha: fechaDMY(cajaData.fecha || fechaLocalHoy()), // la fecha de la caja, no la de hoy
+        usuario: cajaData.usuario || usuario.email,
+        difTotal, difEfectivo, notaDescuadre
+      }
+    });
+
+    // v2.3.0: el resumen del cierre (resumenes_caja). Ya no se copia a la planilla:
+    // la diferencia y su nota quedan también en evaluacion_caja (Sistema Fën la muestra en Hoy).
     const cajaDataFinal = (await getDoc(doc(db, 'cajas', cajaDocId))).data();
     await cerrarResumen(cajaDocId, cajaDataFinal);
   } catch(e) {
