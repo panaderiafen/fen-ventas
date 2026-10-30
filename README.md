@@ -1,3 +1,30 @@
+# fën caja · v2.5.0
+
+**Etapa 1 de la revisión de la caja B2C: el archivo pasa de 4,9 MB a unos 380 KB.** El logo, que estaba incrustado dos veces (2,3 MB cada una), queda como imagen aparte de 53 KB; los estilos y el código, en sus propios archivos. **Nada más cambia:** la caja hace exactamente lo mismo que la v2.4.1 (se comprueba juntando los archivos de nuevo). · 29 de octubre de 2026
+
+## Dónde va (repo fen-ventas, raíz, los cuatro juntos en una sola subida)
+| Archivo | Qué es |
+|---|---|
+| `index.html` | la página (42 KB; antes 4,9 MB) |
+| `caja.js` | el código (antes dentro de index.html) |
+| `caja.css` | los estilos (antes dentro de index.html) |
+| `logo-fen.png` | el logo, 360 × 360 px |
+| `README.md` | a `respaldos/caja-v2.5.0/` |
+
+Súbalos **los cuatro en la misma subida** (Add file → Upload files, arrastrando los cuatro): si se sube solo el `index.html`, la caja queda sin código. Reglas de Firestore, Apps Script y servidor de cobros: sin cambios (sigue fen-point 0.4.1).
+
+## Checklist
+- [ ] Los cuatro archivos en la raíz de fen-ventas, en una sola subida.
+- [ ] Abrir la caja (recargar si estaba abierta): se ve igual; en Productos, abajo, dice "Caja v2.5.0".
+- [ ] Una venta en efectivo y, con el Point integrado, una con Tarjeta, como siempre.
+
+## Pruebas
+`pruebas/caja25/caja-v250.test.js` (16): `construir_v250.py` reproduce los cuatro archivos; juntarlos de nuevo da la v2.4.1 (salvo el logo y la versión); las 14 pruebas de la v2.4.1 contra la v2.5.0; el logo se carga.
+
+Nota: el logo del encabezado ya no se veía bien antes (es oscuro sobre el fondo azul); se corrige con el nuevo aspecto de la etapa 3.
+
+---
+
 # fën caja · v2.4.1
 
 **Arreglo sobre la v2.4.0, después de la prueba del 29 oct en Ainavillo: la venta pagada con el Point se registra en unos segundos (antes 30 a 40) y, si un cobro "no completado" igual termina pagado, se registra ese pago en vez de cobrar otra vez.** Todo lo demás es igual a la v2.4.0. · 29 de octubre de 2026
