@@ -4,13 +4,13 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>Fën · Ventas</title>
-<link rel="stylesheet" href="caja.css?v=2.6.1">
+<link rel="stylesheet" href="caja.css?v=2.7.0">
 </head>
 <body>
 
 <!-- ═══════════════════════════ LOGIN ═══════════════════════════ -->
 <div class="login-screen" id="loginScreen">
-  <img class="login-logo" src="logo-fen.png?v=2.6.1" alt="Fën"/>
+  <img class="login-logo" src="logo-fen.png?v=2.7.0" alt="Fën"/>
   <div class="login-card">
     <div class="login-title">Iniciar sesión</div>
     <label>Correo electrónico</label>
@@ -20,7 +20,7 @@
     <div class="login-error" id="loginError">Correo o contraseña incorrectos</div>
     <button class="btn-login" id="btnLogin" onclick="login()">Entrar</button>
   </div>
-  <div class="login-version">Caja v2.6.1</div>
+  <div class="login-version">Caja v2.7.0</div>
 </div>
 
 <!-- ═══════════════════════════ SUCURSAL ═══════════════════════════ -->
@@ -40,10 +40,10 @@
 
   <div class="header">
     <div class="header-left">
-      <img class="header-logo" src="logo-fen.png?v=2.6.1" alt="Fën"/>
+      <img class="header-logo" src="logo-fen.png?v=2.7.0" alt="Fën"/>
       <div class="header-info">
         <div class="header-title" id="headerSucursal">Fën</div>
-        <div class="header-sub"><span id="headerUsuario"></span> <span class="header-version">· v2.6.1</span></div>
+        <div class="header-sub"><span id="headerUsuario"></span> <span class="header-version">· v2.7.0</span></div>
       </div>
     </div>
     <div class="header-right">
@@ -56,8 +56,6 @@
     <div class="nav-btn" onclick="showSection('stock', this)">📦 Stock</div>
     <div class="nav-btn" onclick="showSection('caja', this)">💵 Caja</div>
     <div class="nav-btn" onclick="showSection('productos', this)">🛍️ Productos</div>
-    <div class="nav-btn admin-only" onclick="showSection('reportes', this)" style="display:none">📊 Reportes</div>
-    <div class="nav-btn admin-only" onclick="showSection('configuracion', this)" style="display:none">⚙️ Configuración</div>
   </div>
 
   <!-- VENTA -->
@@ -362,196 +360,13 @@
 
     <div class="card" id="cardPedirProducto">
       <div class="card-title" style="margin-bottom:4px">Productos de la caja</div>
-      <p class="pp-ayuda">Se administran en Sistema Fën → Catálogo: ahí se crean, se cambian los precios y se habilitan en la caja. Si falta un producto, pídelo aquí.</p>
+      <p class="pp-ayuda">Se administran en Sistema Fën → Catálogo: ahí se crean, se cambian los precios y se habilitan en la caja. Los tipos de leche y los motivos de merma, en Sistema Fën → Configuración. Si falta un producto, pídelo aquí.</p>
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="abrirPedirProducto()">Pedir producto</button>
       <div class="pp-sub">Tus pedidos</div>
       <div id="misPedidosProd"><div class="empty">Cargando…</div></div>
-      <div class="pp-version">Caja v2.6.1</div>
+      <div class="pp-version">Caja v2.7.0</div>
     </div>
 
-    <!-- Tipos de leche (nota de café) -->
-    <div class="card">
-      <button class="pp-plegar" onclick="toggleProdSection('leche')" aria-controls="prodSec-leche">
-        <span class="card-title" style="margin:0"><span id="prodSecIcon-leche">▸</span> Tipos de leche (nota de café)</span>
-      </button>
-      <div id="prodSec-leche" style="display:none;margin-top:10px">
-        <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen en la nota de café al armar un pedido.</div>
-        <div id="tiposLecheLista"></div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <input type="text" id="nuevoTipoLeche" placeholder="Nuevo tipo de leche..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
-          <button class="btn-sm btn-edit" onclick="agregarTipoLeche()">+ Agregar</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Motivos de merma -->
-    <div class="card">
-      <button class="pp-plegar" onclick="toggleProdSection('motivos')" aria-controls="prodSec-motivos">
-        <span class="card-title" style="margin:0"><span id="prodSecIcon-motivos">▸</span> Motivos de merma</span>
-      </button>
-      <div id="prodSec-motivos" style="display:none;margin-top:10px">
-        <div style="font-size:11px;color:#888;margin-bottom:10px">Estas son las opciones que aparecen al enviar un producto a Merma.</div>
-        <div id="motivosMermaLista"></div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <input type="text" id="nuevoMotivoMerma" placeholder="Nuevo motivo..." style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px"/>
-          <button class="btn-sm btn-edit" onclick="agregarMotivoMerma()">+ Agregar</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Lista de productos: solo administración, solo para mirar -->
-    <div class="card admin-only" id="cardListaProductos" style="display:none">
-      <button class="pp-plegar" onclick="toggleProdSection('lista')" aria-controls="prodSec-lista">
-        <span class="card-title" style="margin:0"><span id="prodSecIcon-lista">▸</span> Lista de productos</span>
-      </button>
-      <div id="prodSinAreaAviso"></div>
-      <div id="prodSec-lista" style="display:none;margin-top:10px">
-        <p class="pp-ayuda">Solo para mirar: se administra en Sistema Fën → Catálogo.</p>
-        <div class="prod-search-bar" style="margin-top:10px">
-          <input type="text" id="prodBuscar" placeholder="Buscar producto" aria-label="Buscar producto" oninput="filtrarProdAdmin()"/>
-          <button class="btn-sm btn-edit" onclick="cargarProdAdmin()">Actualizar</button>
-        </div>
-        <div class="area-filter-btns" id="areaFilterBtns"></div>
-        <div id="prodLista" style="margin-top:10px"><div class="empty">Cargando...</div></div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- REPORTES (solo admin) -->
-  <div class="section" id="sec-reportes">
-    <div class="rep-tabs">
-      <button class="rep-tab active" onclick="selRepTab(this,'repVentas')">📊 Ventas</button>
-      <button class="rep-tab" onclick="selRepTab(this,'repStock')">📦 Valor stock</button>
-      <button class="rep-tab" onclick="selRepTab(this,'repMerma')">🗑️ Merma</button>
-      <button class="rep-tab" onclick="selRepTab(this,'repCaja')">💵 Eval. caja</button>
-      <button class="rep-tab" onclick="selRepTab(this,'repSolicitudes')">🔔 Solicitudes</button>
-    </div>
-    <div id="repVentas">
-      <div class="card">
-        <div class="card-title">📊 Reporte de ventas</div>
-        <!-- Selector rápido de período -->
-        <div class="rep-quick-btns">
-          <button class="rep-quick-btn active" onclick="selPeriodo(this,'hoy')">Hoy</button>
-          <button class="rep-quick-btn" onclick="selPeriodo(this,'ayer')">Ayer</button>
-          <button class="rep-quick-btn" onclick="selPeriodo(this,'semana')">Semana actual</button>
-          <button class="rep-quick-btn" onclick="selPeriodo(this,'semana-ant')">Sem. anterior</button>
-          <button class="rep-quick-btn" onclick="selPeriodo(this,'mes')">Mes actual</button>
-          <button class="rep-quick-btn" onclick="selPeriodo(this,'mes-ant')">Mes anterior</button>
-          <button class="rep-quick-btn" onclick="selPeriodo(this,'custom')">📅 Personalizado</button>
-        </div>
-        <!-- Rango personalizado (oculto por defecto) -->
-        <div id="customRangeDiv" style="display:none;margin-bottom:10px">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div><label>Desde</label><input type="date" id="repDesde"/></div>
-            <div><label>Hasta</label><input type="date" id="repHasta"/></div>
-          </div>
-          <button class="btn btn-primary btn-full" style="margin-top:10px" id="btnGenReporte" onclick="generarReporte()">Ver reporte</button>
-        </div>
-        <!-- Inputs ocultos para que generarReporte los lea -->
-        <input type="hidden" id="repDesde" style="display:none"/>
-        <input type="hidden" id="repHasta" style="display:none"/>
-        <label>Sucursal</label>
-        <select id="repSucursal">
-          <option value="">Todas</option>
-          <option value="ainavillo">Ainavillo</option>
-          <option value="barros_arana">Barros Arana</option>
-        </select>
-      </div>
-      <div id="reporteResultado"></div>
-    </div>
-    <div id="repStock" style="display:none">
-      <div class="card">
-        <div class="card-title">📦 Valor en stock</div>
-        <p style="font-size:12px;color:#888;margin-bottom:10px">Valor monetario del stock actual por categoría de antigüedad.</p>
-        <button class="btn btn-primary btn-full" id="btnCalcStock" onclick="cargarValorStock()">Calcular valor actual</button>
-      </div>
-      <div id="valorStockResult"></div>
-    </div>
-    <div id="repMerma" style="display:none">
-      <div class="card">
-        <div class="card-title">🗑️ Registro de merma</div>
-        <p style="font-size:12px;color:#888;margin-bottom:10px">Agrupado por la fecha en que cada producto se clasificó como merma desde Stock (no por cuándo se confirmó "Registrar merma" en este panel).</p>
-        <button class="btn btn-primary btn-full" id="btnCargarMerma" onclick="cargarMerma()">Cargar registros</button>
-      </div>
-      <div id="mermaResult"></div>
-    </div>
-    <div id="repCaja" style="display:none">
-      <div id="cajasSinCerrarWrap"></div>
-      <div class="card">
-        <div class="card-title">💵 Evaluación de cierre de caja</div>
-        <p style="font-size:12px;color:#888;margin-bottom:10px">Comparación entre el conteo manual del cajero y los totales del sistema.</p>
-        <button class="btn btn-primary btn-full" id="btnCargarEvalCaja" onclick="cargarEvaluacionesCaja()">Cargar evaluaciones</button>
-      </div>
-      <div id="evalCajaResult"></div>
-      <div class="card">
-        <div class="card-title">🧾 Resúmenes de caja</div>
-        <p style="font-size:12px;color:#888;margin-bottom:10px">Desde la versión 2.1 cada cierre guarda un resumen por producto, área y medio de pago. Para un mes anterior, genera aquí los que falten (lee las ventas de ese mes una sola vez).</p>
-        <input type="month" id="resumenesMes"/>
-        <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="generarResumenesMes()">Generar resúmenes faltantes</button>
-        <div id="resumenesMesResultado" style="font-size:12px;color:#555;margin-top:6px"></div>
-      </div>
-    </div>
-
-    <!-- Solicitudes de anulación -->
-    <div id="repSolicitudes" style="display:none">
-      <div class="card">
-        <div class="card-title">🔔 Solicitudes de anulación</div>
-        <p style="font-size:12px;color:#888;margin-bottom:10px">Ventas que un cajero pidió anular. Revisa y aprueba o rechaza.</p>
-        <button class="btn btn-primary btn-full" id="btnCargarSolicitudes" onclick="cargarSolicitudesAnulacion()">Cargar solicitudes</button>
-      </div>
-      <div id="solicitudesResult"></div>
-    </div>
-  </div>
-
-</div>
-
-<!-- CONFIGURACIÓN -->
-<div class="section" id="sec-configuracion">
-
-  <!-- Tiempos de pago por sucursal -->
-  <div class="card">
-    <div class="card-title" style="margin-bottom:4px">💰 Tiempos de pago por sucursal</div>
-    <div style="font-size:11px;color:#888;margin-bottom:10px">Días que demora en estar disponible el dinero de cada medio de pago, según el convenio de cada sucursal con el procesador. Efectivo siempre es al momento — no se configura. Se usa para proyectar el flujo de caja hacia fën-producción.</div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead>
-        <tr style="border-bottom:1px solid #eee">
-          <th style="text-align:left;padding:6px 4px;font-size:11px;color:#888">Medio de pago</th>
-          <th style="text-align:center;padding:6px 4px;font-size:11px;color:#888">Ainavillo</th>
-          <th style="text-align:center;padding:6px 4px;font-size:11px;color:#888">Barros Arana</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr style="border-bottom:1px solid #f5f5f5">
-          <td style="padding:6px 4px">Efectivo</td>
-          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (al momento)</td>
-          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (al momento)</td>
-        </tr>
-        <tr style="border-bottom:1px solid #f5f5f5">
-          <td style="padding:6px 4px">Débito</td>
-          <td style="text-align:center;padding:4px"><input type="number" min="0" id="tiempoPago-ainavillo-debito" style="width:60px;text-align:center" onchange="guardarTiemposPago()"/> días</td>
-          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (inmediato)</td>
-        </tr>
-        <tr style="border-bottom:1px solid #f5f5f5">
-          <td style="padding:6px 4px">Crédito</td>
-          <td style="text-align:center;padding:4px"><input type="number" min="0" id="tiempoPago-ainavillo-credito" style="width:60px;text-align:center" onchange="guardarTiemposPago()"/> días</td>
-          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (inmediato)</td>
-        </tr>
-        <tr>
-          <td style="padding:6px 4px">Transferencia</td>
-          <td style="text-align:center;padding:4px"><input type="number" min="0" id="tiempoPago-ainavillo-transferencia" style="width:60px;text-align:center" onchange="guardarTiemposPago()"/> días</td>
-          <td style="text-align:center;padding:6px 4px;color:#aaa">0 (inmediato)</td>
-        </tr>
-      </tbody>
-    </table>
-    <div id="tiemposPagoEstado" style="font-size:11px;color:#888;margin-top:8px"></div>
-  </div>
-
-  <!-- Exportar precios por área -->
-  <div class="card">
-    <div class="card-title" style="margin-bottom:4px">🖨️ Exportar precios por área</div>
-    <div style="font-size:11px;color:#888;margin-bottom:10px">Genera un documento con todos los productos activos, agrupados por área y ordenados de menor a mayor precio, mostrando el precio de primer día (Hoy). Se abre el diálogo de impresión — ahí puedes elegir "Guardar como PDF" en vez de imprimir.</div>
-    <button class="btn btn-primary btn-full" onclick="exportarPreciosPorArea()">📄 Generar documento</button>
   </div>
 
 </div>
@@ -598,27 +413,6 @@
     <div class="modal-btns">
       <button class="btn btn-secondary" style="flex:1" onclick="cerrarModalCierre()">Cancelar</button>
       <button class="btn btn-danger" style="flex:2" id="btnConfirmarCierre" onclick="confirmarCierreCiego()">🔒 Confirmar cierre</button>
-    </div>
-  </div>
-</div>
-
-<!-- CORREGIR EVALUACIÓN DE CAJA -->
-<div class="modal-overlay" id="modalCorregirEval">
-  <div class="modal">
-    <div class="modal-title">✏️ Corregir cierre de caja</div>
-    <p style="font-size:12px;color:#888;margin-bottom:14px">Usa esto solo si el cierre quedó mal registrado (ej. error de tipeo del cajero). Los totales del sistema no se modifican, solo el conteo manual.</p>
-    <input type="hidden" id="editEvalId"/>
-    <label>💵 Efectivo contado ($) — incluye monto inicial</label>
-    <input type="number" id="editEvalEfectivo" placeholder="0" min="0"/>
-    <label>💳 Débito ($)</label>
-    <input type="number" id="editEvalDebito" placeholder="0" min="0"/>
-    <label>💳 Crédito ($)</label>
-    <input type="number" id="editEvalCredito" placeholder="0" min="0"/>
-    <label>📲 Transferencia ($)</label>
-    <input type="number" id="editEvalTransfer" placeholder="0" min="0"/>
-    <div class="modal-btns">
-      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalCorregirEval').classList.remove('open')">Cancelar</button>
-      <button class="btn btn-primary" style="flex:2" id="btnGuardarCorreccion" onclick="guardarCorreccionEval()">Guardar corrección</button>
     </div>
   </div>
 </div>
@@ -741,13 +535,10 @@
   <div id="cmdMedio" style="font-size:12px;"></div>
 </div>
 
-<div id="reportePreciosPreview"></div>
 
 <div id="toastMsg"></div>
 
-<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.6/qz-tray.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script type="module" src="caja.js?v=2.6.1"></script>
+<script type="module" src="caja.js?v=2.7.0"></script>
 </body>
 </html>

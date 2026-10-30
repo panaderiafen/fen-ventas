@@ -1,3 +1,39 @@
+# fën caja · v2.7.0
+
+**Etapa 3 (primera parte) de la revisión de la caja B2C, aprobada por Emmanuel el 29 oct: la caja queda solo con lo del mostrador, y el cierre anota las ventas por tipo de leche.** · 29 de octubre de 2026
+
+## Qué cambia
+1. **Se retiran de la caja** (todo ya está en Sistema Fën, revisado con Emmanuel el 29 oct):
+   | Antes en la caja | Ahora en Sistema Fën |
+   |---|---|
+   | Reportes › Ventas, Valor stock, Merma | Ventas de caja › Reportes y Merma y stock |
+   | Reportes › Eval. caja (arqueos, cajas sin cerrar, resúmenes faltantes) | Ventas de caja › Cierres |
+   | Reportes › Solicitudes de anulación | Ventas de caja › Anulaciones |
+   | Configuración › Tiempos de pago | Configuración (la caja ya no vuelve a dejar Barros Arana en 0) |
+   | Productos › Tipos de leche, Motivos de merma | Configuración |
+   | Productos › Lista de productos | Catálogo |
+   | Configuración › Exportar precios por área | Se retira (no se usa) |
+2. **Queda en la caja** lo del mostrador: Venta (y Mesas), Stock, Caja (apertura y cierre), Productos con "Pedir producto", la impresora de cada equipo y el aviso de una caja anterior sin cerrar. La caja sigue usando los tipos de leche y los motivos de merma que se configuran en Sistema Fën.
+3. **El cierre guarda las ventas por tipo de leche** (en `resumenes_caja`: `porLeche` en total y en cada producto). Sistema Fën v0.116.0 lo muestra en Ventas de caja › Reportes › Por tipo de leche; más adelante lo usa el control de stock de materias primas.
+4. **Más liviana:** el código baja de 5.114 a 3.778 líneas y ya no carga Chart.js ni html2canvas. Con cuenta de administración, entrar a Productos ya no lee todos los productos.
+- Para la vendedora, nada cambia.
+
+## Dónde va (repo fen-ventas, raíz, los cuatro juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`. Este README a `respaldos/caja-v2.7.0/`. Reglas de Firestore, Apps Script y servidor de cobros (fen-point 0.4.1): sin cambios.
+**Cuándo:** después del piloto del Point en Barros Arana (para no cambiar dos cosas el mismo día). Junto con Sistema Fën v0.116.0, que muestra el reporte de leche.
+
+## Checklist
+- [ ] Los cuatro archivos en la raíz de fen-ventas, en una sola subida.
+- [ ] Al abrir la caja dice "v2.7.0" al lado del correo.
+- [ ] Con la cuenta de administración, arriba solo aparecen Venta, Stock, Caja y Productos.
+- [ ] Una venta de café con tipo de leche (en la nota) y el cierre del día como siempre; al otro día, Sistema Fën → Ventas de caja → Reportes → "Por tipo de leche" la muestra.
+
+## Pruebas
+- `pruebas/caja27/caja-v270.test.js` (27): las 22 de la v2.6.1 contra la v2.7.0 y 5 nuevas (lo retirado ya no está y lo del mostrador sigue; con cuenta de administración solo las cuatro pestañas y sin leer todos los productos; los tipos de leche y motivos de Sistema Fën se usan; el cierre guarda `porLeche`; sin desborde a 390, 768 y 1440 px).
+- `pruebas/caja27/caja-v270-azar.test.js`: 150 ventas al azar dejan los mismos datos que la v2.6.1.
+
+---
+
 # fën caja · v2.6.1
 
 **Dos arreglos pedidos por Emmanuel el 29 oct, sobre la v2.6.0.** · 29 de octubre de 2026
