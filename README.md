@@ -1,3 +1,32 @@
+# fën caja · v2.9.0
+
+**Cierre de la Etapa 3 de la revisión de la caja B2C** (pedido por Emmanuel el 29 oct, para pilotear el Point el 30 oct en la mañana). Va junto con **Sistema Fën v0.117.0**. Para la vendedora solo cambia que ya no hay emojis. · 30 de octubre de 2026
+
+## Qué cambia
+1. **El resumen del cierre se arma con `resumen-caja.js`**, el mismo archivo (idéntico) que usa Sistema Fën v0.117.0. Antes estaba escrito dos veces y había que cambiarlo en los dos lados. El resumen que se guarda es el mismo de la v2.8.0 (lo revisan las pruebas).
+2. **De una sola vez** (lote de escrituras, como las ventas desde la v2.6.0):
+   - **Cambiar el medio de pago** de una venta: la venta y los totales de la caja juntos. Si se corta internet, no queda la venta con un medio y la caja con otro.
+   - **Pedir una anulación:** la solicitud y la marca "pendiente" de la venta juntas.
+   - Las anulaciones se **aprueban** en Sistema Fën v0.117.0, que ahora devuelve el stock y descuenta la caja (también lo cobrado con el Point integrado) en una sola transacción.
+3. **Sin emojis** dentro de las secciones (títulos, botones, avisos). Quedan ✓ y ✕, y las flechas.
+
+## Dónde va (repo fen-ventas, raíz, los CINCO juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png` y **`resumen-caja.js` (nuevo)**. Este README a `respaldos/caja-v2.9.0/`.
+Ojo: es el repo **fen-ventas** (la caja), no sistema-fen. Si falta `resumen-caja.js`, la caja no abre.
+Sistema Fën v0.117.0 va aparte, a su repo. Reglas de Firestore, Apps Script y servidor de cobros: sin cambios.
+
+## Checklist
+- [ ] Los cinco archivos en la raíz de **fen-ventas**, en una sola subida; recargar la caja.
+- [ ] Al lado del correo dice "· v2.9.0".
+- [ ] Una venta, y en "Ventas del turno" cambiar su medio de pago: cambia en la venta y en el arqueo.
+- [ ] Al cierre del día, el cierre y su resumen como siempre (Sistema Fën → Ventas de caja → Reportes lo muestra al otro día).
+
+## Pruebas
+- `pruebas/caja29/caja-v290.test.js` (36): las 32 de la v2.8.0 contra la v2.9.0 y 4 nuevas (resumen-caja.js igual al de Sistema Fën y la caja lo usa; sin emojis; el cierre guarda el mismo resumen que la v2.8.0; cambiar el medio es un lote y si falla no cambia nada; pedir una anulación es un lote).
+- `pruebas/caja29/caja-v290-azar.test.js`: 150 ventas al azar dejan los mismos datos que la v2.8.0.
+
+---
+
 # fën caja · v2.8.0
 
 **Etapa 3 (segunda parte) de la revisión de la caja B2C: el aspecto nuevo, opción A elegida por Emmanuel el 29 oct** (lienzo "Boceto · Aspecto de la caja"). Nada cambia en lo que hace la caja. · 29 de octubre de 2026

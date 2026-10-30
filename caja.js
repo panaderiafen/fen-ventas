@@ -1,7 +1,8 @@
-// fën caja v2.8.0 · código
+// fën caja v2.9.0 · código
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { armarResumen } from './resumen-caja.js?v=2.9.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -70,7 +71,7 @@ let pedidoLineas = [];
 let modoVenta = 'directa'; // 'directa' | 'mesas' | 'mesa-detail'
 let mesaActivaId = null;
 let mesaActivaNombre = '';
-// Última venta registrada — permite reimprimir la comanda con "🖨 Comanda" aunque el carrito ya esté vacío
+// Última venta registrada — permite reimprimir la comanda con "Comanda" aunque el carrito ya esté vacío
 let ultimaVentaRegistrada = null;
 // Caché de las ventas del turno visible (id → datos completos), para poder reimprimir cualquiera de ellas
 let ventasTurnoCache = {};
@@ -689,7 +690,7 @@ window.toggleMostrarSinStock = function() {
   mostrarSinStock = !mostrarSinStock;
   const btn = document.getElementById('btnToggleStock');
   if (btn) {
-    btn.textContent = mostrarSinStock ? '👁 Solo con stock' : '👁 Mostrar todos';
+    btn.textContent = mostrarSinStock ? 'Solo con stock' : 'Mostrar todos';
     btn.style.background = mostrarSinStock ? '#1F3F78' : '';
     btn.style.color       = mostrarSinStock ? 'white'   : '';
     btn.style.borderColor = mostrarSinStock ? '#1F3F78' : '';
@@ -988,7 +989,7 @@ window.selModoVenta = function(btn, modo) {
     mesaActivaId = null;
     document.getElementById('mesasListado').style.display = 'none';
     document.getElementById('ventaLayoutMain').style.display = '';
-    document.getElementById('ventaCardTitle').textContent = '🛒 Nueva venta';
+    document.getElementById('ventaCardTitle').textContent = 'Nueva venta';
     document.getElementById('pedidoCardTitle').textContent = 'Pedido actual';
     document.getElementById('btnPagar').textContent = '✓ Registrar pago';
     pedidoLineas = [];
@@ -1012,7 +1013,7 @@ window.cargarMesas = async function() {
     const mesas = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.numero || 0) - (b.numero || 0));
     wrap.innerHTML = `
       <div class="card">
-        <div class="card-title">🍽️ Mesas abiertas</div>
+        <div class="card-title">Mesas abiertas</div>
         <button class="btn btn-primary btn-full" style="margin-bottom:12px" onclick="crearMesa()">+ Nueva mesa</button>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
           ${mesas.length ? mesas.map(m => `
@@ -1031,7 +1032,7 @@ window.cargarMesas = async function() {
 
 // Crea una mesa nueva: numeración automática por sucursal, con nombre opcional
 window.crearMesa = async function() {
-  if (!cajaId) { alert('⚠️ Debes abrir la caja antes de crear una mesa'); return; }
+  if (!cajaId) { alert('Debes abrir la caja antes de crear una mesa'); return; }
   const nombreInput = prompt('Nombre de la mesa (opcional). Deja vacío para usar el número automático:');
   if (nombreInput === null) return; // canceló
   try {
@@ -1063,10 +1064,10 @@ window.abrirMesa = async function(mesaId) {
     document.getElementById('mesasListado').style.display = 'none';
     document.getElementById('ventaLayoutMain').style.display = '';
     document.getElementById('mesaHeaderBar').style.display = 'flex';
-    document.getElementById('mesaHeaderNombre').textContent = `🍽️ ${m.nombre}`;
-    document.getElementById('ventaCardTitle').textContent = `🍽️ ${m.nombre}`;
+    document.getElementById('mesaHeaderNombre').textContent = `${m.nombre}`;
+    document.getElementById('ventaCardTitle').textContent = `${m.nombre}`;
     document.getElementById('pedidoCardTitle').textContent = `Pedido — ${m.nombre}`;
-    document.getElementById('btnPagar').textContent = '💳 Cobrar y cerrar mesa';
+    document.getElementById('btnPagar').textContent = 'Cobrar y cerrar mesa';
     renderPedido();
   } catch(e) { alert('Error al abrir mesa: ' + e.message); }
 };
@@ -1105,7 +1106,7 @@ window.cancelarMesa = async function() {
     await updateDoc(doc(db, 'mesas', mesaActivaId), {
       estado: 'cancelada', cierre: Timestamp.now(), canceladoPor: usuario.email
     });
-    showToast('🗑️ Mesa cancelada');
+    showToast('Mesa cancelada');
     pedidoLineas = [];
     resetPagoDividido();
     volverAMesas();
@@ -1135,7 +1136,7 @@ async function persistirMesa() {
 // PEDIDO
 // ═══════════════════════════
 window.agregarAlPedido = function(id) {
-  if (!cajaId) { alert('⚠️ Debes abrir la caja antes de realizar ventas'); return; }
+  if (!cajaId) { alert('Debes abrir la caja antes de realizar ventas'); return; }
   const prod = productos.find(p => p.id === id);
   if (!prod) return;
   const conControl   = prod.controlStock !== false;
@@ -1171,14 +1172,14 @@ window.agregarAlPedidoConLote = function(id, loteFecha) {
         ? (stockItem?.entradas?.[loteFecha] || 0)
         : (stockItem ? getQtyCategoria(stockItem, categoriaStockActiva) : 0);
     if (disponible <= 0) {
-      alert(`⚠️ Sin stock${esPermanente ? '' : ` en categoría "${categoriaStockActiva}"`} para ${prod.nombre}`);
+      alert(`Sin stock${esPermanente ? '' : ` en categoría "${categoriaStockActiva}"`} para ${prod.nombre}`);
       return;
     }
     const cantEnPedido = pedidoLineas
       .filter(l => l.id === id && l.categoriaStock === categoriaStockActiva && (l.loteFecha || '') === (loteFecha || ''))
       .reduce((a, l) => a + l.cantidad, 0);
     if (cantEnPedido >= disponible) {
-      alert(`⚠️ Solo hay ${disponible} unidad(es) de ${prod.nombre}${loteFecha ? ` en el lote del ${keyToFechaCL(loteFecha)}` : ` en stock (${categoriaStockActiva})`}`);
+      alert(`Solo hay ${disponible} unidad(es) de ${prod.nombre}${loteFecha ? ` en el lote del ${keyToFechaCL(loteFecha)}` : ` en stock (${categoriaStockActiva})`}`);
       return;
     }
   }
@@ -1216,7 +1217,7 @@ window.agregarAlPedidoConLote = function(id, loteFecha) {
 
 // Abre el selector de lote cuando un producto de Última oferta tiene más de un lote disponible
 window.abrirModalElegirLote = function(productoId, nombre, lotes) {
-  document.getElementById('elegirLoteTitulo').textContent = `📦 ${nombre} — elige el lote`;
+  document.getElementById('elegirLoteTitulo').textContent = `${nombre} — elige el lote`;
   document.getElementById('elegirLoteOpciones').innerHTML = lotes.map(l => `
     <button onclick="elegirLoteYAgregar('${productoId}','${l.key}')" style="text-align:left;padding:12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer">
       <div style="font-weight:600;font-size:13px">Ingreso ${keyToFechaCL(l.key)} → lleg. Últ.of. ${fechaLlegadaUltimaOferta(l.key)}</div>
@@ -1267,7 +1268,7 @@ function renderPedido() {
           ${l.descMonto > 0 ? `−$${parseInt(l.descMonto).toLocaleString('es-CL')} → $${parseInt(l.total).toLocaleString('es-CL')}` : ''}
         </span>
         <button class="btn-sm" id="notaBtn-${i}" onclick="toggleNotaLinea(${i})" style="margin-left:auto;font-size:11px;padding:3px 8px">
-          ${tieneNota ? '📝 Nota ✓' : '📝 + Nota'}
+          ${tieneNota ? 'Nota ✓' : '+ Nota'}
         </button>
       </div>
       <div class="linea-nota-panel" id="notaPanel-${i}" style="display:${tieneNota ? '' : 'none'};margin-top:6px;padding:8px;background:#f7f9fc;border-radius:8px;display:flex;flex-direction:column;gap:6px">
@@ -1300,7 +1301,7 @@ window.cambiarNotaLinea = function(i, campo, valor) {
   const btn = document.getElementById(`notaBtn-${i}`);
   if (btn) {
     const l = pedidoLineas[i];
-    btn.textContent = (l.clienteNombre || l.tipoLeche || l.nota) ? '📝 Nota ✓' : '📝 + Nota';
+    btn.textContent = (l.clienteNombre || l.tipoLeche || l.nota) ? 'Nota ✓' : '+ Nota';
   }
   if (modoVenta === 'mesa-detail') persistirMesa();
 };
@@ -1368,7 +1369,7 @@ window.cambiarQty = function(i, delta) {
         .filter(l => l.id === linea.id && l.categoriaStock === linea.categoriaStock && (l.loteFecha || '') === (linea.loteFecha || ''))
         .reduce((a, l) => a + l.cantidad, 0);
       if (totalEnPedido >= disponible) {
-        showToast(`⚠️ Stock máximo: ${disponible} ud. de ${linea.nombre}`, 'error');
+        showToast(`Stock máximo: ${disponible} ud. de ${linea.nombre}`, 'error');
         return;
       }
     }
@@ -1461,7 +1462,7 @@ window.actualizarRestanteDividido = function() {
     .reduce((a, id) => a + (parseInt(document.getElementById(id).value) || 0), 0);
   const restante = total - suma;
   const el = document.getElementById('divRestante');
-  el.textContent = restante === 0 ? '✅ Cuadra con el total' : `Diferencia: $${Math.abs(restante).toLocaleString('es-CL')} ${restante > 0 ? 'faltan' : 'de más'}`;
+  el.textContent = restante === 0 ? 'Cuadra con el total' : `Diferencia: $${Math.abs(restante).toLocaleString('es-CL')} ${restante > 0 ? 'faltan' : 'de más'}`;
   el.style.color = restante === 0 ? '#1D9E75' : '#e74c3c';
 };
 
@@ -1849,7 +1850,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.8.0';
+const CAJA_VERSION = '2.9.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2074,7 +2075,7 @@ window.registrarVenta = async function() {
     pagoSinIntegracion = false; ptIntentoAnterior = null; pintarModoPoint(); // v2.4.0 · v2.4.1
     renderPedido();
     await cargarUltimasVentas();
-    showToast(`✅ Venta registrada · $${total.toLocaleString('es-CL')}`);
+    showToast(`Venta registrada · $${total.toLocaleString('es-CL')}`);
   } catch(e) {
     alert('Error al registrar: ' + e.message);
   }
@@ -2129,7 +2130,7 @@ window.cerrarYCobrarMesa = async function() {
     await lote.commit();
     marcados.forEach(p => { p.tuvoVentas = true; });
     ultimaVentaRegistrada = venta;
-    showToast(`✅ Mesa cobrada · $${total.toLocaleString('es-CL')}`);
+    showToast(`Mesa cobrada · $${total.toLocaleString('es-CL')}`);
     pedidoLineas = [];
     resetPagoDividido();
     pagoSinIntegracion = false; ptIntentoAnterior = null; pintarModoPoint(); // v2.4.0 · v2.4.1
@@ -2138,7 +2139,7 @@ window.cerrarYCobrarMesa = async function() {
     alert('Error al cobrar mesa: ' + e.message);
   }
   btn.disabled = false;
-  btn.textContent = '💳 Cobrar y cerrar mesa';
+  btn.textContent = 'Cobrar y cerrar mesa';
 };
 
 // ═══════════════════════════
@@ -2176,7 +2177,7 @@ window.imprimirComanda = async function(venta) {
   document.getElementById('cmdLineas').innerHTML = lineas.map(l => {
     const extra = [l.clienteNombre, l.tipoLeche, l.nota].filter(Boolean).join(' · ');
     return `${l.nombre} x${l.cantidad} ........ $${parseInt(l.total).toLocaleString('es-CL')}` +
-      (extra ? `<br/><span style="font-size:11px;color:#555">&nbsp;&nbsp;📝 ${extra}</span>` : '');
+      (extra ? `<br/><span style="font-size:11px;color:#555">&nbsp;&nbsp;${extra}</span>` : '');
   }).join('<br/>');
   document.getElementById('cmdTotal').textContent = `TOTAL: $${total.toLocaleString('es-CL')}`;
   document.getElementById('cmdMedio').textContent = `Medio: ${medio}`;
@@ -2298,7 +2299,7 @@ async function cargarUltimasVentas() {
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.fecha?.seconds || 0) - (a.fecha?.seconds || 0)); // todas, más reciente primero
 
-    const medioLabel = { efectivo: '💵 Efectivo', debito: '💳 Débito', credito: '💳 Crédito', transferencia: '📲 Transfer.' };
+    const medioLabel = { efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', transferencia: 'Transfer.' };
 
     ventasTurnoCache = {}; // se refresca cada vez que se recarga la lista
 
@@ -2310,20 +2311,20 @@ async function cargarUltimasVentas() {
       const tienePendiente = v.solicitudAnulacionPendiente === true;
 
       const medioBadge = v.pagos
-        ? `<span class="ultimas-venta-medio" title="${v.pagos.map(p => `${medioLabel[p.medio]||p.medio}: $${p.monto.toLocaleString('es-CL')}`).join(' · ')}">🔀 Dividido</span>`
+        ? `<span class="ultimas-venta-medio" title="${v.pagos.map(p => `${medioLabel[p.medio]||p.medio}: $${p.monto.toLocaleString('es-CL')}`).join(' · ')}">Dividido</span>`
         : esAnulada
           ? `<span class="ultimas-venta-medio anulada-badge">${medioLabel[v.medioPago] || v.medioPago}</span>`
-          : `<button class="ultimas-venta-medio" onclick="abrirModalEditarMedio('${v.id}','${v.medioPago}')" title="Cambiar medio de pago">${medioLabel[v.medioPago] || v.medioPago} ✏️</button>`;
+          : `<button class="ultimas-venta-medio" onclick="abrirModalEditarMedio('${v.id}','${v.medioPago}')" title="Cambiar medio de pago">${medioLabel[v.medioPago] || v.medioPago}</button>`;
 
-      const btnComanda = `<button onclick="reimprimirVentaTurno('${v.id}')" title="Reimprimir comanda">🖨 Comanda</button>`;
+      const btnComanda = `<button onclick="reimprimirVentaTurno('${v.id}')" title="Reimprimir comanda">Comanda</button>`;
 
       const acciones = esAnulada
-        ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-anulada-tag">🚫 Venta anulada${v.motivoAnulacion ? ': ' + v.motivoAnulacion : ''}</span>${btnComanda}</div>`
+        ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-anulada-tag">Venta anulada${v.motivoAnulacion ? ': ' + v.motivoAnulacion : ''}</span>${btnComanda}</div>`
         : tienePendiente
-          ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-pendiente-tag">⏳ Anulación pendiente de aprobación</span>${btnComanda}</div>`
+          ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-pendiente-tag">Anulación pendiente de aprobación</span>${btnComanda}</div>`
           : `<div class="ultimas-venta-acciones">
               ${btnComanda}
-              <button class="btn-anular" onclick="abrirModalAnulacion('${v.id}')">🗑️ Solicitar anulación</button>
+              <button class="btn-anular" onclick="abrirModalAnulacion('${v.id}')">Solicitar anulación</button>
             </div>`;
 
       return `
@@ -2395,22 +2396,24 @@ window.confirmarEditarMedio = async function() {
       return;
     }
 
+    // v2.9.0: la venta y los totales de la caja, de una sola vez (o queda todo o no queda nada)
+    const lote = writeBatch(db);
     // 1. Sobrescribir el medio de pago en la venta (con rastro de auditoría)
-    await updateDoc(ventaRef, {
+    lote.update(ventaRef, {
       medioPago: _medioEditSeleccionado,
       medioPagoOriginal: venta.medioPagoOriginal || medioAnterior,
       medioPagoEditadoPor: usuario.email,
       medioPagoEditadoFecha: Timestamp.now()
     });
-
     // 2. Ajustar los totales acumulados de la caja (resta del medio viejo, suma al nuevo)
     //    — esto es un contador agregado, no se puede simplemente sobrescribir.
     if (venta.cajaId) {
-      await updateDoc(doc(db, 'cajas', venta.cajaId), {
+      lote.update(doc(db, 'cajas', venta.cajaId), {
         [`totales.${medioAnterior}`]: increment(-venta.total),
         [`totales.${_medioEditSeleccionado}`]: increment(venta.total)
       });
     }
+    await lote.commit();
 
     cerrarModalEditarMedio();
     await cargarUltimasVentas();
@@ -2419,7 +2422,7 @@ window.confirmarEditarMedio = async function() {
       const cajaSnap = await getDoc(doc(db, 'cajas', cajaId));
       if (cajaSnap.exists()) mostrarResumenCaja(cajaSnap.data());
     }
-    showToast('✅ Medio de pago actualizado');
+    showToast('Medio de pago actualizado');
   } catch(e) {
     alert('Error al actualizar: ' + e.message);
   }
@@ -2453,8 +2456,11 @@ window.confirmarSolicitudAnulacion = async function() {
     if (!ventaSnap.exists()) throw new Error('La venta ya no existe');
     const venta = ventaSnap.data();
 
+    // v2.9.0: la solicitud y la marca en la venta, de una sola vez
+    const lote = writeBatch(db);
     // 1. Crear la solicitud
-    const solicitudRef = await addDoc(collection(db, 'solicitudes_anulacion'), {
+    const solicitudRef = doc(db, 'solicitudes_anulacion', idNuevo());
+    lote.set(solicitudRef, {
       ventaId, sucursal, cajaId: venta.cajaId || null,
       total: venta.total, medioPago: venta.medioPago,
       lineasResumen: (venta.lineas || []).map(l => `${l.nombre} x${l.cantidad}`).join(', '),
@@ -2465,7 +2471,8 @@ window.confirmarSolicitudAnulacion = async function() {
     });
 
     // 2. Marcar la venta como con solicitud pendiente (solo visual, no se anula aún)
-    await updateDoc(ventaRef, { solicitudAnulacionPendiente: true });
+    lote.update(ventaRef, { solicitudAnulacionPendiente: true });
+    await lote.commit();
 
     // 3. v2.3.1: aviso por correo a la administración (no aprueba nada, solo avisa). Sale sin esperar: si falla, la
     //    solicitud queda igual en Firestore (Reportes → Solicitudes y Sistema Fën → Hoy).
@@ -2479,11 +2486,11 @@ window.confirmarSolicitudAnulacion = async function() {
 
     cerrarModalAnulacion();
     await cargarUltimasVentas();
-    showToast('📩 Solicitud enviada al administrador');
+    showToast('Solicitud enviada al administrador');
   } catch(e) {
     alert('Error al enviar la solicitud: ' + e.message);
   }
-  btn.disabled = false; btn.textContent = '📩 Enviar solicitud';
+  btn.disabled = false; btn.textContent = 'Enviar solicitud';
 };
 
 // Busca el último cierre de caja de esta sucursal que tenga saldoSiguiente
@@ -2508,7 +2515,7 @@ async function cargarSaldoSugerido() {
     const ultimo = cierres[0];
     const saldo = parseInt(ultimo.saldoSiguiente);
     if (saldo < 0) return;
-    hint.textContent = `💡 Saldo sugerido del turno anterior: $${saldo.toLocaleString('es-CL')} — puedes ajustarlo si es necesario`;
+    hint.textContent = `Saldo sugerido del turno anterior: $${saldo.toLocaleString('es-CL')} — puedes ajustarlo si es necesario`;
     hint.style.display = 'block';
     // Pre-llenar solo si el campo está vacío
     if (!input.value) input.value = saldo;
@@ -2532,7 +2539,7 @@ window.abrirCaja = async function() {
     document.getElementById('cardAbrirCaja').classList.add('hidden');
     document.getElementById('cardCajaAbierta').classList.remove('hidden');
     mostrarResumenCaja({ montoInicial: monto, totales: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 }, totalVentas: 0, nVentas: 0 });
-    showToast('✅ Caja abierta');
+    showToast('Caja abierta');
   } catch(e) { alert('Error al abrir caja: ' + e.message); }
   btn.disabled = false; btn.textContent = 'Abrir caja';
 };
@@ -2541,10 +2548,10 @@ function mostrarResumenCaja(data) {
   const t = data.totales || {};
   document.getElementById('resumenCaja').innerHTML = `
     <div class="resumen-row"><span>Monto inicial</span><span>$${parseInt(data.montoInicial||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row"><span>💵 Efectivo</span><span>$${parseInt(t.efectivo||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row"><span>💳 Débito</span><span>$${parseInt(t.debito||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row"><span>💳 Crédito</span><span>$${parseInt(t.credito||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row"><span>📲 Transferencia</span><span>$${parseInt(t.transferencia||0).toLocaleString('es-CL')}</span></div>
+    <div class="resumen-row"><span>Efectivo</span><span>$${parseInt(t.efectivo||0).toLocaleString('es-CL')}</span></div>
+    <div class="resumen-row"><span>Débito</span><span>$${parseInt(t.debito||0).toLocaleString('es-CL')}</span></div>
+    <div class="resumen-row"><span>Crédito</span><span>$${parseInt(t.credito||0).toLocaleString('es-CL')}</span></div>
+    <div class="resumen-row"><span>Transferencia</span><span>$${parseInt(t.transferencia||0).toLocaleString('es-CL')}</span></div>
     <div class="resumen-row total"><span>Total ventas (${data.nVentas||0})</span><span>$${parseInt(data.totalVentas||0).toLocaleString('es-CL')}</span></div>
   `;
 }
@@ -2578,7 +2585,7 @@ window.cerrarCaja = function(targetCajaId) {
 async function infoPointCierre(id) {
   const box = document.getElementById('cierrePointInfo');
   const lblD = document.getElementById('cierrDebitoLbl'), lblC = document.getElementById('cierrCreditoLbl');
-  box.style.display = 'none'; lblD.textContent = '💳 Débito ($)'; lblC.textContent = '💳 Crédito ($)';
+  box.style.display = 'none'; lblD.textContent = 'Débito ($)'; lblC.textContent = 'Crédito ($)';
   if (!id) return;
   try {
     const snap = await getDoc(doc(db, 'cajas', id));
@@ -2587,7 +2594,7 @@ async function infoPointCierre(id) {
     if (!d && !c) return;
     box.innerHTML = `<b>Con el Point integrado: ${ptPesos(d + c)}</b> (Débito ${ptPesos(d)} · Crédito ${ptPesos(c)}), confirmado por Mercado Pago venta por venta. No se cuenta: abajo escriba solo lo cobrado <b>sin integración</b>.`;
     box.style.display = 'block';
-    lblD.textContent = '💳 Débito sin integración ($)'; lblC.textContent = '💳 Crédito sin integración ($)';
+    lblD.textContent = 'Débito sin integración ($)'; lblC.textContent = 'Crédito sin integración ($)';
   } catch (e) { /* sin conexión: el arqueo sigue como siempre */ }
 }
 
@@ -2691,7 +2698,7 @@ window.confirmarCierreCiego = async function() {
     if (hayDiferencia) {
       notaDescuadre = await pedirNotaDescuadre({ difEfectivo, difDebito, difCredito, difTransfer, difTotal });
       if (notaDescuadre === null) {
-        btn.disabled = false; btn.textContent = '🔒 Confirmar cierre';
+        btn.disabled = false; btn.textContent = 'Confirmar cierre';
         return;
       }
     }
@@ -2734,7 +2741,7 @@ window.confirmarCierreCiego = async function() {
     } else {
       avisarCajaAnterior();
     }
-    showToast('✅ Caja cerrada correctamente');
+    showToast('Caja cerrada correctamente');
 
     // v2.3.1: aviso por correo del descuadre (como en la v2.2.0). Sale sin esperar: el cierre no depende de él.
     if (hayDiferencia) avisarPorCorreo(APPS_SCRIPT_URL_VENTAS_FEN, {
@@ -2753,7 +2760,7 @@ window.confirmarCierreCiego = async function() {
     await cerrarResumen(cajaDocId, cajaDataFinal);
   } catch(e) {
     alert('Error al cerrar caja: ' + e.message);
-    btn.disabled = false; btn.textContent = '🔒 Confirmar cierre';
+    btn.disabled = false; btn.textContent = 'Confirmar cierre';
   }
 };
 
@@ -2831,75 +2838,9 @@ async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
     const areaRes = a => { const c = normalizarArea(a); return c === SIN_AREA ? 'Otros' : c; };
     prods.forEach(p => { const f = (function () { const t = String(p.tipo || '').trim(), r = String(p.idRecetaFen || '').trim(), rv = t === 'reventa' || (!t && /^REV\d+$/i.test(r)); return { catalogoId: String(p.catalogoId || ''), tipo: t, recetaId: rv || t === 'cargo' ? '' : r, reventaId: rv ? String(p.reventaId || r) : '', unidadesPorVenta: Number(p.unidadesPorVenta) > 0 ? Number(p.unidadesPorVenta) : null }; })();
       infoProd[p.id] = { area: areaRes(p.area), idRecetaFen: p.idRecetaFen || '', ...f }; });
-    const neto = b => Math.round((parseInt(b) || 0) / 1.19);
-    const r = {
-      cajaId: cajaDocId,
-      sucursal: cajaData.sucursal || '',
-      fecha: normalizarFechaCaja(cajaData.fecha) || cajaData.fecha || '',
-      nVentas: 0, nAnuladas: 0, totalBruto: 0, totalNeto: 0,
-      porMedio: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 },
-      porArea: {}, porProducto: {},
-      porLeche: {}, // v2.7.0: unidades por tipo de leche (también en cada producto)
-      version: 1, actualizado: Timestamp.now()
-    };
-    r.versionCaja = '2.3.0'; // v2.3.0 (porProducto con catalogoId, tipo, recetaId, reventaId) · v2.2.0 (porTarjeta, agotadoHoy)
-    const tarj = {}, agot = {}, reagot = {}; // v2.2.0
-    r.mes = (r.fecha || '').slice(0, 7);
-    ventasDocs.forEach(d => {
-      const v = d.data();
-      if (v.anulada === true) { r.nAnuladas++; return; }
-      r.nVentas++;
-      const total = parseInt(v.total) || 0;
-      r.totalBruto += total;
-      if (Array.isArray(v.pagos) && v.pagos.length) {
-        v.pagos.forEach(p => { if (p && p.medio) r.porMedio[p.medio] = (r.porMedio[p.medio] || 0) + (parseInt(p.monto) || 0); });
-      } else if (v.medioPago) {
-        r.porMedio[v.medioPago] = (r.porMedio[v.medioPago] || 0) + total;
-      }
-      (v.lineas || []).forEach(l => {
-        const key = l.id || ('sin-id:' + (l.nombre || ''));
-        const info0 = infoProd[l.id] || { area: 'Otros', idRecetaFen: '', catalogoId: '', tipo: '', recetaId: '', reventaId: '' };
-        // v2.3.0: la foto de la línea (al vender) manda; si no la tiene (venta anterior), el producto de hoy
-        const info = l.catalogoId || l.tipo ? { ...info0, area: l.area ? areaRes(l.area) : info0.area, catalogoId: l.catalogoId || '', tipo: l.tipo || '', recetaId: l.recetaId || '', reventaId: l.reventaId || '', unidadesPorVenta: Number(l.unidadesPorVenta) > 0 ? Number(l.unidadesPorVenta) : info0.unidadesPorVenta } : info0;
-        const bruto = parseInt(l.total) || 0, cant = parseFloat(l.cantidad) || 0;
-        const pp = r.porProducto[key] || (r.porProducto[key] = { nombre: l.nombre || '', area: info.area, idRecetaFen: info.idRecetaFen, catalogoId: info.catalogoId || '', tipo: info.tipo || '', recetaId: info.recetaId || '', reventaId: info.reventaId || '', ...(info.unidadesPorVenta > 0 ? { unidadesPorVenta: info.unidadesPorVenta } : {}), cantidad: 0, bruto: 0, neto: 0 });
-        pp.cantidad += cant; pp.bruto += bruto; pp.neto += neto(bruto);
-        const pa = r.porArea[info.area] || (r.porArea[info.area] = { cantidad: 0, bruto: 0, neto: 0 });
-        pa.cantidad += cant; pa.bruto += bruto; pa.neto += neto(bruto);
-        // v2.7.0: por tipo de leche (la nota del café)
-        const leche = String(l.tipoLeche || '').trim();
-        if (leche) {
-          r.porLeche[leche] = (r.porLeche[leche] || 0) + cant;
-          const pl = pp.porLeche || (pp.porLeche = {});
-          pl[leche] = (pl[leche] || 0) + cant;
-        }
-        // v2.2.0: por tarjeta y hora en que se agotó el lote de hoy
-        if (l.tarjeta) {
-          const t = (tarj[key] = tarj[key] || {});
-          const tt = t[l.tarjeta] || (t[l.tarjeta] = { cant: 0, monto: 0 });
-          tt.cant += cant; tt.monto += bruto;
-        }
-        if (l.agotado && (!agot[key] || l.agotado < agot[key])) agot[key] = l.agotado;
-        if (l.reagotado && (!reagot[key] || l.reagotado > reagot[key])) reagot[key] = l.reagotado;
-      });
-    });
-    r.totalNeto = neto(r.totalBruto);
-    // v2.2.0: porTarjeta suma lo mismo que cantidad y bruto; lo vendido sin tarjeta anotada va a "sinDato"
-    Object.keys(tarj).forEach(k => {
-      const pp = r.porProducto[k]; if (!pp) return;
-      let sc = 0, sm = 0;
-      Object.values(tarj[k]).forEach(x => { sc += x.cant; sm += x.monto; });
-      const fc = Math.round((pp.cantidad - sc) * 1000) / 1000, fm = pp.bruto - sm;
-      if (fc || fm) tarj[k].sinDato = { cant: fc, monto: fm };
-      pp.porTarjeta = tarj[k];
-    });
-    Object.keys(agot).forEach(k => { if (r.porProducto[k]) r.porProducto[k].agotadoHoy = agot[k]; });
-    Object.keys(reagot).forEach(k => { if (r.porProducto[k]) r.porProducto[k].reagotadoHoy = reagot[k]; });
-    // Las claves de mapas en Firestore no admiten algunos caracteres: el ID de producto ya es seguro;
-    // los nombres sin ID se codifican.
-    const porProducto = {};
-    Object.keys(r.porProducto).forEach(k => { porProducto[k.startsWith('sin-id:') ? 'sin-id-' + encodeURIComponent(k.slice(7)).replace(/[.%]/g, '_') : k] = r.porProducto[k]; });
-    r.porProducto = porProducto;
+    // v2.9.0: el resumen lo arma resumen-caja.js (el mismo de Sistema Fën)
+    const r = armarResumen({ cajaId: cajaDocId, cajaData, ventas: ventasDocs.map(d => d.data()), infoProd, areaRes,
+      fecha: normalizarFechaCaja(cajaData.fecha) || cajaData.fecha || '', ahora: Timestamp.now() });
     await setDoc(doc(db, 'resumenes_caja', cajaDocId), r);
     return true;
   } catch (e) {
@@ -2973,7 +2914,7 @@ async function programarRespaldoMedianoche() {
       }
       await reintentarResumenesPendientes(); // v2.3.0
     } catch (err) {
-      console.error('❌ Error en respaldo automático de medianoche:', err);
+      console.error('Error en respaldo automático de medianoche:', err);
     }
 
     // Re-programar para la siguiente medianoche
@@ -2992,7 +2933,7 @@ programarRespaldoMedianoche();
 window.migrarStockFormato = async function() {
   if (!confirm('¿Migrar todos los datos de stock al nuevo formato?\n\nEsto convierte el stock existente (Hoy/Ayer/Antesayer/Cuarto día/Merma) al nuevo sistema basado en fechas.\n\nSolo es necesario hacerlo una vez.')) return;
   const btn = document.getElementById('btnMigrarStock');
-  btn.disabled = true; btn.textContent = '⏳ Migrando...';
+  btn.disabled = true; btn.textContent = 'Migrando...';
   try {
     const snap = await getDocs(collection(db, 'stock'));
     let migrados = 0, omitidos = 0;
@@ -3041,13 +2982,13 @@ window.migrarStockFormato = async function() {
     }
 
     await cargarStockPorCategoria();
-    showToast(`✅ Migración completa: ${migrados} documentos migrados, ${omitidos} ya estaban actualizados`);
+    showToast(`Migración completa: ${migrados} documentos migrados, ${omitidos} ya estaban actualizados`);
     console.log(`Migración: ${migrados} migrados, ${omitidos} omitidos`);
   } catch(e) {
     alert('Error en migración: ' + e.message);
     console.error(e);
   }
-  btn.disabled = false; btn.textContent = '⚡ Migrar datos stock';
+  btn.disabled = false; btn.textContent = 'Migrar datos stock';
 };
 
 let _stockListaArea = ''; // filtro de área compartido para las 3 categorías
@@ -3077,7 +3018,7 @@ async function cargarStockPorCategoria() {
         hoy: null, ayer: null, antesayer: null, cuartoDia: null, merma: null,
       });
       necesitaRecarga = true;
-      console.log('✅ Auto-migrado:', stockDoc.id);
+      console.log('Auto-migrado:', stockDoc.id);
     } catch(e) { console.error('Error migrando:', stockDoc.id, e); }
   }
 
@@ -3144,7 +3085,7 @@ async function cargarStockPorCategoria() {
         ? `<div style="font-size:11px;color:#888;margin-top:2px;line-height:1.5">
             ${entradas.map(e => {
               const hora = (i.entradasLog || []).find(l => l.fechaKey === e.key)?.hora || '';
-              return `<div>📦 Ingreso ${keyToFechaCL(e.key)}${hora ? ` ${hora}` : ''} → lleg. Últ.of. ${fechaLlegadaUltimaOferta(e.key)} · <b>${e.qty} ud.</b></div>`;
+              return `<div>Ingreso ${keyToFechaCL(e.key)}${hora ? ` ${hora}` : ''} → lleg. Últ.of. ${fechaLlegadaUltimaOferta(e.key)} · <b>${e.qty} ud.</b></div>`;
             }).join('')}
           </div>`
         : `<div class="stock-prod-meta">${fechaRef}${logStr ? `&nbsp;&nbsp;${logStr}` : ''}</div>`;
@@ -3411,7 +3352,7 @@ window.abrirModalMoverMerma = function(productoId, nombre, categoria) {
 
   document.getElementById('moverMermaProdId').value = productoId;
   document.getElementById('moverMermaNombre').value = nombre;
-  document.getElementById('moverMermaTitulo').textContent = `🗑️ Enviar "${nombre}" a Merma`;
+  document.getElementById('moverMermaTitulo').textContent = `Enviar "${nombre}" a Merma`;
 
   const sel = document.getElementById('moverMermaFecha');
   sel.innerHTML = entradas.map(e =>
@@ -3472,7 +3413,7 @@ window.confirmarMoverMerma = async function() {
     });
 
     await cargarStockPorCategoria();
-    showToast(`🗑 ${cantidad} ud. de "${nombre}" movidas a Merma`);
+    showToast(`${cantidad} ud. de "${nombre}" movidas a Merma`);
   } catch(e) { alert('Error: ' + e.message); }
 };
 
@@ -3527,7 +3468,7 @@ window.confirmarRescatar = async function(catDestino) {
     }
     if (Object.keys(updates).length) await updateDoc(stockRef, updates);
     await cargarStockPorCategoria();
-    showToast(`✅ Producto rescatado a "${catDestino}"`);
+    showToast(`Producto rescatado a "${catDestino}"`);
   } catch(e) { alert('Error: ' + e.message); }
 };
 function determinarCatPorFecha(fechaISO) {
@@ -3622,7 +3563,7 @@ window.ingresarStock = async function() {
     inicializarFechaStock();
     limpiarStockProd();
     await cargarStockPorCategoria();
-    showToast('✅ Stock ingresado correctamente');
+    showToast('Stock ingresado correctamente');
   } catch(e) {
     alert('Error al ingresar stock: ' + e.message);
   }
@@ -3661,7 +3602,7 @@ async function rotarStock() {
       hoy:       null
     });
   }
-  console.log('🔄 Rotación de stock completada (5 categorías)');
+  console.log('Rotación de stock completada (5 categorías)');
 }
 
 /**
@@ -3691,7 +3632,7 @@ async function verificarYRotarStock() {
       const diasReal = await calcularDiasSinRotar();
       if (diasReal === 0) return; // todo en orden, nada que hacer
       // Hay stock viejo → el flag estaba mal, forzamos la rotación
-      console.log(`⚠️ meta_rotacion decía verificado pero hay ${diasReal} día(s) de stock sin rotar`);
+      console.log(`meta_rotacion decía verificado pero hay ${diasReal} día(s) de stock sin rotar`);
       const vueltas = Math.min(diasReal, 3);
       for (let i = 0; i < vueltas; i++) await rotarStock();
       await setDoc(metaRef, { fecha: hoyStr, verificado: true });
@@ -3710,13 +3651,13 @@ async function verificarYRotarStock() {
 
     if (diffDias > 0) {
       const vueltas = Math.min(diffDias, 3);
-      console.log(`🔄 Catch-up: ${diffDias} día(s) sin rotar → ejecutando ${vueltas} rotación(es)`);
+      console.log(`Catch-up: ${diffDias} día(s) sin rotar → ejecutando ${vueltas} rotación(es)`);
       for (let i = 0; i < vueltas; i++) await rotarStock();
     }
 
     await setDoc(metaRef, { fecha: hoyStr, verificado: true });
   } catch (e) {
-    console.error('❌ Error en catch-up de rotación de stock:', e);
+    console.error('Error en catch-up de rotación de stock:', e);
   }
 }
 
@@ -3771,11 +3712,11 @@ window.forzarRotacionManual = async function() {
     const hoyStr = fechaLocalHoy();
     await setDoc(doc(db, 'meta_rotacion', sucursal), { fecha: hoyStr, verificado: true });
     await cargarStockPorCategoria();
-    showToast('✅ Rotación ejecutada correctamente');
+    showToast('Rotación ejecutada correctamente');
   } catch (e) {
     alert('Error al rotar stock: ' + e.message);
   }
-  if (btn) { btn.disabled = false; btn.textContent = '🔄 Forzar rotación'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Forzar rotación'; }
 };
 
 // ─── v2.8.0: la barra lateral se colapsa y se abre; el equipo recuerda cómo la dejó ───

@@ -4,13 +4,13 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>Fën · Ventas</title>
-<link rel="stylesheet" href="caja.css?v=2.8.0">
+<link rel="stylesheet" href="caja.css?v=2.9.0">
 </head>
 <body>
 
 <!-- ═══════════════════════════ LOGIN ═══════════════════════════ -->
 <div class="login-screen" id="loginScreen">
-  <img class="login-logo" src="logo-fen.png?v=2.8.0" alt="Fën"/>
+  <img class="login-logo" src="logo-fen.png?v=2.9.0" alt="Fën"/>
   <div class="login-card">
     <div class="login-title">Iniciar sesión</div>
     <label>Correo electrónico</label>
@@ -20,7 +20,7 @@
     <div class="login-error" id="loginError">Correo o contraseña incorrectos</div>
     <button class="btn-login" id="btnLogin" onclick="login()">Entrar</button>
   </div>
-  <div class="login-version">Caja v2.8.0</div>
+  <div class="login-version">Caja v2.9.0</div>
 </div>
 
 <!-- ═══════════════════════════ SUCURSAL ═══════════════════════════ -->
@@ -41,8 +41,8 @@
   <div class="app-marco" id="appMarco">
   <aside class="lateral" id="lateral" aria-label="Menú de la caja">
     <div class="lat-marca">
-      <img class="header-logo lat-logo" src="logo-fen.png?v=2.8.0" alt="Fën, panadería masa madre"/>
-      <div class="lat-fen" aria-hidden="true"><img src="logo-fen.png?v=2.8.0" alt=""/></div>
+      <img class="header-logo lat-logo" src="logo-fen.png?v=2.9.0" alt="Fën, panadería masa madre"/>
+      <div class="lat-fen" aria-hidden="true"><img src="logo-fen.png?v=2.9.0" alt=""/></div>
       <div class="header-title" id="headerSucursal">Fën</div>
       <div class="lat-tienda-corta" id="headerSucursalCorta" aria-hidden="true"></div>
     </div>
@@ -53,8 +53,8 @@
       <button type="button" class="nav-btn" onclick="showSection('productos', this)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12l-8 8-9-9V3h8zM7.5 7.5h.01"/></svg><span>Productos</span></button>
     </nav>
     <div class="lat-pie">
-      <div class="header-sub"><span id="headerUsuario"></span> <span class="header-version">· v2.8.0</span></div>
-      <div class="lat-version-corta" aria-hidden="true">v2.8.0</div>
+      <div class="header-sub"><span id="headerUsuario"></span> <span class="header-version">· v2.9.0</span></div>
+      <div class="lat-version-corta" aria-hidden="true">v2.9.0</div>
       <div class="lat-botones">
         <button type="button" class="btn-icon" onclick="cerrarSesion()">Salir</button>
         <button type="button" class="lat-colapsar" id="btnLateral" onclick="alternarLateral()" aria-label="Colapsar la barra" aria-expanded="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
@@ -68,15 +68,15 @@
 
     <!-- Tabs: Nueva venta / Mesas -->
     <div class="rep-tabs" id="ventaModoTabs" style="margin-bottom:10px">
-      <button class="rep-tab active" onclick="selModoVenta(this,'directa')">🛒 Nueva venta</button>
-      <button class="rep-tab" onclick="selModoVenta(this,'mesas')">🍽️ Mesas</button>
+      <button class="rep-tab active" onclick="selModoVenta(this,'directa')">Nueva venta</button>
+      <button class="rep-tab" onclick="selModoVenta(this,'mesas')">Mesas</button>
     </div>
 
     <!-- Barra de mesa activa (solo visible dentro de una mesa) -->
     <div id="mesaHeaderBar" style="display:none;align-items:center;justify-content:space-between;background:#eef4fb;border-radius:10px;padding:10px 14px;margin-bottom:10px">
       <button class="btn-sm" onclick="volverAMesas()">← Mesas</button>
       <div id="mesaHeaderNombre" style="font-weight:700;color:#1F3F78"></div>
-      <button class="btn-sm btn-del" onclick="cancelarMesa()">🗑️ Cancelar mesa</button>
+      <button class="btn-sm btn-del" onclick="cancelarMesa()">Cancelar mesa</button>
     </div>
 
     <!-- Listado de mesas abiertas -->
@@ -87,7 +87,7 @@
       <!-- COLUMNA IZQUIERDA: grilla de productos + últimas ventas -->
       <div class="venta-left">
         <div class="card" id="cardNuevaVenta" style="transition:background 0.2s,border-color 0.2s">
-          <div class="card-title" id="ventaCardTitle">🛒 Nueva venta</div>
+          <div class="card-title" id="ventaCardTitle">Nueva venta</div>
 
           <!-- Áreas (nivel 1) -->
           <div class="area-tabs" id="areaTabs"></div>
@@ -106,11 +106,11 @@
             </div>
             <button class="btn-sm" id="btnToggleStock" onclick="toggleMostrarSinStock()"
                     style="white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px">
-              👁 Mostrar todos
+              Mostrar todos
             </button>
             <button class="btn-sm" id="btnVistaGeneral" onclick="toggleVistaGeneral()"
                     style="white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px">
-              📋 Vista general
+              Vista general
             </button>
             <button class="btn-sm" id="btnPedirProducto" onclick="abrirPedirProducto()"
                     style="white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px">
@@ -150,25 +150,25 @@
           <div style="margin-top:14px;">
             <label>Medio de pago <span id="ptInsignia" class="pt-insignia" style="display:none"></span></label>
             <div class="medio-grid">
-              <button class="medio-btn selected" id="mp-efectivo" onclick="selMedio('efectivo')">💵 Efectivo</button>
-              <button class="medio-btn" id="mp-debito" onclick="selMedio('debito')">💳 Débito</button>
-              <button class="medio-btn" id="mp-credito" onclick="selMedio('credito')">💳 Crédito</button>
-              <button class="medio-btn" id="mp-transferencia" onclick="selMedio('transferencia')">📲 Transferencia</button>
+              <button class="medio-btn selected" id="mp-efectivo" onclick="selMedio('efectivo')">Efectivo</button>
+              <button class="medio-btn" id="mp-debito" onclick="selMedio('debito')">Débito</button>
+              <button class="medio-btn" id="mp-credito" onclick="selMedio('credito')">Crédito</button>
+              <button class="medio-btn" id="mp-transferencia" onclick="selMedio('transferencia')">Transferencia</button>
             </div>
             <button class="btn-sm" id="btnTogglePagoDividido" onclick="togglePagoDividido()" style="width:100%;margin-top:8px">+ Dividir pago</button>
             <div id="pagoDivididoWrap" style="display:none;margin-top:10px">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                <div><label style="font-size:11px">💵 Efectivo</label><input type="number" id="divEfectivo" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
-                <div><label style="font-size:11px">💳 Débito</label><input type="number" id="divDebito" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
-                <div><label style="font-size:11px">💳 Crédito</label><input type="number" id="divCredito" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
-                <div><label style="font-size:11px">📲 Transferencia</label><input type="number" id="divTransfer" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
+                <div><label style="font-size:11px">Efectivo</label><input type="number" id="divEfectivo" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
+                <div><label style="font-size:11px">Débito</label><input type="number" id="divDebito" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
+                <div><label style="font-size:11px">Crédito</label><input type="number" id="divCredito" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
+                <div><label style="font-size:11px">Transferencia</label><input type="number" id="divTransfer" placeholder="0" min="0" oninput="actualizarRestanteDividido()"/></div>
               </div>
               <div id="divRestante" style="font-size:11px;margin-top:6px"></div>
             </div>
           </div>
 
           <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-            <button class="btn btn-secondary" style="flex:1" onclick="imprimirComanda()">🖨 Comanda</button>
+            <button class="btn btn-secondary" style="flex:1" onclick="imprimirComanda()">Comanda</button>
             <select id="metodoImpresionSel" onchange="cambiarMetodoImpresion(this.value)" title="Método de impresión" style="font-size:11px;border-radius:8px;border:1px solid #ddd;padding:0 6px">
               <option value="navegador">Navegador / RawBT</option>
               <option value="qz">QZ Tray (PC)</option>
@@ -194,9 +194,9 @@
       <div class="card" style="padding:14px">
         <div style="font-size:12px;color:#888;font-weight:600;margin-bottom:10px">Ver stock de:</div>
         <div class="visor-suc-btns">
-          <button class="visor-suc-btn active" onclick="selVisorSucursal(this,'ainavillo')">🏪 Ainavillo</button>
-          <button class="visor-suc-btn" onclick="selVisorSucursal(this,'barros_arana')">🏪 Barros Arana</button>
-          <button class="visor-suc-btn" onclick="selVisorSucursal(this,'ambas')">📊 Total ambas</button>
+          <button class="visor-suc-btn active" onclick="selVisorSucursal(this,'ainavillo')">Ainavillo</button>
+          <button class="visor-suc-btn" onclick="selVisorSucursal(this,'barros_arana')">Barros Arana</button>
+          <button class="visor-suc-btn" onclick="selVisorSucursal(this,'ambas')">Total ambas</button>
         </div>
       </div>
     </div>
@@ -209,10 +209,10 @@
       <!-- Filtro por área -->
       <div class="stock-area-btns" id="stockAreaBtns">
         <button class="stock-area-btn active" onclick="selStockArea(this,'')">Todos</button>
-        <button class="stock-area-btn" onclick="selStockArea(this,'BOL')">🥐 BOL</button>
-        <button class="stock-area-btn" onclick="selStockArea(this,'PAN')">🥖 PAN</button>
-        <button class="stock-area-btn" onclick="selStockArea(this,'PAS')">🎂 PAS</button>
-        <button class="stock-area-btn" onclick="selStockArea(this,'CAF')">☕ CAF</button>
+        <button class="stock-area-btn" onclick="selStockArea(this,'BOL')">BOL</button>
+        <button class="stock-area-btn" onclick="selStockArea(this,'PAN')">PAN</button>
+        <button class="stock-area-btn" onclick="selStockArea(this,'PAS')">PAS</button>
+        <button class="stock-area-btn" onclick="selStockArea(this,'CAF')">CAF</button>
       </div>
 
       <!-- Grilla de productos -->
@@ -249,8 +249,8 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <div style="font-size:12px;color:#888;font-weight:600">Filtrar listas por área</div>
             <div style="display:flex;gap:6px">
-              <button class="btn-sm btn-edit admin-only" id="btnForzarRotacion" style="display:none" onclick="forzarRotacionManual()">🔄 Forzar rotación</button>
-              <button class="btn-sm admin-only" id="btnMigrarStock" style="display:none;background:#E4EEF8;border:1px solid #1F3F78;color:#1F3F78" onclick="migrarStockFormato()">⚡ Migrar stock</button>
+              <button class="btn-sm btn-edit admin-only" id="btnForzarRotacion" style="display:none" onclick="forzarRotacionManual()">Forzar rotación</button>
+              <button class="btn-sm admin-only" id="btnMigrarStock" style="display:none;background:#E4EEF8;border:1px solid #1F3F78;color:#1F3F78" onclick="migrarStockFormato()">Migrar stock</button>
             </div>
           </div>
           <div class="stock-area-btns" id="stockListaAreaBtns">
@@ -261,7 +261,7 @@
         <!-- Hoy -->
         <div class="card">
           <div class="stock-cat-header">
-            <div class="stock-cat-titulo cat-hoy">📦 Stock del día</div>
+            <div class="stock-cat-titulo cat-hoy">Stock del día</div>
             <span id="totalHoy" style="font-size:11px;color:#888"></span>
           </div>
           <div id="stockListaHoy"><div class="empty">Sin stock ingresado hoy</div></div>
@@ -270,7 +270,7 @@
         <!-- Ayer -->
         <div class="card">
           <div class="stock-cat-header">
-            <div class="stock-cat-titulo cat-ayer">📦 Stock de ayer</div>
+            <div class="stock-cat-titulo cat-ayer">Stock de ayer</div>
             <span id="totalAyer" style="font-size:11px;color:#888"></span>
           </div>
           <div id="stockListaAyer"><div class="empty">Sin stock de ayer</div></div>
@@ -279,7 +279,7 @@
         <!-- Antes de ayer -->
         <div class="card">
           <div class="stock-cat-header">
-            <div class="stock-cat-titulo cat-antesayer">📦 Stock de antes de ayer</div>
+            <div class="stock-cat-titulo cat-antesayer">Stock de antes de ayer</div>
             <span id="totalAntesayer" style="font-size:11px;color:#888"></span>
           </div>
           <div id="stockListaAntesayer"><div class="empty">Sin stock de antes de ayer</div></div>
@@ -288,7 +288,7 @@
         <!-- Cuarto día -->
         <div class="card">
           <div class="stock-cat-header">
-            <div class="stock-cat-titulo cat-cuartodia">📦 Cuarto día</div>
+            <div class="stock-cat-titulo cat-cuartodia">Cuarto día</div>
             <span id="totalCuartoDia" style="font-size:11px;color:#888"></span>
           </div>
           <div id="stockListaCuartoDia"><div class="empty">Sin stock de cuarto día</div></div>
@@ -297,7 +297,7 @@
         <!-- Última oferta -->
         <div class="card">
           <div class="stock-cat-header">
-            <div class="stock-cat-titulo cat-ultimaoferta">🏷️ Última oferta</div>
+            <div class="stock-cat-titulo cat-ultimaoferta">Última oferta</div>
             <span id="totalUltimaOferta" style="font-size:11px;color:#888"></span>
           </div>
           <p style="font-size:11px;color:#888;margin-bottom:8px">Productos listos para oferta final. Cualquiera puede moverlos a Merma; solo el admin puede rescatarlos.</p>
@@ -307,7 +307,7 @@
         <!-- Sin vencimiento -->
         <div class="card">
           <div class="stock-cat-header">
-            <div class="stock-cat-titulo cat-permanente">🔁 Sin vencimiento</div>
+            <div class="stock-cat-titulo cat-permanente">Sin vencimiento</div>
             <span id="totalPermanente" style="font-size:11px;color:#888"></span>
           </div>
           <p style="font-size:11px;color:#888;margin-bottom:8px">Productos que no tienen fecha de vencimiento (no rotan entre categorías).</p>
@@ -317,7 +317,7 @@
         <!-- Merma -->
         <div class="card">
           <div class="stock-cat-header">
-            <div class="stock-cat-titulo cat-merma">🗑️ Merma</div>
+            <div class="stock-cat-titulo cat-merma">Merma</div>
             <span id="totalMerma" style="font-size:11px;color:#888"></span>
           </div>
           <p style="font-size:11px;color:#888;margin-bottom:8px">Productos fuera de venta. Al registrar la merma, se exporta a Sheets y se elimina del stock.</p>
@@ -329,7 +329,7 @@
       <!-- Columna derecha: resumen total por producto (solo visor) -->
       <div id="visorResumenPanel">
         <div class="card" style="position:sticky;top:12px">
-          <div class="card-title" style="margin-bottom:8px">📊 Total por producto</div>
+          <div class="card-title" style="margin-bottom:8px">Total por producto</div>
           <!-- Filtro por área -->
           <div class="area-filter-btns" id="visorResumenAreaBtns" style="margin-bottom:10px">
             <button class="area-filter-btn active" onclick="selVisorResumenArea(this,'')">Todos</button>
@@ -346,17 +346,17 @@
   <div class="section" id="sec-caja">
     <div id="avisoCajaAnterior"></div>
     <div class="card" id="cardAbrirCaja">
-      <div class="card-title">💵 Abrir caja</div>
+      <div class="card-title">Abrir caja</div>
       <label>Monto inicial en efectivo ($)</label>
       <input type="number" id="cajaMontoInicial" placeholder="0" min="0"/>
       <div id="saldoSugeridoHint" style="display:none;font-size:11px;color:#1D7A5F;margin-top:4px;padding:6px 10px;background:#E3F3EC;border-radius:6px"></div>
       <button class="btn btn-primary btn-full" style="margin-top:12px" id="btnAbrirCaja" onclick="abrirCaja()">Abrir caja</button>
     </div>
     <div class="card hidden" id="cardCajaAbierta">
-      <div class="card-title">💵 Arqueo de caja</div>
+      <div class="card-title">Arqueo de caja</div>
       <div id="resumenCaja"></div>
       <button class="btn btn-secondary btn-full" style="margin-top:12px" id="btnActualizarArqueo" onclick="actualizarArqueo()">↻ Actualizar arqueo</button>
-      <button class="btn btn-danger btn-full" style="margin-top:8px" onclick="cerrarCaja()">🔒 Cerrar caja del día</button>
+      <button class="btn btn-danger btn-full" style="margin-top:8px" onclick="cerrarCaja()">Cerrar caja del día</button>
     </div>
   </div>
 
@@ -369,7 +369,7 @@
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="abrirPedirProducto()">Pedir producto</button>
       <div class="pp-sub">Tus pedidos</div>
       <div id="misPedidosProd"><div class="empty">Cargando…</div></div>
-      <div class="pp-version">Caja v2.8.0</div>
+      <div class="pp-version">Caja v2.9.0</div>
     </div>
 
   </div>
@@ -381,7 +381,7 @@
 <!-- MODAL CIERRE CIEGO -->
 <div class="modal-overlay" id="modalNotaDescuadre">
   <div class="modal">
-    <div class="modal-title">📝 Diferencia detectada en caja</div>
+    <div class="modal-title">Diferencia detectada en caja</div>
     <p id="notaDescuadreResumen" style="font-size:13px;color:#555;margin-bottom:10px"></p>
     <textarea id="notaDescuadreTexto" rows="3" placeholder="Ej: faltó cambio para un cliente, se traspasó dinero a otra caja, un cliente no se llevó su vuelto, etc." style="width:100%;box-sizing:border-box"></textarea>
     <div class="modal-btns" style="margin-top:14px">
@@ -397,20 +397,20 @@
 
 <div class="modal-overlay" id="modalCierreCiego">
   <div class="modal">
-    <div class="modal-title">🔒 Arqueo manual de caja</div>
+    <div class="modal-title">Arqueo manual de caja</div>
     <p style="font-size:12px;color:#888;margin-bottom:14px">Ingresa los montos que contaste físicamente, sin ver el sistema.</p>
-    <label>💵 Efectivo en caja ($)</label>
+    <label>Efectivo en caja ($)</label>
     <input type="number" id="cierrEfectivo" placeholder="0" min="0"/>
     <div id="cierrePointInfo"></div>
-    <label id="cierrDebitoLbl">💳 Débito ($)</label>
+    <label id="cierrDebitoLbl">Débito ($)</label>
     <input type="number" id="cierrDebito" placeholder="0" min="0"/>
-    <label id="cierrCreditoLbl">💳 Crédito ($)</label>
+    <label id="cierrCreditoLbl">Crédito ($)</label>
     <input type="number" id="cierrCredito" placeholder="0" min="0"/>
-    <label>📲 Transferencia ($)</label>
+    <label>Transferencia ($)</label>
     <input type="number" id="cierrTransfer" placeholder="0" min="0"/>
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f0f0f0">
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#555;margin-bottom:6px">
-        💰 Monto retirado de caja ($)
+        Monto retirado de caja ($)
         <span style="font-size:10px;font-weight:400;color:#aaa">(opcional)</span>
       </label>
       <input type="number" id="cierrRetirado" placeholder="0" min="0"/>
@@ -419,7 +419,7 @@
     <input type="hidden" id="cierreTargetCajaId"/>
     <div class="modal-btns">
       <button class="btn btn-secondary" style="flex:1" onclick="cerrarModalCierre()">Cancelar</button>
-      <button class="btn btn-danger" style="flex:2" id="btnConfirmarCierre" onclick="confirmarCierreCiego()">🔒 Confirmar cierre</button>
+      <button class="btn btn-danger" style="flex:2" id="btnConfirmarCierre" onclick="confirmarCierreCiego()">Confirmar cierre</button>
     </div>
   </div>
 </div>
@@ -427,14 +427,14 @@
 <!-- EDITAR MEDIO DE PAGO -->
 <div class="modal-overlay" id="modalEditarMedio">
   <div class="modal">
-    <div class="modal-title">✏️ Cambiar medio de pago</div>
+    <div class="modal-title">Cambiar medio de pago</div>
     <p style="font-size:12px;color:#888;margin-bottom:14px">Solo se actualiza el medio de pago, el monto de la venta no cambia.</p>
     <input type="hidden" id="editVentaId"/>
     <div class="medio-grid">
-      <button class="medio-btn" id="em-efectivo" onclick="selMedioEdit('efectivo')">💵 Efectivo</button>
-      <button class="medio-btn" id="em-debito" onclick="selMedioEdit('debito')">💳 Débito</button>
-      <button class="medio-btn" id="em-credito" onclick="selMedioEdit('credito')">💳 Crédito</button>
-      <button class="medio-btn" id="em-transferencia" onclick="selMedioEdit('transferencia')">📲 Transferencia</button>
+      <button class="medio-btn" id="em-efectivo" onclick="selMedioEdit('efectivo')">Efectivo</button>
+      <button class="medio-btn" id="em-debito" onclick="selMedioEdit('debito')">Débito</button>
+      <button class="medio-btn" id="em-credito" onclick="selMedioEdit('credito')">Crédito</button>
+      <button class="medio-btn" id="em-transferencia" onclick="selMedioEdit('transferencia')">Transferencia</button>
     </div>
     <div class="modal-btns">
       <button class="btn btn-secondary" style="flex:1" onclick="cerrarModalEditarMedio()">Cancelar</button>
@@ -446,14 +446,14 @@
 <!-- SOLICITAR ANULACIÓN -->
 <div class="modal-overlay" id="modalSolicitarAnulacion">
   <div class="modal">
-    <div class="modal-title">⚠️ Solicitar anulación de venta</div>
+    <div class="modal-title">Solicitar anulación de venta</div>
     <p style="font-size:12px;color:#888;margin-bottom:14px">Se enviará una notificación al administrador. La venta no se elimina hasta que sea aprobada.</p>
     <input type="hidden" id="anulVentaId"/>
     <label>Motivo de la anulación</label>
     <textarea id="anulMotivo" rows="3" placeholder="Ej: Producto equivocado, cliente se arrepintió, error de ingreso..." style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
     <div class="modal-btns">
       <button class="btn btn-secondary" style="flex:1" onclick="cerrarModalAnulacion()">Cancelar</button>
-      <button class="btn btn-danger" style="flex:2" id="btnConfirmarAnulacion" onclick="confirmarSolicitudAnulacion()">📩 Enviar solicitud</button>
+      <button class="btn btn-danger" style="flex:2" id="btnConfirmarAnulacion" onclick="confirmarSolicitudAnulacion()">Enviar solicitud</button>
     </div>
   </div>
 </div>
@@ -461,7 +461,7 @@
 <!-- MODAL RESCATAR DE MERMA -->
 <div class="modal-overlay" id="modalElegirLote">
   <div class="modal">
-    <div class="modal-title" id="elegirLoteTitulo">📦 Elegir lote</div>
+    <div class="modal-title" id="elegirLoteTitulo">Elegir lote</div>
     <p style="font-size:12px;color:#888;margin-bottom:14px">Este producto tiene más de un lote en Última oferta. Elige de cuál estás vendiendo.</p>
     <div id="elegirLoteOpciones" style="display:flex;flex-direction:column;gap:8px"></div>
     <div class="modal-btns" style="margin-top:14px">
@@ -494,7 +494,7 @@
 
 <div class="modal-overlay" id="modalMoverMerma">
   <div class="modal">
-    <div class="modal-title" id="moverMermaTitulo">🗑️ Enviar a Merma</div>
+    <div class="modal-title" id="moverMermaTitulo">Enviar a Merma</div>
     <p style="font-size:12px;color:#888;margin-bottom:14px">Elige de qué fecha es el lote y cuánta cantidad enviar — el resto queda disponible.</p>
     <input type="hidden" id="moverMermaProdId"/>
     <input type="hidden" id="moverMermaNombre"/>
@@ -506,7 +506,7 @@
     <select id="moverMermaMotivo"></select>
     <div class="modal-btns" style="margin-top:14px">
       <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalMoverMerma').classList.remove('open')">Cancelar</button>
-      <button class="btn btn-danger" style="flex:2" onclick="confirmarMoverMerma()">🗑️ Enviar a Merma</button>
+      <button class="btn btn-danger" style="flex:2" onclick="confirmarMoverMerma()">Enviar a Merma</button>
     </div>
   </div>
 </div>
@@ -518,11 +518,11 @@
     <input type="hidden" id="rescatarProdId"/>
     <input type="hidden" id="rescatarQty"/>
     <div style="display:flex;flex-direction:column;gap:8px" id="rescatarOpciones">
-      <button class="btn btn-secondary" onclick="confirmarRescatar('hoy')">📦 Stock del día (Hoy)</button>
-      <button class="btn btn-secondary" onclick="confirmarRescatar('ayer')">📦 Stock de ayer</button>
-      <button class="btn btn-secondary" onclick="confirmarRescatar('antesayer')">📦 Antes de ayer</button>
-      <button class="btn btn-secondary" onclick="confirmarRescatar('cuartoDia')">📦 Cuarto día</button>
-      <button class="btn btn-secondary" onclick="confirmarRescatar('ultimaOferta')" style="color:#C05621;border-color:#C05621">🏷️ Última oferta</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('hoy')">Stock del día (Hoy)</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('ayer')">Stock de ayer</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('antesayer')">Antes de ayer</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('cuartoDia')">Cuarto día</button>
+      <button class="btn btn-secondary" onclick="confirmarRescatar('ultimaOferta')" style="color:#C05621;border-color:#C05621">Última oferta</button>
     </div>
     <div class="modal-btns" style="margin-top:14px">
       <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('modalRescatar').classList.remove('open')">Cancelar</button>
@@ -546,6 +546,6 @@
 <div id="toastMsg"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.6/qz-tray.js"></script>
-<script type="module" src="caja.js?v=2.8.0"></script>
+<script type="module" src="caja.js?v=2.9.0"></script>
 </body>
 </html>
