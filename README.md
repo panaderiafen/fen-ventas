@@ -1,3 +1,17 @@
+# fën caja · v2.6.1
+
+**Dos arreglos pedidos por Emmanuel el 29 oct, sobre la v2.6.0.** · 29 de octubre de 2026
+
+1. **El stock en pantalla baja al instante después de vender.** Antes seguía mostrando lo que había al abrir la pestaña, y en la misma pantalla se podía volver a vender lo que ya no estaba (por ejemplo, las mismas 3 ciabattas). Ahora, al registrar la venta, la caja descuenta en pantalla lo vendido (con lo que leyó justo antes de guardar: sin lecturas extra).
+   - **Si otra caja vendió mientras tanto:** al cobrar, la caja lee el stock real; si no alcanza, avisa "No alcanza el stock: Ciabatta: pidió 3, quedan 1", **no registra**, deja el pedido para ajustarlo y actualiza la pantalla. Con el Point integrado, lo revisa **antes** de mandar el cobro al Point.
+2. **El día bajo cada tarjeta de frescura:** Hoy (jue 29), Ayer (mié 28), Ant. (mar 27), 4to (lun 26), Últ. (≤ dom 25: lo de ese día o antes, y lo pasado a mano a última oferta). Se calcula solo con la fecha de hoy; sirve igual en Mesas.
+
+Dónde va: igual que la v2.6.0 (los cuatro archivos juntos a la raíz de fen-ventas; este README a `respaldos/caja-v2.6.1/`).
+
+Pruebas: `pruebas/caja261/caja-v261.test.js` (las de la v2.6.0 contra la v2.6.1 y 4 nuevas) y `caja-v261-azar.test.js` (150 ventas al azar con stock de sobra: los mismos datos que la v2.6.0; con poco stock la v2.6.0 dejaba vender lo que ya no había, que es lo que se corrige).
+
+---
+
 # fën caja · v2.6.0
 
 **Etapa 2 de la revisión de la caja B2C: cada venta se guarda de una sola vez.** La venta, la marca de los productos vendidos, los totales de la caja, el descuento de stock y su movimiento van juntos en un lote de escrituras: o queda todo o no queda nada. Igual al cobrar una mesa (venta, totales y cierre de la mesa). Además, **la versión se ve** en la pantalla de ingreso y en el encabezado, al lado del correo. · 29 de octubre de 2026

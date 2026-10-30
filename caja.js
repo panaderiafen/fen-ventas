@@ -1,4 +1,4 @@
-// fën caja v2.6.0 · código
+// fën caja v2.6.1 · código
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -768,6 +768,18 @@ function getPrecioProducto(prod, cat) {
   return prod.precio || 0;
 }
 
+// v2.6.1: bajo cada tarjeta, el día que le corresponde (Hoy jue 29, Ayer mié 28, …, Últ. ≤ dom 25)
+function pintarFechasTarjetas() {
+  const hoy = new Date(fechaLocalHoy() + 'T12:00:00');
+  const dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  const dia = n => { const d = new Date(hoy); d.setDate(d.getDate() - n); return dias[d.getDay()] + ' ' + d.getDate(); };
+  const filas = [['hoy', 'Hoy', dia(0)], ['ayer', 'Ayer', dia(1)], ['antesayer', 'Ant.', dia(2)], ['cuartodia', '4to', dia(3)], ['ultimaoferta', 'Últ.', '≤ ' + dia(4)]];
+  for (const [id, nombre, fecha] of filas) {
+    const b = document.getElementById('scat-' + id);
+    if (b && b.dataset.fecha !== fecha) { b.dataset.fecha = fecha; b.innerHTML = nombre + '<span class="cat-fecha">' + fecha + '</span>'; }
+  }
+}
+
 // Cambia la categoría de stock activa en ventas
 window.selCatStock = function(cat) {
   categoriaStockActiva = cat;
@@ -852,6 +864,7 @@ window.filtrarCat = function(cat) {
 let vistaGeneralActiva = false;
 
 function renderProductos() {
+  pintarFechasTarjetas(); // v2.6.1
   if (vistaGeneralActiva) { renderVistaGeneral(); return; }
   const prodArea = areaActiva ? productos.filter(p => normalizarArea(p.area) === areaActiva) : productos;
   const lista = (catActiva === 'TODOS' ? prodArea : prodArea.filter(p => p.categoria === catActiva))
@@ -1762,6 +1775,18 @@ function totalesCajaEnLote(lote, pagoData, total) {
   lote.update(doc(db, 'cajas', cajaId), cambios);
 }
 
+// v2.6.1: la pantalla toma el stock que se acaba de leer (y, si la venta se registró, lo que quedó)
+function stockPantallaDesdePlan(plan, vendido) {
+  if (!plan || !plan.docs) return;
+  window._stockMap = window._stockMap || {};
+  for (const [k, d] of Object.entries(plan.docs)) {
+    if (!d.existe) continue;
+    const item = window._stockMap[k] || (window._stockMap[k] = {});
+    item.entradas = Object.assign({}, vendido ? d.entradas : d.leido);
+  }
+  renderProductos();
+}
+
 // Enruta el botón "Registrar pago / Cobrar" según el modo activo
 window.confirmarPagoBoton = function() {
   // v2.4.0: con el Point integrado, la parte con tarjeta se cobra primero en el Point
@@ -1884,6 +1909,15 @@ async function cobrarConPoint(monto) {
     const pagos = obtenerDatosPagoBase().pagos || [];
     const suma = pagos.reduce((a, p) => a + p.monto, 0);
     if (suma !== total) { alert(`La suma de los medios de pago ($${suma.toLocaleString('es-CL')}) no coincide con el total ($${total.toLocaleString('es-CL')})`); return; }
+  }
+  // v2.6.1: antes de cobrar en el Point, se revisa que el stock alcance (venta directa; la mesa ya lo descontó)
+  if (modoVenta !== 'mesa-detail' && !pagoPointPendiente) {
+    const prev = await planearStockVenta(pedidoLineas, Timestamp.now());
+    if (prev && prev.faltantes.length) {
+      stockPantallaDesdePlan(prev, false);
+      alert('No alcanza el stock (otra caja vendió mientras tanto):\n' + prev.faltantes.map(f => `· ${f.nombre}: pidió ${f.pedido}, quedan ${f.hay}`).join('\n') + '\n\nAjuste el pedido antes de cobrar.');
+      return;
+    }
   }
   // Un pago ya confirmado cuya venta no alcanzó a registrarse: se registra sin volver a cobrar
   if (pagoPointPendiente && pagoPointPendiente.monto === monto && pagoPointPendiente.total === total) { return registrarPagado(pagoPointPendiente); }
@@ -2066,7 +2100,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.6.0';
+const CAJA_VERSION = '2.6.1';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2077,6 +2111,8 @@ async function planearStockVenta(lineas, fechaVenta) {
     const hora = horaAgotadoCaja(fechaVenta);
     const docs = {};
     const plan = [];
+    const faltantes = [];
+    plan.faltantes = faltantes; plan.docs = docs; // v2.6.1
     for (const l of lineas) {
       const prod = productos.find(p => p.id === l.id);
       if (prod && prod.controlStock === false) { plan.push(null); continue; }
@@ -2088,10 +2124,11 @@ async function planearStockVenta(lineas, fechaVenta) {
         const sn = await getDoc(ref);
         const data = sn.exists() ? (sn.data() || {}) : null;
         d = docs[stockKey] = { ref, existe: !!data, entradas: Object.assign({}, data && data.entradas), agotado: Object.assign({}, data && data.agotado) };
+        d.leido = Object.assign({}, d.entradas); // v2.6.1: lo que había al leer, para la pantalla si falta
       }
       const p = { productoId: l.id, stockRef: d.ref, escrituras: [], campos: esPerm ? {} : { tarjeta: l.categoriaStock || 'hoy' } };
       plan.push(p);
-      if (!d.existe) continue;
+      if (!d.existe) { faltantes.push({ nombre: (prod && prod.nombre) || l.nombre || l.id, pedido: l.cantidad, hay: 0 }); continue; }
       const entradas = d.entradas;
       if (esPerm) {
         const qtyActual = entradas['permanente'] || 0;
@@ -2112,6 +2149,9 @@ async function planearStockVenta(lineas, fechaVenta) {
           toDeduct -= deducir;
         }
       }
+      // v2.6.1: ¿alcanzó? (otra caja pudo vender ese stock después de que se cargó la pantalla)
+      const salio = p.escrituras.reduce((a, e) => a + e.cantidad, 0);
+      if (salio < l.cantidad) faltantes.push({ nombre: (prod && prod.nombre) || l.nombre || l.id, pedido: l.cantidad, hay: salio });
       for (const e of p.escrituras) {
         const antes = entradas[e.key] || 0;
         entradas[e.key] = e.nuevo;
@@ -2193,6 +2233,13 @@ window.registrarVenta = async function() {
   };
   // v2.2.0: tarjeta y lotes de cada línea (mismas lecturas de stock, antes de guardar)
   const planStock = await planearStockVenta(pedidoLineas, venta.fecha);
+  // v2.6.1: si otra caja ya vendió ese stock, se avisa y no se registra
+  if (planStock && planStock.faltantes.length) {
+    stockPantallaDesdePlan(planStock, false);
+    btn.disabled = false; btn.textContent = '✓ Registrar pago';
+    alert('No alcanza el stock (otra caja vendió mientras tanto):\n' + planStock.faltantes.map(f => `· ${f.nombre}: pidió ${f.pedido}, quedan ${f.hay}`).join('\n') + '\n\nAjuste el pedido y vuelva a cobrar.');
+    return;
+  }
   agregarTarjetaYLotes(venta.lineas, pedidoLineas, planStock);
   try {
     if (planStock) {
@@ -2215,6 +2262,7 @@ window.registrarVenta = async function() {
       if (mov.length) lote.set(doc(db, 'stockMovimientos', idNuevo()), { tipo: 'venta', ventaId: ventaRef.id, sucursal, descontados: mov, usuario: usuario.email, fecha: Timestamp.now() });
       await lote.commit();
       marcados.forEach(p => { p.tuvoVentas = true; });
+      stockPantallaDesdePlan(planStock, true); // v2.6.1: lo vendido se descuenta en pantalla al instante
     } else {
     const ventaRef = await addDoc(collection(db, 'ventas'), venta);
     await marcarProductosConVenta(venta.lineas);
