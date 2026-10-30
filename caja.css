@@ -1,57 +1,44 @@
-/* fën caja v2.7.0 · estilos */
+/* fën caja v2.8.0 · estilos */
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0f0; min-height: 100vh; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #F4F8FC; color: #1C2B3A; min-height: 100vh; }
 
 /* LOGIN */
-.login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; background: #003a79; }
+.login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; background: #1F3F78; }
 .login-logo { width: 120px; height: 120px; margin-bottom: 32px; }
 .login-card { background: white; border-radius: 16px; padding: 32px 28px; width: 100%; max-width: 380px; }
-.login-title { font-size: 20px; font-weight: 700; color: #003a79; margin-bottom: 24px; text-align: center; }
+.login-title { font-size: 20px; font-weight: 700; color: #1F3F78; margin-bottom: 24px; text-align: center; }
 .login-card label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; margin-top: 14px; }
 .login-card label:first-of-type { margin-top: 0; }
 .login-card input { width: 100%; padding: 12px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; outline: none; }
-.login-card input:focus { border-color: #003a79; }
+.login-card input:focus { border-color: #1F3F78; }
 .login-error { color: #e74c3c; font-size: 13px; margin-top: 10px; text-align: center; display: none; }
-.btn-login { width: 100%; padding: 14px; background: #003a79; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 20px; }
+.btn-login { width: 100%; padding: 14px; background: #1F3F78; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 20px; }
 .btn-login:disabled { background: #aaa; }
 
 /* SUCURSAL */
-.sucursal-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; background: #003a79; }
+.sucursal-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; background: #1F3F78; }
 .sucursal-title { font-size: 22px; font-weight: 700; color: white; margin-bottom: 8px; }
 .sucursal-sub { font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 32px; }
-.sucursal-btn { width: 100%; max-width: 340px; padding: 20px; background: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 700; color: #003a79; cursor: pointer; margin-bottom: 12px; display: flex; align-items: center; gap: 14px; }
+.sucursal-btn { width: 100%; max-width: 340px; padding: 20px; background: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 700; color: #1F3F78; cursor: pointer; margin-bottom: 12px; display: flex; align-items: center; gap: 14px; }
 .sucursal-btn span { font-size: 28px; }
 
 /* APP */
 .app-screen { display: none; }
 
-/* HEADER */
-.header { background: #003a79; color: white; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-.header-left { display: flex; align-items: center; gap: 10px; }
-.header-logo { height: 32px; }
-.header-info { }
-.header-title { font-size: 14px; font-weight: 700; }
-.header-sub { font-size: 11px; opacity: 0.7; }
-.header-right { display: flex; align-items: center; gap: 8px; }
-.btn-icon { background: rgba(255,255,255,0.15); border: none; color: white; border-radius: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
-
-/* NAV */
-.nav { background: white; border-bottom: 1px solid #e0e0e0; display: flex; overflow-x: auto; position: sticky; top: 56px; z-index: 99; }
-.nav-btn { padding: 12px 16px; font-size: 13px; font-weight: 600; color: #666; white-space: nowrap; cursor: pointer; border-bottom: 2px solid transparent; }
-.nav-btn.active { color: #003a79; border-bottom-color: #003a79; }
+/* HEADER y NAV: v2.8.0, ver "BARRA LATERAL" al final */
 
 /* SECCIONES */
 .section { display: none; max-width: 700px; margin: 0 auto; padding: 16px; }
 .section.active { display: block; }
 
 /* CARDS */
-.card { background: white; border-radius: 12px; border: 0.5px solid #e0e0e0; padding: 16px; margin-bottom: 12px; }
-.card-title { font-size: 14px; font-weight: 700; color: #003a79; margin-bottom: 14px; }
+.card { background: white; border-radius: 14px; border: 1px solid #D5E2EF; padding: 16px; margin-bottom: 12px; }
+.card-title { font-size: 14px; font-weight: 700; color: #1F3F78; margin-bottom: 14px; }
 
 /* GRILLA PRODUCTOS */
 .productos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 6px; margin-bottom: 12px; }
 .prod-btn { background: white; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 9px 5px; text-align: center; cursor: pointer; transition: all 0.15s; }
-.prod-btn:active { background: #e8f0fb; border-color: #003a79; transform: scale(0.97); }
+.prod-btn:active { background: #E4EEF8; border-color: #1F3F78; transform: scale(0.97); }
 .prod-btn .nombre { font-size: 11px; font-weight: 700; line-height: 1.25; }
 .prod-btn .precio { font-size: 10px; color: #888; margin-top: 3px; }
 .prod-btn.sin-stock { opacity: 0.4; cursor: not-allowed; }
@@ -64,7 +51,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* CATEGORÍAS (nivel 2) */
 .cat-tabs { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; }
 .cat-tab { padding: 4px 10px; border-radius: 14px; font-size: 11px; font-weight: 500; border: none; color: #888; cursor: pointer; white-space: nowrap; background: #f0f1f3; }
-.cat-tab.active { background: #e5edf9; color: #003a79; font-weight: 600; }
+.cat-tab.active { background: #E4EEF8; color: #1F3F78; font-weight: 600; }
 
 /* PEDIDO ACTUAL */
 .linea-pedido-wrap { border-bottom: 0.5px solid #f0f0f0; padding: 8px 0; }
@@ -73,18 +60,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .linea-prod-nombre { font-size: 13px; font-weight: 600; color: #222; }
 .linea-prod-precio { font-size: 11px; color: #888; }
 .qty-control { display: flex; align-items: center; gap: 4px; }
-.qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1.5px solid #ddd; background: white; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #003a79; font-weight: 700; }
+.qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1.5px solid #ddd; background: white; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #1F3F78; font-weight: 700; }
 .qty-num { font-size: 14px; font-weight: 700; text-align: center; min-width: 20px; }
-.linea-total { font-size: 13px; font-weight: 700; color: #003a79; text-align: right; }
+.linea-total { font-size: 13px; font-weight: 700; color: #1F3F78; text-align: right; }
 .btn-remove-linea { background: none; border: none; color: #e74c3c; font-size: 18px; cursor: pointer; padding: 0; }
 /* DESCUENTO POR LÍNEA */
 .linea-desc-row { display: flex; align-items: center; gap: 5px; margin-top: 5px; }
 .linea-desc-label { font-size: 11px; color: #aaa; }
 .linea-desc-input { width: 54px; padding: 3px 6px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; text-align: center; outline: none; }
-.linea-desc-input:focus { border-color: #003a79; }
+.linea-desc-input:focus { border-color: #1F3F78; }
 .linea-desc-tipo { display: flex; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
 .linea-desc-tipo-btn { padding: 3px 8px; font-size: 11px; font-weight: 600; border: none; background: white; color: #888; cursor: pointer; }
-.linea-desc-tipo-btn.active { background: #003a79; color: white; }
+.linea-desc-tipo-btn.active { background: #1F3F78; color: white; }
 .linea-desc-result { font-size: 11px; color: #e74c3c; margin-left: auto; white-space: nowrap; }
 /* ÚLTIMAS VENTAS */
 #ultimasVentasList { max-height: 480px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -93,10 +80,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .ultimas-venta-item.anulada { opacity: 0.5; }
 .ultimas-venta-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; gap: 6px; }
 .ultimas-venta-fecha { font-size: 11px; color: #888; }
-.ultimas-venta-medio { font-size: 11px; font-weight: 600; color: #003a79; background: #e8f0fb; padding: 2px 8px; border-radius: 10px; cursor: pointer; border: none; }
+.ultimas-venta-medio { font-size: 11px; font-weight: 600; color: #1F3F78; background: #E4EEF8; padding: 2px 8px; border-radius: 10px; cursor: pointer; border: none; }
 .ultimas-venta-medio.anulada-badge { color: #e74c3c; background: #fde8e8; cursor: default; }
 .ultimas-venta-linea { font-size: 12px; color: #444; display: flex; justify-content: space-between; padding: 1px 0; }
-.ultimas-venta-total { font-size: 13px; font-weight: 700; color: #003a79; margin-top: 5px; text-align: right; }
+.ultimas-venta-total { font-size: 13px; font-weight: 700; color: #1F3F78; margin-top: 5px; text-align: right; }
 .ultimas-venta-acciones { display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end; }
 .ultimas-venta-acciones button { font-size: 11px; padding: 4px 9px; border-radius: 6px; border: 1px solid #ddd; background: white; cursor: pointer; }
 .ultimas-venta-acciones .btn-anular { color: #e74c3c; border-color: #e74c3c; }
@@ -106,7 +93,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* RESUMEN */
 .resumen-box { background: #f8f9fa; border-radius: 8px; padding: 12px; margin-top: 10px; }
 .resumen-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; color: #555; }
-.resumen-row.total { font-size: 16px; font-weight: 700; color: #003a79; border-top: 1px solid #ddd; margin-top: 6px; padding-top: 8px; }
+.resumen-row.total { font-size: 16px; font-weight: 700; color: #1F3F78; border-top: 1px solid #ddd; margin-top: 6px; padding-top: 8px; }
 .resumen-row.descuento { color: #e74c3c; }
 
 /* DESCUENTO */
@@ -114,17 +101,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .descuento-row input { flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
 .descuento-tipo { display: flex; border: 1.5px solid #ddd; border-radius: 8px; overflow: hidden; }
 .desc-tipo-btn { padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: white; color: #666; }
-.desc-tipo-btn.active { background: #003a79; color: white; }
+.desc-tipo-btn.active { background: #1F3F78; color: white; }
 
 /* MEDIO DE PAGO */
 .medio-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
 .medio-btn { padding: 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 13px; font-weight: 600; color: #555; background: white; cursor: pointer; text-align: center; }
-.medio-btn.selected { border-color: #003a79; background: #e8f0fb; color: #003a79; }
+.medio-btn.selected { border-color: #1F3F78; background: #E4EEF8; color: #1F3F78; }
 
 /* BOTONES */
 .btn { padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
-.btn-primary { background: #003a79; color: white; }
-.btn-secondary { background: white; color: #003a79; border: 1.5px solid #003a79; }
+.btn-primary { background: #1F3F78; color: white; }
+.btn-secondary { background: white; color: #1F3F78; border: 1.5px solid #1F3F78; }
 .btn-danger { background: white; color: #e74c3c; border: 1.5px solid #e74c3c; }
 .btn-full { width: 100%; padding: 14px; font-size: 15px; }
 .btn-success { background: #1D9E75; color: white; }
@@ -141,10 +128,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 #modalPoint .pt-monto { font-size: 34px; font-weight: 800; color: #222; }
 #modalPoint .pt-tit { font-size: 18px; font-weight: 700; }
 #modalPoint .pt-sub { font-size: 13px; color: #555; line-height: 1.5; }
-#modalPoint .pt-tienda { font-size: 13px; font-weight: 600; color: #003a79; }
+#modalPoint .pt-tienda { font-size: 13px; font-weight: 600; color: #1F3F78; }
 #modalPoint .pt-ok { color: #1D7A5F; } #modalPoint .pt-mal { color: #92400e; }
-#modalPoint .pt-barra { width: 100%; height: 6px; background: #e8f0fb; border-radius: 3px; overflow: hidden; }
-#modalPoint .pt-barra > div { height: 6px; background: #003a79; transition: width 1s linear; }
+#modalPoint .pt-barra { width: 100%; height: 6px; background: #E4EEF8; border-radius: 3px; overflow: hidden; }
+#modalPoint .pt-barra > div { height: 6px; background: #1F3F78; transition: width 1s linear; }
 #modalPoint .pt-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 6px; }
 #modalPoint .pt-botones .btn, #modalPoint .pt-uno { min-height: 48px; }
 #modalPoint .pt-uno { width: 100%; }
@@ -155,7 +142,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 #cierrePointInfo { display: none; margin: 4px 0 10px; padding: 10px 12px; border-radius: 8px; background: #e9f7f1; color: #14573f; font-size: 12px; line-height: 1.5; }
 .modal-overlay.open { display: flex; }
 .modal { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 420px; }
-.modal-title { font-size: 16px; font-weight: 700; color: #003a79; margin-bottom: 16px; }
+.modal-title { font-size: 16px; font-weight: 700; color: #1F3F78; margin-bottom: 16px; }
 .modal-btns { display: flex; gap: 8px; margin-top: 16px; }
 
 /* COMANDA */
@@ -185,7 +172,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; margin-top: 10px; }
 input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
-input:focus, select:focus { border-color: #003a79; }
+input:focus, select:focus { border-color: #1F3F78; }
 
 /* STOCK CATEGORÍA SWITCH (ventas) */
 .stock-cat-switch { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 8px 10px; background: #f8f9fa; border-radius: 8px; }
@@ -198,7 +185,7 @@ input:focus, select:focus { border-color: #003a79; }
 .stock-cat-btn.active.cat-cuartodia { background: #92400E; color: white; }
 /* BADGE DE CATEGORÍA EN LÍNEA */
 .cat-badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 700; margin-left: 4px; }
-.cat-badge.cat-hoy       { background: #e8f0fb; color: #003a79; }
+.cat-badge.cat-hoy       { background: #E4EEF8; color: #1F3F78; }
 .cat-badge.cat-ayer      { background: #fff3cd; color: #856404; }
 .cat-badge.cat-antesayer { background: #fde8e8; color: #c0392b; }
 .cat-badge.cat-cuartodia { background: #fef3c7; color: #92400E; }
@@ -206,7 +193,7 @@ input:focus, select:focus { border-color: #003a79; }
 /* CARDS DE STOCK POR CATEGORÍA */
 .stock-cat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .stock-cat-titulo { font-size: 14px; font-weight: 700; }
-.stock-cat-titulo.cat-hoy       { color: #003a79; }
+.stock-cat-titulo.cat-hoy       { color: #1F3F78; }
 .stock-cat-titulo.cat-ayer      { color: #b8860b; }
 .stock-cat-titulo.cat-antesayer { color: #c0392b; }
 .stock-cat-titulo.cat-cuartodia { color: #92400E; }
@@ -231,28 +218,28 @@ input:focus, select:focus { border-color: #003a79; }
 .stock-prod-nombre { font-size: 13px; font-weight: 600; color: #222; }
 .stock-prod-meta { font-size: 11px; color: #aaa; }
 .stock-qty-ctrl { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
-.stock-qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1.5px solid #ddd; background: white; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #003a79; font-weight: 700; }
+.stock-qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1.5px solid #ddd; background: white; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #1F3F78; font-weight: 700; }
 .stock-qty-num { font-size: 14px; font-weight: 700; min-width: 28px; text-align: center; }
 /* TABLA PRODUCTOS */
 .prod-search-bar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
 .prod-search-bar input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; outline: none; }
-.prod-search-bar input:focus { border-color: #003a79; }
+.prod-search-bar input:focus { border-color: #1F3F78; }
 .area-filter-btns { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
 .area-filter-btn { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; border: 1.5px solid #ddd; background: white; color: #888; cursor: pointer; white-space: nowrap; }
-.area-filter-btn.active { background: #003a79; color: white; border-color: #003a79; }
+.area-filter-btn.active { background: #1F3F78; color: white; border-color: #1F3F78; }
 .prod-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; }
 .prod-table { width: 100%; min-width: 540px; border-collapse: collapse; font-size: 12px; }
 .prod-table th { padding: 8px 6px; text-align: left; color: #888; font-size: 10px; font-weight: 700; border-bottom: 1px solid #eee; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.3px; }
 .prod-table td { padding: 8px 6px; border-bottom: 0.5px solid #f5f5f5; vertical-align: middle; }
 .prod-table tr:last-child td { border-bottom: none; }
 .prod-table tr:hover td { background: #fafafa; }
-.area-code { display: inline-block; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 700; background: #e8f0fb; color: #003a79; }
+.area-code { display: inline-block; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 700; background: #E4EEF8; color: #1F3F78; }
 /* TOGGLE SWITCH */
 .toggle-switch { position: relative; display: inline-block; width: 34px; height: 18px; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
 .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ddd; border-radius: 18px; transition: .25s; }
 .toggle-slider:before { content: ''; position: absolute; width: 12px; height: 12px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .25s; }
-input:checked + .toggle-slider { background: #003a79; }
+input:checked + .toggle-slider { background: #1F3F78; }
 input:checked + .toggle-slider:before { transform: translateX(16px); }
 /* TOAST */
 #toastMsg { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1D9E75; color: white; padding: 12px 24px; border-radius: 24px; font-size: 14px; font-weight: 600; z-index: 999; opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
@@ -260,7 +247,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 #toastMsg.error { background: #e74c3c; }
 /* BOTONES PEQUEÑOS */
 .btn-sm { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid #ddd; background: white; }
-.btn-sm.btn-edit { color: #003a79; border-color: #003a79; }
+.btn-sm.btn-edit { color: #1F3F78; border-color: #1F3F78; }
 .btn-sm.btn-del  { color: #e74c3c; border-color: #e74c3c; }
 /* PROD ROW (lista admin antigua - borrada, pero btn-sm ya lo cubre) */
 .prod-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid #f0f0f0; }
@@ -280,23 +267,23 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 /* STOCK INGRESO — GRILLA DE SELECCIÓN */
 .stock-area-btns { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px; }
 .stock-area-btn { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; border: 1.5px solid #ddd; background: white; color: #888; cursor: pointer; white-space: nowrap; }
-.stock-area-btn.active { background: #003a79; color: white; border-color: #003a79; }
+.stock-area-btn.active { background: #1F3F78; color: white; border-color: #1F3F78; }
 .stock-ingreso-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 5px; margin-bottom: 10px; max-height: 190px; overflow-y: auto; }
 .stock-ingreso-btn { background: white; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 6px 3px; text-align: center; cursor: pointer; transition: background .15s; }
-.stock-ingreso-btn:active { background: #e8f0fb; border-color: #003a79; }
+.stock-ingreso-btn:active { background: #E4EEF8; border-color: #1F3F78; }
 .stock-ingreso-btn .s-icon { font-size: 17px; margin-bottom: 2px; }
 .stock-ingreso-btn .s-name { font-size: 9px; font-weight: 600; color: #333; line-height: 1.2; }
-.stock-sel-badge { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #e8f0fb; border-radius: 8px; border: 1.5px solid #003a79; margin-bottom: 10px; }
-.stock-sel-badge span { font-size: 13px; font-weight: 600; color: #003a79; }
-.stock-sel-badge button { background: none; border: none; color: #003a79; font-size: 18px; cursor: pointer; padding: 0; line-height: 1; }
+.stock-sel-badge { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #E4EEF8; border-radius: 8px; border: 1.5px solid #1F3F78; margin-bottom: 10px; }
+.stock-sel-badge span { font-size: 13px; font-weight: 600; color: #1F3F78; }
+.stock-sel-badge button { background: none; border: none; color: #1F3F78; font-size: 18px; cursor: pointer; padding: 0; line-height: 1; }
 /* FECHA INGRESO STOCK */
 .stock-fecha-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .stock-fecha-row input[type="date"] { flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; outline: none; }
-.stock-fecha-row input[type="date"]:focus { border-color: #003a79; }
+.stock-fecha-row input[type="date"]:focus { border-color: #1F3F78; }
 /* REPORTES — QUICK SELECT */
 .rep-quick-btns { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
 .rep-quick-btn { padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; white-space: nowrap; }
-.rep-quick-btn.active { background: #003a79; color: white; border-color: #003a79; }
+.rep-quick-btn.active { background: #1F3F78; color: white; border-color: #1F3F78; }
 /* VISOR DE STOCK — LAYOUT DOS COLUMNAS */
 .visor-stock-columns { display: block; } /* visible para todos; flex solo para el visor */
 .visor-stock-columns.visor-active { display: flex; gap: 14px; align-items: flex-start; }
@@ -310,29 +297,29 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .visor-resumen-row:last-child { border-bottom: none; }
 .visor-resumen-nombre { font-size: 12px; font-weight: 600; color: #222; }
 .visor-resumen-detalle { font-size: 10px; color: #aaa; margin-top: 2px; line-height: 1.4; }
-.visor-resumen-total { font-size: 14px; font-weight: 700; color: #003a79; white-space: nowrap; }
+.visor-resumen-total { font-size: 14px; font-weight: 700; color: #1F3F78; white-space: nowrap; }
 
 /* VISOR DE STOCK — SELECTOR DE SUCURSAL */
 .visor-suc-btns { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .visor-suc-btn { flex: 1; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; text-align: center; transition: all .15s; }
-.visor-suc-btn.active { background: #003a79; color: white; border-color: #003a79; }
-.visor-stock-qty { font-size: 15px; font-weight: 700; color: #003a79; text-align: right; padding: 4px 8px; }
+.visor-suc-btn.active { background: #1F3F78; color: white; border-color: #1F3F78; }
+.visor-stock-qty { font-size: 15px; font-weight: 700; color: #1F3F78; text-align: right; padding: 4px 8px; }
 .visor-ambas-detalle { font-size: 10px; color: #aaa; margin-top: 1px; }
 
 /* REPORTES — TABS */
 .rep-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 4px; }
 .rep-tab { padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1.5px solid #ddd; background: white; color: #666; cursor: pointer; white-space: nowrap; }
-.rep-tab.active { background: #003a79; color: white; border-color: #003a79; }
+.rep-tab.active { background: #1F3F78; color: white; border-color: #1F3F78; }
 /* EVALUACIÓN CAJA */
 .eval-dif-ok   { color: #1D9E75; font-weight: 700; }
 .eval-dif-mal  { color: #e74c3c; font-weight: 700; }
-.eval-dif-plus { color: #003a79; font-weight: 700; }
+.eval-dif-plus { color: #1F3F78; font-weight: 700; }
 /* BOTÓN CARGANDO */
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* v2.3.0 · Productos (solo para mirar) y Pedir producto */
 .pp-ayuda { font-size: 12px; color: #666; line-height: 1.45; }
-.pp-sub { font-size: 12px; font-weight: 700; color: #003a79; margin: 16px 0 6px; }
+.pp-sub { font-size: 12px; font-weight: 700; color: #1F3F78; margin: 16px 0 6px; }
 .pp-version { font-size: 11px; color: #999; margin-top: 12px; text-align: right; }
 .pp-error { color: #c0392b; font-size: 12px; margin-top: 8px; }
 .pp-ok { color: #1D7A5F; font-size: 12px; margin-top: 8px; }
@@ -341,7 +328,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .pp-ped-txt, .pp-prod-txt { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .pp-ped-resp, .pp-prod-meta { color: #777; font-size: 11px; margin-top: 2px; overflow-wrap: anywhere; }
 .pp-prod-nombre { font-weight: 600; color: #222; }
-.pp-prod-precio { font-weight: 700; color: #003a79; white-space: nowrap; }
+.pp-prod-precio { font-weight: 700; color: #1F3F78; white-space: nowrap; }
 .pp-chip { flex-shrink: 0; align-self: flex-start; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 10px; white-space: nowrap; }
 .pp-pend { background: #FFF4D6; color: #8a6416; }
 .pp-apr { background: #E3F3EC; color: #1D7A5F; }
@@ -361,3 +348,80 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .stock-cat-btn { line-height: 1.15; padding: 5px 8px; }
 .stock-cat-btns { max-width: 100%; overflow-x: auto; }
 .stock-cat-btn .cat-fecha { display: block; font-size: 10px; font-weight: 500; opacity: 0.85; white-space: nowrap; }
+
+/* ═══ v2.8.0 · Aspecto nuevo (opción A): azules pastel y barra lateral como Sistema Fën ═══ */
+:root { --fondo: #F4F8FC; --barra: #E4EEF8; --marcado: #C9DAEC; --borde: #D5E2EF; --marino: #1F3F78; --suave: #4F6275; }
+/* Ingreso y sucursal: el logo (oscuro) sobre pastel, ahora se ve */
+.login-screen, .sucursal-screen { background: var(--barra); }
+.login-card { border: 1px solid var(--borde); }
+.login-version { color: var(--suave); }
+.sucursal-title { color: var(--marino); }
+.sucursal-sub { color: var(--suave); }
+.sucursal-btn { border: 1px solid var(--borde); min-height: 64px; }
+.sucursal-btn .suc-icono { display: flex; color: var(--marino); }
+
+/* BARRA LATERAL */
+.app-marco { display: flex; min-height: 100vh; }
+.app-main { flex: 1; min-width: 0; }
+.lateral { flex: 0 0 232px; width: 232px; position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--barra); border-right: 1px solid var(--borde);
+  display: flex; flex-direction: column; gap: 4px; padding: 20px 14px; z-index: 100; }
+.lat-marca { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-bottom: 14px; }
+.lat-logo { width: 128px; height: 128px; display: block; }
+.header-title { font-size: 13px; font-weight: 700; color: #1C2B3A; background: white; border: 1px solid var(--marcado); border-radius: 999px; padding: 4px 12px; }
+.lat-fen, .lat-tienda-corta, .lat-version-corta { display: none; }
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav-btn { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 14px; border: 0; border-radius: 12px; background: transparent;
+  font: inherit; font-size: 15px; font-weight: 600; color: #33475B; text-align: left; cursor: pointer; white-space: nowrap; }
+.nav-btn:hover { background: rgba(255,255,255,.55); }
+.nav-btn.active { background: white; color: var(--marino); font-weight: 800; box-shadow: 0 1px 2px rgba(31,63,120,.12); }
+.nav-btn svg { flex: none; }
+.nav-btn:focus-visible, .lat-colapsar:focus-visible, .btn-icon:focus-visible { outline: 2px solid var(--marino); outline-offset: 2px; }
+.lat-pie { margin-top: auto; border-top: 1px solid var(--marcado); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.header-sub { font-size: 12px; color: var(--suave); overflow-wrap: anywhere; }
+.header-version { white-space: nowrap; }
+.lat-botones { display: flex; gap: 8px; }
+.btn-icon { flex: 1; min-height: 44px; border-radius: 10px; border: 1px solid var(--marcado); background: white; color: var(--marino); font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 12px; }
+.lat-colapsar { flex: none; width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid var(--marcado); background: white; color: var(--marino);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.lat-colapsar svg { transition: transform .15s; }
+
+/* Colapsada: angosta, con íconos, "fën", la tienda corta y la versión */
+.app-marco.colapsada .lateral { flex-basis: 84px; width: 84px; padding: 18px 10px; align-items: center; }
+.app-marco.colapsada .lat-logo, .app-marco.colapsada .header-title, .app-marco.colapsada .header-sub { display: none; }
+.app-marco.colapsada .lat-fen { display: block; width: 56px; height: 30px; overflow: hidden; position: relative; }
+.app-marco.colapsada .lat-fen img { position: absolute; width: 132px; height: 132px; left: -38px; top: -52px; }
+.app-marco.colapsada .lat-tienda-corta { display: block; font-size: 11px; font-weight: 800; color: var(--marino); background: white; border: 1px solid var(--marcado); border-radius: 999px; padding: 3px 8px; }
+.app-marco.colapsada .lat-marca { padding-bottom: 8px; }
+.app-marco.colapsada .nav-btn { flex-direction: column; justify-content: center; gap: 3px; width: 64px; min-height: 58px; padding: 0; font-size: 11px; text-align: center; }
+.app-marco.colapsada .lat-pie { align-items: center; width: 100%; }
+.app-marco.colapsada .lat-version-corta { display: block; font-size: 10px; color: var(--suave); }
+.app-marco.colapsada .lat-botones { flex-direction: column; align-items: center; }
+.app-marco.colapsada .btn-icon { flex: none; width: 64px; padding: 0; font-size: 12px; }
+.app-marco.colapsada .lat-colapsar { width: 48px; }
+.app-marco.colapsada .lat-colapsar svg { transform: rotate(180deg); }
+
+/* Celular: arriba el logo, la tienda y Salir; las secciones en una barra abajo, como Sistema Fën */
+@media (max-width: 760px) {
+  .app-marco, .app-marco.colapsada { display: block; }
+  .lateral, .app-marco.colapsada .lateral { position: sticky; top: 0; width: auto; height: auto; overflow: visible; flex-direction: row; align-items: center; gap: 10px;
+    padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--borde); }
+  .lat-marca, .app-marco.colapsada .lat-marca { flex-direction: row; padding: 0; gap: 10px; flex: 1; min-width: 0; }
+  .lat-logo, .app-marco.colapsada .lat-logo { display: block; width: 44px; height: 44px; }
+  .app-marco.colapsada .lat-fen, .app-marco.colapsada .lat-tienda-corta, .app-marco.colapsada .lat-version-corta { display: none; }
+  .header-title, .app-marco.colapsada .header-title { display: block; background: none; border: 0; padding: 0; font-size: 15px; font-weight: 800; color: var(--marino); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lat-pie, .app-marco.colapsada .lat-pie { margin: 0; border: 0; padding: 0; flex-direction: row; align-items: center; gap: 8px; width: auto; }
+  .header-sub, .app-marco.colapsada .header-sub { display: block; font-size: 11px; max-width: 140px; text-align: right; }
+  .lat-botones, .app-marco.colapsada .lat-botones { flex-direction: row; }
+  .btn-icon, .app-marco.colapsada .btn-icon { flex: none; width: auto; min-height: 40px; padding: 0 12px; }
+  .lat-colapsar { display: none !important; }
+  .nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 150; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0;
+    background: white; border-top: 1px solid var(--borde); padding: 4px 4px calc(8px + env(safe-area-inset-bottom)); }
+  .nav-btn, .app-marco.colapsada .nav-btn { flex-direction: column; justify-content: center; gap: 2px; width: auto; min-height: 54px; padding: 0; font-size: 12px; border-radius: 10px; text-align: center; box-shadow: none; }
+  .nav-btn.active { background: var(--barra); }
+  .app-main { padding-bottom: 76px; }
+  #toastMsg { bottom: 92px; }
+}
+@media (max-width: 400px) {
+  .header-sub, .app-marco.colapsada .header-sub { max-width: 110px; }
+  .stock-cat-btn { padding: 5px 6px; }   /* las cinco tarjetas caben en su recuadro */
+}

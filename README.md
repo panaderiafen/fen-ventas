@@ -1,3 +1,33 @@
+# fën caja · v2.8.0
+
+**Etapa 3 (segunda parte) de la revisión de la caja B2C: el aspecto nuevo, opción A elegida por Emmanuel el 29 oct** (lienzo "Boceto · Aspecto de la caja"). Nada cambia en lo que hace la caja. · 29 de octubre de 2026
+
+## Qué cambia
+- **Barra lateral como Sistema Fën** (computador y tablet): logo completo, la tienda, Venta, Stock, Caja y Productos con íconos, el correo con la versión y "Salir".
+- **Se colapsa con la flecha de abajo:** queda una franja angosta con los íconos, "fën", la tienda corta (BA o AI) y la versión, y los productos ganan espacio. La misma flecha la vuelve a abrir. **Cada equipo recuerda cómo la dejó.** Si nunca se tocó, en pantallas de menos de 1024 px parte colapsada.
+- **En el celular** (760 px o menos): arriba el logo, la tienda, el correo con la versión y "Salir"; las cuatro secciones en una barra abajo, como en Sistema Fën.
+- **Azules pastel** (fondo, barra, bordes y marcado, y el marino del logo para títulos y botones). Las áreas conservan su color, "Registrar pago" sigue en verde y las tarjetas de frescura siguen con sus colores.
+- **El logo ahora se ve** (es oscuro y antes estaba sobre azul oscuro), también en el ingreso y al elegir la sucursal. Barra e ingreso sin emojis.
+- Lo de adentro de cada sección (botones, ventanas, cierre) se ve como antes, con los colores nuevos; los emojis de adentro quedan para otra vuelta.
+
+## Dónde va (repo fen-ventas, raíz, los cuatro juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`. Este README a `respaldos/caja-v2.8.0/`. Reglas de Firestore, Apps Script, servidor de cobros y Sistema Fën: sin cambios.
+**Cuándo:** después del piloto del Point en Barros Arana (para no cambiar dos cosas el mismo día).
+
+## Checklist
+- [ ] Los cuatro archivos en la raíz de fen-ventas, en una sola subida; recargar la caja en cada equipo.
+- [ ] En el ingreso y al elegir sucursal se ve el logo sobre azul claro.
+- [ ] En el computador o la tablet: la barra a la izquierda con el logo; abajo dice "· v2.8.0" al lado del correo.
+- [ ] La flecha de abajo colapsa la barra y la vuelve a abrir; al recargar, queda como se dejó.
+- [ ] En un celular: las cuatro secciones abajo y "Salir" arriba.
+- [ ] Una venta y, al final del día, el cierre, como siempre.
+
+## Pruebas
+- `pruebas/caja28/caja-v280.test.js` (32): las 27 de la v2.7.0 contra la v2.8.0 y 5 nuevas (sin el azul de antes y fuera de la barra el código es el de la v2.7.0; barra abierta, colapsada y recordada; tablet de 800 px parte colapsada y 1024 px abierta; celular con la barra abajo; sin desborde a 390, 768, 1024 y 1440 px en las cuatro secciones). Capturas en `pruebas/capturas/caja28/`.
+- `pruebas/caja28/caja-v280-azar.test.js`: 150 ventas al azar dejan los mismos datos que la v2.7.0.
+
+---
+
 # fën caja · v2.7.0
 
 **Etapa 3 (primera parte) de la revisión de la caja B2C, aprobada por Emmanuel el 29 oct: la caja queda solo con lo del mostrador, y el cierre anota las ventas por tipo de leche.** · 29 de octubre de 2026

@@ -1,4 +1,4 @@
-// fën caja v2.7.0 · código
+// fën caja v2.8.0 · código
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -166,7 +166,7 @@ async function iniciarVisorStock() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('sucursalScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
-  document.getElementById('headerSucursal').textContent = 'Fën · Stock';
+  document.getElementById('headerSucursal').textContent = 'Stock';
   document.getElementById('headerUsuario').textContent = usuario.email;
   // Desactivar todas las secciones y mostrar solo Stock
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -356,7 +356,8 @@ window.selSucursal = async function(s) {
   sucursal = s;
   document.getElementById('sucursalScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
-  document.getElementById('headerSucursal').textContent = s === 'ainavillo' ? 'Fën · Ainavillo' : 'Fën · Barros Arana';
+  document.getElementById('headerSucursal').textContent = s === 'ainavillo' ? 'Ainavillo' : 'Barros Arana';
+  document.getElementById('headerSucursalCorta').textContent = s === 'ainavillo' ? 'AI' : 'BA'; // v2.8.0
   document.getElementById('headerUsuario').textContent = usuario.email;
   await cargarAreas();
   await cargarProductos();
@@ -689,9 +690,9 @@ window.toggleMostrarSinStock = function() {
   const btn = document.getElementById('btnToggleStock');
   if (btn) {
     btn.textContent = mostrarSinStock ? '👁 Solo con stock' : '👁 Mostrar todos';
-    btn.style.background = mostrarSinStock ? '#003a79' : '';
+    btn.style.background = mostrarSinStock ? '#1F3F78' : '';
     btn.style.color       = mostrarSinStock ? 'white'   : '';
-    btn.style.borderColor = mostrarSinStock ? '#003a79' : '';
+    btn.style.borderColor = mostrarSinStock ? '#1F3F78' : '';
   }
   renderProductos();
 };
@@ -812,7 +813,7 @@ window.toggleVistaGeneral = function() {
   const grid = document.getElementById('productosGrid');
   const lista = document.getElementById('vistaGeneralList');
   if (vistaGeneralActiva) {
-    btn.style.cssText = 'white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px;background:#003a79;color:#fff;border:none';
+    btn.style.cssText = 'white-space:nowrap;padding:6px 10px;font-size:11px;border-radius:8px;background:#1F3F78;color:#fff;border:none';
     catSwitch.style.opacity = '0.4';
     catSwitch.style.pointerEvents = 'none';
     grid.style.display = 'none';
@@ -856,7 +857,7 @@ function renderVistaGeneral() {
         <div class="stock-prod-nombre" style="color:${principal}">${p.nombre}</div>
         <div class="stock-prod-meta">${detalle || 'Sin stock'}</div>
       </div>
-      <div style="font-weight:700;color:#003a79;white-space:nowrap;padding-left:8px">${total} un.</div>
+      <div style="font-weight:700;color:#1F3F78;white-space:nowrap;padding-left:8px">${total} un.</div>
     </div>`;
   }).join('');
 }
@@ -1018,7 +1019,7 @@ window.cargarMesas = async function() {
             <button onclick="abrirMesa('${m.id}')" style="text-align:left;padding:12px;border:0.5px solid #ddd;border-radius:10px;background:#fff;cursor:pointer">
               <div style="font-weight:700;font-size:14px;color:#222">${m.nombre}</div>
               <div style="font-size:12px;color:#888;margin-top:4px">${(m.lineas || []).length} línea(s)</div>
-              <div style="font-size:15px;font-weight:700;color:#003a79;margin-top:6px">$${parseInt(m.total || 0).toLocaleString('es-CL')}</div>
+              <div style="font-size:15px;font-weight:700;color:#1F3F78;margin-top:6px">$${parseInt(m.total || 0).toLocaleString('es-CL')}</div>
             </button>
           `).join('') : '<div class="empty" style="grid-column:1/-1">Sin mesas abiertas</div>'}
         </div>
@@ -1848,7 +1849,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.7.0';
+const CAJA_VERSION = '2.8.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3776,3 +3777,21 @@ window.forzarRotacionManual = async function() {
   }
   if (btn) { btn.disabled = false; btn.textContent = '🔄 Forzar rotación'; }
 };
+
+// ─── v2.8.0: la barra lateral se colapsa y se abre; el equipo recuerda cómo la dejó ───
+function aplicarLateral(colapsada) {
+  const marco = document.getElementById('appMarco'), btn = document.getElementById('btnLateral');
+  if (!marco) return;
+  marco.classList.toggle('colapsada', colapsada);
+  if (btn) { btn.setAttribute('aria-expanded', String(!colapsada)); btn.setAttribute('aria-label', colapsada ? 'Abrir la barra' : 'Colapsar la barra'); }
+}
+window.alternarLateral = function() {
+  const colapsada = !document.getElementById('appMarco').classList.contains('colapsada');
+  aplicarLateral(colapsada);
+  try { localStorage.setItem('fen_caja_lateral', colapsada ? 'colapsada' : 'abierta'); } catch (e) {}
+};
+(function () {
+  let guardado = null;
+  try { guardado = localStorage.getItem('fen_caja_lateral'); } catch (e) {}
+  aplicarLateral(guardado ? guardado === 'colapsada' : window.innerWidth < 1024);
+})();
