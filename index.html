@@ -141,6 +141,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* MODAL */
 .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; padding: 16px; }
 #modalNotaDescuadre { z-index: 210; } /* v2.3.1: la nota del descuadre va encima de la ventana del cierre */
+/* v2.4.0: cobro con el Point integrado */
+#modalPoint { z-index: 220; }
+#modalPoint .pt-centro { text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+#modalPoint .pt-monto { font-size: 34px; font-weight: 800; color: #222; }
+#modalPoint .pt-tit { font-size: 18px; font-weight: 700; }
+#modalPoint .pt-sub { font-size: 13px; color: #555; line-height: 1.5; }
+#modalPoint .pt-tienda { font-size: 13px; font-weight: 600; color: #003a79; }
+#modalPoint .pt-ok { color: #1D7A5F; } #modalPoint .pt-mal { color: #92400e; }
+#modalPoint .pt-barra { width: 100%; height: 6px; background: #e8f0fb; border-radius: 3px; overflow: hidden; }
+#modalPoint .pt-barra > div { height: 6px; background: #003a79; transition: width 1s linear; }
+#modalPoint .pt-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 6px; }
+#modalPoint .pt-botones .btn, #modalPoint .pt-uno { min-height: 48px; }
+#modalPoint .pt-uno { width: 100%; }
+#modalPoint .pt-planb { background: #fff7ed; border: 1px solid #f5c58a; border-radius: 10px; padding: 12px; font-size: 12px; color: #5c3a10; line-height: 1.5; text-align: left; width: 100%; box-sizing: border-box; }
+#modalPoint .pt-planb ol { margin: 6px 0 0 18px; padding: 0; }
+.pt-insignia { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e9f7f1; color: #14573f; vertical-align: middle; }
+.pt-insignia.pt-manual { background: #fff7ed; color: #92400e; }
+#cierrePointInfo { display: none; margin: 4px 0 10px; padding: 10px 12px; border-radius: 8px; background: #e9f7f1; color: #14573f; font-size: 12px; line-height: 1.5; }
 .modal-overlay.open { display: flex; }
 .modal { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 420px; }
 .modal-title { font-size: 16px; font-weight: 700; color: #003a79; margin-bottom: 16px; }
@@ -480,7 +498,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 
           <!-- Medio de pago -->
           <div style="margin-top:14px;">
-            <label>Medio de pago</label>
+            <label>Medio de pago <span id="ptInsignia" class="pt-insignia" style="display:none"></span></label>
             <div class="medio-grid">
               <button class="medio-btn selected" id="mp-efectivo" onclick="selMedio('efectivo')">💵 Efectivo</button>
               <button class="medio-btn" id="mp-debito" onclick="selMedio('debito')">💳 Débito</button>
@@ -701,7 +719,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="abrirPedirProducto()">Pedir producto</button>
       <div class="pp-sub">Tus pedidos</div>
       <div id="misPedidosProd"><div class="empty">Cargando…</div></div>
-      <div class="pp-version">Caja v2.3.1</div>
+      <div class="pp-version">Caja v2.4.0</div>
     </div>
 
     <!-- Tipos de leche (nota de café) -->
@@ -904,15 +922,20 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
   </div>
 </div>
 
+<div class="modal-overlay" id="modalPoint" role="dialog" aria-modal="true" aria-labelledby="ptTitulo">
+  <div class="modal" id="modalPointCuerpo"></div>
+</div>
+
 <div class="modal-overlay" id="modalCierreCiego">
   <div class="modal">
     <div class="modal-title">🔒 Arqueo manual de caja</div>
     <p style="font-size:12px;color:#888;margin-bottom:14px">Ingresa los montos que contaste físicamente, sin ver el sistema.</p>
     <label>💵 Efectivo en caja ($)</label>
     <input type="number" id="cierrEfectivo" placeholder="0" min="0"/>
-    <label>💳 Débito ($)</label>
+    <div id="cierrePointInfo"></div>
+    <label id="cierrDebitoLbl">💳 Débito ($)</label>
     <input type="number" id="cierrDebito" placeholder="0" min="0"/>
-    <label>💳 Crédito ($)</label>
+    <label id="cierrCreditoLbl">💳 Crédito ($)</label>
     <input type="number" id="cierrCredito" placeholder="0" min="0"/>
     <label>📲 Transferencia ($)</label>
     <input type="number" id="cierrTransfer" placeholder="0" min="0"/>
@@ -1447,6 +1470,10 @@ async function cargarStockAmbas() {
 }
 
 window.selSucursal = async function(s) {
+  // v2.4.0: el equipo recuerda su tienda; si se elige la otra, se pregunta (no se bloquea)
+  const tiendaEq = tiendaDelEquipo();
+  if (tiendaEq && tiendaEq !== s && !confirm(`Este equipo suele trabajar en ${ptNombreTienda(tiendaEq)}. ¿Seguro que quiere entrar como ${ptNombreTienda(s)}?`)) return;
+  recordarTiendaEquipo(s);
   sucursal = s;
   document.getElementById('sucursalScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
@@ -1457,6 +1484,7 @@ window.selSucursal = async function(s) {
   await verificarCaja();
   cargarStockLista();
   reintentarResumenesPendientes(); // v2.3.0: cierres cuyo resumen no alcanzó a guardarse
+  iniciarRevisionPoint(); // v2.4.0: ¿el Point de esta tienda está integrado?
 };
 
 // ═══════════════════════════
@@ -2780,6 +2808,14 @@ window.actualizarRestanteDividido = function() {
 
 // Devuelve { medioPago } o { pagos: [...] } según si el pago está dividido
 function obtenerDatosPago() {
+  const r = obtenerDatosPagoBase();
+  // v2.4.0: la venta cobrada con el Point integrado lleva su orden y su tipo de tarjeta; la cobrada a mano cuando
+  // el Point estaba integrado queda marcada para cuadrarla con el reporte de Mercado Pago.
+  if (pagoPointListo) r.pagoPoint = pagoPointListo;
+  else if (pointIntegrado && pagoSinIntegracion) r.pagoSinIntegracion = true;
+  return r;
+}
+function obtenerDatosPagoBase() {
   if (!pagoDividido) return { medioPago: medioSeleccionado };
   const mapa = [['efectivo','divEfectivo'], ['debito','divDebito'], ['credito','divCredito'], ['transferencia','divTransfer']];
   const pagos = mapa
@@ -2793,10 +2829,12 @@ async function incrementarTotalesCaja(pagoData, total) {
   if (pagoData.pagos) {
     const incrementos = {};
     pagoData.pagos.forEach(p => { incrementos[`totales.${p.medio}`] = increment(p.monto); });
+    if (pagoData.pagoPoint) incrementos[`totalesPoint.${pagoData.pagoPoint.medio}`] = increment(pagoData.pagoPoint.monto); // v2.4.0
     await updateDoc(doc(db, 'cajas', cajaId), { ...incrementos, totalVentas: increment(total), nVentas: increment(1) });
   } else {
     await updateDoc(doc(db, 'cajas', cajaId), {
       [`totales.${pagoData.medioPago}`]: increment(total),
+      ...(pagoData.pagoPoint ? { [`totalesPoint.${pagoData.pagoPoint.medio}`]: increment(pagoData.pagoPoint.monto) } : {}), // v2.4.0
       totalVentas: increment(total), nVentas: increment(1)
     });
   }
@@ -2804,9 +2842,248 @@ async function incrementarTotalesCaja(pagoData, total) {
 
 // Enruta el botón "Registrar pago / Cobrar" según el modo activo
 window.confirmarPagoBoton = function() {
-  if (modoVenta === 'mesa-detail') { cerrarYCobrarMesa(); }
-  else { registrarVenta(); }
+  // v2.4.0: con el Point integrado, la parte con tarjeta se cobra primero en el Point
+  const monto = montoTarjetaPoint();
+  if (pointIntegrado && !pagoSinIntegracion && monto > 0 && pedidoLineas.length && cajaId) { cobrarConPoint(monto); return; }
+  registrarConLoQueHay();
 };
+function registrarConLoQueHay() {
+  if (modoVenta === 'mesa-detail') return cerrarYCobrarMesa();
+  return registrarVenta();
+}
+
+// ─── v2.4.0: cobro con el Point de Mercado Pago integrado (modo PDV) ───────────
+// La caja le pide el cobro al servidor de cobros (Cloudflare Worker fen-point) con la sesión de quien vende; el servidor
+// elige el Point de la tienda y crea la orden en Mercado Pago. Cuando Mercado Pago confirma el pago, la venta se registra
+// sola, con el tipo de tarjeta. El modo lo manda el Point: si está en modo normal (o no hay conexión con el servidor),
+// la caja funciona como siempre. Ningún secreto vive aquí: las claves están en Cloudflare.
+const PUNTO_URL = 'https://fen-point.panaderiafen.workers.dev';
+const PT_VENCE_MS = 3 * 60 * 1000;
+let pointIntegrado = false, pointRevisado = 0, pointTimer = null;
+let pagoSinIntegracion = false;   // esta venta se cobra a mano aunque el Point esté integrado (plan B)
+let pagoPointListo = null;        // pago confirmado que se está registrando
+let pagoPointPendiente = null;    // pago confirmado cuya venta no alcanzó a registrarse (no se vuelve a cobrar)
+let ptCobro = null, ptSondeo = null, ptReloj = null;
+const ptNombreTienda = s => s === 'ainavillo' ? 'Ainavillo' : 'Barros Arana';
+const ptPesos = n => '$' + (parseInt(n) || 0).toLocaleString('es-CL');
+
+async function ptPedir(metodo, ruta, cuerpo) {
+  const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+  const r = await fetch(PUNTO_URL + ruta, { method: metodo, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
+  let d = {}; try { d = await r.json(); } catch (e) { d = { ok: false, mensaje: 'Respuesta no válida (' + r.status + ')' }; }
+  d.status = r.status;
+  return d;
+}
+
+// ¿El Point de esta tienda está en modo integrado? Sin respuesta, la caja queda en el modo de siempre.
+async function revisarModoPoint(forzar) {
+  if (!sucursal || !auth.currentUser) return pointIntegrado;
+  if (!forzar && Date.now() - pointRevisado < 60000) return pointIntegrado;
+  pointRevisado = Date.now();
+  try {
+    const d = await ptPedir('GET', '/point?sucursal=' + encodeURIComponent(sucursal));
+    pointIntegrado = !!(d.ok && d.integrado);
+  } catch (e) { pointIntegrado = false; }
+  pintarModoPoint();
+  return pointIntegrado;
+}
+function pintarModoPoint() {
+  const integrado = pointIntegrado && !pagoSinIntegracion;
+  const deb = document.getElementById('mp-debito'), cre = document.getElementById('mp-credito');
+  if (deb) deb.textContent = deb.textContent.replace(integrado ? 'Débito' : 'Tarjeta', integrado ? 'Tarjeta' : 'Débito');
+  if (cre) cre.style.display = integrado ? 'none' : '';
+  if (integrado && medioSeleccionado === 'credito') selMedio('debito');
+  const lblDeb = document.querySelector('label[for="divDebito"]') || (document.getElementById('divDebito') || {}).previousElementSibling;
+  if (lblDeb) lblDeb.textContent = lblDeb.textContent.replace(integrado ? 'Débito' : 'Tarjeta', integrado ? 'Tarjeta' : 'Débito');
+  const divCre = document.getElementById('divCredito');
+  if (divCre && divCre.parentElement) divCre.parentElement.style.display = integrado ? 'none' : '';
+  if (integrado && divCre) divCre.value = '';
+  const ins = document.getElementById('ptInsignia');
+  if (ins) {
+    if (pointIntegrado && pagoSinIntegracion) { ins.textContent = 'Point: cobro a mano en esta venta'; ins.className = 'pt-insignia pt-manual'; ins.style.display = ''; }
+    else if (pointIntegrado) { ins.textContent = 'Point integrado'; ins.className = 'pt-insignia'; ins.style.display = ''; }
+    else ins.style.display = 'none';
+  }
+}
+function iniciarRevisionPoint() {
+  revisarModoPoint(true);
+  if (pointTimer) clearInterval(pointTimer);
+  pointTimer = setInterval(() => { if (!document.getElementById('modalPoint').classList.contains('open')) revisarModoPoint(true); }, 3 * 60 * 1000);
+}
+
+// Cuánto se cobra con tarjeta en esta venta (con el Point integrado, "Tarjeta" es el botón de Débito)
+function montoTarjetaPoint() {
+  const total = parseInt(document.getElementById('resumenVenta').dataset.total) || 0;
+  if (!pagoDividido) return medioSeleccionado === 'debito' || medioSeleccionado === 'credito' ? total : 0;
+  return (parseInt(document.getElementById('divDebito').value) || 0) + (parseInt(document.getElementById('divCredito').value) || 0);
+}
+
+function ptVentana(html) {
+  document.getElementById('modalPointCuerpo').innerHTML = html;
+  document.getElementById('modalPoint').classList.add('open');
+}
+function ptCerrarVentana() {
+  document.getElementById('modalPoint').classList.remove('open');
+  if (ptSondeo) { clearTimeout(ptSondeo); ptSondeo = null; }
+  if (ptReloj) { clearInterval(ptReloj); ptReloj = null; }
+}
+
+async function cobrarConPoint(monto) {
+  const total = parseInt(document.getElementById('resumenVenta').dataset.total) || 0;
+  if (pagoDividido) {
+    const pagos = obtenerDatosPagoBase().pagos || [];
+    const suma = pagos.reduce((a, p) => a + p.monto, 0);
+    if (suma !== total) { alert(`La suma de los medios de pago ($${suma.toLocaleString('es-CL')}) no coincide con el total ($${total.toLocaleString('es-CL')})`); return; }
+  }
+  // Un pago ya confirmado cuya venta no alcanzó a registrarse: se registra sin volver a cobrar
+  if (pagoPointPendiente && pagoPointPendiente.monto === monto && pagoPointPendiente.total === total) { return registrarPagado(pagoPointPendiente); }
+  const tienda = ptNombreTienda(sucursal);
+  ptVentana(`<div class="pt-centro"><div class="pt-tienda">Point de ${tienda}</div><div class="pt-monto">${ptPesos(monto)}</div>
+    <div class="pt-tit" id="ptTitulo">Enviando el cobro al Point…</div></div>`);
+  const referencia = (sucursal === 'ainavillo' ? 'AI-' : 'BA-') + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+  let d;
+  try { d = await ptPedir('POST', '/cobrar', { sucursal, monto, referencia, descripcion: 'Venta Fën ' + tienda }); }
+  catch (e) { return ptSinConexion(monto, 'No se pudo conectar con el servidor de cobros.'); }
+  if (!d.ok) {
+    if (d.status === 409 && /queued|cola/i.test(d.mensaje || '')) return ptSinConexion(monto, 'El Point tiene otro cobro pendiente. Cancélelo en el Point (o espere 3 minutos) y vuelva a cobrar.');
+    return ptSinConexion(monto, d.mensaje || 'El servidor de cobros no aceptó el cobro.');
+  }
+  ptCobro = { referencia, monto, total, creada: Date.now(), estado: d.estado || 'enviado', tienda };
+  ptEsperando();
+  ptSondear(0);
+}
+
+function ptEsperando(aviso) {
+  const c = ptCobro;
+  ptVentana(`<div class="pt-centro"><div class="pt-tienda">Enviado al Point de ${c.tienda}</div><div class="pt-monto">${ptPesos(c.monto)}</div>
+    <div class="pt-tit" id="ptTitulo">El cliente paga en el Point</div>
+    <div class="pt-sub">No digite el monto: ya aparece en el Point. Esta pantalla avanza sola cuando Mercado Pago confirma el pago.</div>
+    <div class="pt-barra"><div id="ptBarra" style="width:0%"></div></div>
+    <div class="pt-sub" id="ptQueda"></div>
+    ${aviso ? `<div class="pt-planb">${aviso}</div>` : ''}
+    <div class="pt-botones"><button type="button" class="btn btn-danger" onclick="ptCancelar()">Cancelar cobro</button>
+    <button type="button" class="btn btn-secondary" onclick="ptPlanB()">Cobrar sin integración</button></div></div>`);
+  const pintar = () => {
+    const pasado = Date.now() - c.creada, queda = Math.max(0, PT_VENCE_MS - pasado);
+    const b = document.getElementById('ptBarra'); if (b) b.style.width = Math.min(100, pasado / PT_VENCE_MS * 100) + '%';
+    const q = document.getElementById('ptQueda'); if (q) q.textContent = 'Esperando · el cobro vence en ' + Math.floor(queda / 60000) + ':' + String(Math.floor(queda / 1000) % 60).padStart(2, '0');
+  };
+  pintar();
+  if (ptReloj) clearInterval(ptReloj);
+  ptReloj = setInterval(pintar, 1000);
+}
+
+function ptSondear(n) {
+  if (ptSondeo) clearTimeout(ptSondeo);
+  ptSondeo = setTimeout(async () => {
+    const c = ptCobro;
+    if (!c) return;
+    const verificar = Date.now() - c.creada > 60000 && n % 5 === 0;
+    let d = null;
+    try { d = await ptPedir('GET', '/estado?ref=' + encodeURIComponent(c.referencia) + (verificar ? '&verificar=1' : '')); } catch (e) { d = null; }
+    if (!ptCobro || ptCobro !== c) return;
+    if (d && d.ok) {
+      c.estado = d.estado;
+      if (d.estado === 'pagado') return ptPagado(d);
+      if (['cancelado', 'vencido', 'fallido', 'devuelto'].includes(d.estado)) return ptNoPagado(d.estado);
+    }
+    // Pasado el plazo sin respuesta, se pregunta directo a Mercado Pago en el siguiente intento
+    ptSondear(Date.now() - c.creada > PT_VENCE_MS + 20000 ? 0 : n + 1);
+  }, 2000);
+}
+
+function medioDeTipo(t) { return t === 'credito' ? 'credito' : 'debito'; }   // prepago y dinero en cuenta se suman a débito
+
+async function ptPagado(d) {
+  const c = ptCobro; ptCobro = null;
+  const medio = medioDeTipo(d.tipoPago);
+  const pago = { referencia: c.referencia, ordenId: d.ordenId || '', pagoId: d.pagoId || '', tipoPago: d.tipoPago || '', medio, monto: c.monto, total: c.total };
+  const txt = { debito: 'Débito', credito: 'Crédito', prepago: 'Prepago', dinero_en_cuenta: 'Dinero en cuenta (QR)' }[d.tipoPago] || 'Tarjeta';
+  ptVentana(`<div class="pt-centro"><div class="pt-tit pt-ok" id="ptTitulo">Pago confirmado</div><div class="pt-monto">${ptPesos(c.monto)}</div>
+    <div class="pt-sub">${txt} · confirmado por Mercado Pago</div><div class="pt-sub">Registrando la venta…</div></div>`);
+  return registrarPagado(pago);
+}
+
+async function registrarPagado(pago) {
+  // El monto con tarjeta queda en Débito o Crédito según lo que dijo Mercado Pago
+  if (pagoDividido) {
+    const deb = document.getElementById('divDebito'), cre = document.getElementById('divCredito');
+    deb.value = pago.medio === 'debito' ? pago.monto : ''; cre.value = pago.medio === 'credito' ? pago.monto : '';
+  } else {
+    medioSeleccionado = pago.medio;
+  }
+  pagoPointListo = { referencia: pago.referencia, ordenId: pago.ordenId, pagoId: pago.pagoId, tipoPago: pago.tipoPago, medio: pago.medio, monto: pago.monto };
+  const antes = pedidoLineas.length;
+  try { await registrarConLoQueHay(); } catch (e) { /* registrarVenta ya avisa */ }
+  pagoPointListo = null;
+  const registrada = antes > 0 && pedidoLineas.length === 0;
+  if (registrada) {
+    pagoPointPendiente = null;
+    ptCerrarVentana();
+    if (!pagoDividido) selMedio('efectivo');
+    pintarModoPoint();
+  } else {
+    pagoPointPendiente = pago;
+    ptVentana(`<div class="pt-centro"><div class="pt-tit pt-mal" id="ptTitulo">El pago está confirmado, pero la venta no se registró</div>
+      <div class="pt-monto">${ptPesos(pago.monto)}</div>
+      <div class="pt-sub">No vuelva a cobrar al cliente. Revise internet y toque "Registrar venta": se registra con el pago ya confirmado.</div>
+      <button type="button" class="btn btn-success pt-uno" onclick="ptCerrarVentana(); confirmarPagoBoton()">Registrar venta</button></div>`);
+  }
+}
+
+function ptNoPagado(estado) {
+  const c = ptCobro; ptCobro = null;
+  if (ptReloj) { clearInterval(ptReloj); ptReloj = null; }
+  const motivo = { cancelado: 'Se canceló el cobro.', vencido: 'Pasaron 3 minutos sin pagar.', fallido: 'La tarjeta fue rechazada o el pago falló.', devuelto: 'El pago se devolvió.' }[estado] || '';
+  ptVentana(`<div class="pt-centro"><div class="pt-tit pt-mal" id="ptTitulo">El pago no se completó</div><div class="pt-monto">${ptPesos(c.monto)}</div>
+    <div class="pt-sub">${motivo} La venta no se registró y el pedido sigue abierto.</div>
+    <button type="button" class="btn btn-success pt-uno" onclick="ptCerrarVentana(); confirmarPagoBoton()">Volver a cobrar en el Point</button>
+    <button type="button" class="btn btn-secondary pt-uno" onclick="ptCerrarVentana()">Cambiar medio de pago</button></div>`);
+}
+
+window.ptCancelar = async function() {
+  const c = ptCobro; if (!c) return ptCerrarVentana();
+  let d = null;
+  try { d = await ptPedir('POST', '/cancelar', { referencia: c.referencia }); } catch (e) { d = null; }
+  if (d && d.ok && d.estado === 'pagado') return ptPagado(d);
+  if (d && d.ok && ['cancelado', 'vencido', 'fallido'].includes(d.estado)) { ptCobro = null; ptCerrarVentana(); showToast('Cobro cancelado'); return; }
+  ptEsperando('El cobro ya está en el Point: cancélelo en el mismo Point (salga de la pantalla de cobro y confirme). Esta pantalla avanza sola.');
+};
+window.ptCerrarVentana = ptCerrarVentana;
+
+function ptPasosPlanB() {
+  return `<div class="pt-planb"><b>Cobrar sin integración</b><ol>
+    <li>Si el cobro ya aparece en el Point, cancélelo ahí primero.</li>
+    <li>En el Point: Más opciones › Ajustes › Modo de vinculación › modo normal (sin integración).</li>
+    <li>Digite el monto en el Point y cobre como antes.</li>
+    <li>En la caja, elija Débito o Crédito y registre la venta.</li></ol></div>`;
+}
+function ptSinConexion(monto, msg) {
+  ptCobro = null;
+  ptVentana(`<div class="pt-centro"><div class="pt-tit pt-mal" id="ptTitulo">No se pudo cobrar en el Point</div><div class="pt-monto">${ptPesos(monto)}</div>
+    <div class="pt-sub">${msg}</div>
+    <button type="button" class="btn btn-secondary pt-uno" onclick="ptCerrarVentana(); confirmarPagoBoton()">Intentar de nuevo</button>
+    ${ptPasosPlanB()}
+    <button type="button" class="btn btn-danger pt-uno" onclick="ptPlanB(true)">Cobrar sin integración</button></div>`);
+}
+// Plan B: esta venta se cobra a mano (Débito o Crédito, como antes). Si había un cobro en el Point, se intenta cancelar.
+window.ptPlanB = async function(directo) {
+  const c = ptCobro;
+  if (c && !directo) {
+    if (!confirm('¿Cobrar esta venta sin integración? Si el cobro ya aparece en el Point, cancélelo ahí antes de digitar el monto.')) return;
+    ptCobro = null;
+    try { await ptPedir('POST', '/cancelar', { referencia: c.referencia }); } catch (e) {}
+  }
+  ptCerrarVentana();
+  pagoSinIntegracion = true;
+  pintarModoPoint();
+  showToast('Cobre en el Point digitando el monto, elija Débito o Crédito y registre la venta');
+};
+
+// ─── v2.4.0: cada equipo recuerda la tienda donde trabaja ───────────────────
+const CLAVE_TIENDA_EQUIPO = 'fen_caja_tienda_equipo';
+function tiendaDelEquipo() { try { return localStorage.getItem(CLAVE_TIENDA_EQUIPO) || ''; } catch (e) { return ''; } }
+function recordarTiendaEquipo(s) { try { if (!localStorage.getItem(CLAVE_TIENDA_EQUIPO)) localStorage.setItem(CLAVE_TIENDA_EQUIPO, s); } catch (e) {} }
 
 // ═══════════════════════════
 // REGISTRAR VENTA
@@ -2833,7 +3110,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.3.1';
+const CAJA_VERSION = '2.4.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3019,6 +3296,7 @@ window.registrarVenta = async function() {
     ultimaVentaRegistrada = venta;
     pedidoLineas = [];
     resetPagoDividido();
+    pagoSinIntegracion = false; pintarModoPoint(); // v2.4.0
     renderPedido();
     await cargarUltimasVentas();
     showToast(`✅ Venta registrada · $${total.toLocaleString('es-CL')}`);
@@ -3076,6 +3354,7 @@ window.cerrarYCobrarMesa = async function() {
     showToast(`✅ Mesa cobrada · $${total.toLocaleString('es-CL')}`);
     pedidoLineas = [];
     resetPagoDividido();
+    pagoSinIntegracion = false; pintarModoPoint(); // v2.4.0
     volverAMesas();
   } catch(e) {
     alert('Error al cobrar mesa: ' + e.message);
@@ -3298,6 +3577,8 @@ async function cargarUltimasVentas() {
 let _medioEditSeleccionado = null;
 
 window.abrirModalEditarMedio = function(ventaId, medioActual) {
+  const vPoint = ventasTurnoCache[ventaId];
+  if (vPoint && vPoint.pagoPoint) { alert('Esta venta se cobró con el Point integrado: el medio de pago lo confirmó Mercado Pago y no se cambia aquí.'); return; } // v2.4.0
   document.getElementById('editVentaId').value = ventaId;
   _medioEditSeleccionado = medioActual;
   ['efectivo','debito','credito','transferencia'].forEach(m => {
@@ -3513,7 +3794,24 @@ window.cerrarCaja = function(targetCajaId) {
   document.getElementById('cierrRetirado').value  = '';
   document.getElementById('cierreTargetCajaId').value = targetCajaId || cajaId || '';
   document.getElementById('modalCierreCiego').classList.add('open');
+  infoPointCierre(targetCajaId || cajaId); // v2.4.0
 };
+// v2.4.0: lo cobrado con el Point integrado se muestra (ya lo confirmó Mercado Pago) y no se cuenta en el arqueo
+async function infoPointCierre(id) {
+  const box = document.getElementById('cierrePointInfo');
+  const lblD = document.getElementById('cierrDebitoLbl'), lblC = document.getElementById('cierrCreditoLbl');
+  box.style.display = 'none'; lblD.textContent = '💳 Débito ($)'; lblC.textContent = '💳 Crédito ($)';
+  if (!id) return;
+  try {
+    const snap = await getDoc(doc(db, 'cajas', id));
+    const tp = (snap.exists() && snap.data().totalesPoint) || {};
+    const d = parseInt(tp.debito) || 0, c = parseInt(tp.credito) || 0;
+    if (!d && !c) return;
+    box.innerHTML = `<b>Con el Point integrado: ${ptPesos(d + c)}</b> (Débito ${ptPesos(d)} · Crédito ${ptPesos(c)}), confirmado por Mercado Pago venta por venta. No se cuenta: abajo escriba solo lo cobrado <b>sin integración</b>.`;
+    box.style.display = 'block';
+    lblD.textContent = '💳 Débito sin integración ($)'; lblC.textContent = '💳 Crédito sin integración ($)';
+  } catch (e) { /* sin conexión: el arqueo sigue como siempre */ }
+}
 
 window.cerrarModalCierre = function() {
   document.getElementById('modalCierreCiego').classList.remove('open');
@@ -3555,8 +3853,8 @@ window.cancelarNotaDescuadre = function() {
 window.confirmarCierreCiego = async function() {
   const btn = document.getElementById('btnConfirmarCierre');
   const manEfectivo  = parseInt(document.getElementById('cierrEfectivo').value)  || 0;
-  const manDebito    = parseInt(document.getElementById('cierrDebito').value)    || 0;
-  const manCredito   = parseInt(document.getElementById('cierrCredito').value)   || 0;
+  let manDebito      = parseInt(document.getElementById('cierrDebito').value)    || 0;
+  let manCredito     = parseInt(document.getElementById('cierrCredito').value)   || 0;
   const manTransfer  = parseInt(document.getElementById('cierrTransfer').value)  || 0;
   const montoRetirado = parseInt(document.getElementById('cierrRetirado').value) || 0;
   const targetCajaId  = document.getElementById('cierreTargetCajaId').value || cajaId;
@@ -3582,6 +3880,10 @@ window.confirmarCierreCiego = async function() {
     const cajaDocId = targetCajaId;
     const t = cajaData.totales || {};
     const montoInicial = parseInt(cajaData.montoInicial) || 0;
+    // v2.4.0: lo cobrado con el Point integrado ya está confirmado: se suma a lo contado
+    const tPoint = cajaData.totalesPoint || {};
+    manDebito += parseInt(tPoint.debito) || 0;
+    manCredito += parseInt(tPoint.credito) || 0;
 
     // Sistema: solo ventas (sin monto inicial)
     const sistEfectivo = parseInt(t.efectivo)        || 0;
