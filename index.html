@@ -719,7 +719,7 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="abrirPedirProducto()">Pedir producto</button>
       <div class="pp-sub">Tus pedidos</div>
       <div id="misPedidosProd"><div class="empty">Cargando…</div></div>
-      <div class="pp-version">Caja v2.4.0</div>
+      <div class="pp-version">Caja v2.4.1</div>
     </div>
 
     <!-- Tipos de leche (nota de café) -->
@@ -2864,6 +2864,7 @@ let pagoSinIntegracion = false;   // esta venta se cobra a mano aunque el Point 
 let pagoPointListo = null;        // pago confirmado que se está registrando
 let pagoPointPendiente = null;    // pago confirmado cuya venta no alcanzó a registrarse (no se vuelve a cobrar)
 let ptCobro = null, ptSondeo = null, ptReloj = null;
+let ptIntentoAnterior = null, ptVigia = null;   // v2.4.1: el último cobro que no se completó (por si igual se pagó)
 const ptNombreTienda = s => s === 'ainavillo' ? 'Ainavillo' : 'Barros Arana';
 const ptPesos = n => '$' + (parseInt(n) || 0).toLocaleString('es-CL');
 
@@ -2911,6 +2912,33 @@ function iniciarRevisionPoint() {
   pointTimer = setInterval(() => { if (!document.getElementById('modalPoint').classList.contains('open')) revisarModoPoint(true); }, 3 * 60 * 1000);
 }
 
+// v2.4.1: un cobro vencido o cancelado puede terminar pagado en el Point (la tarjeta ya estaba pasando).
+// Se sigue mirando 2 minutos; si se pagó, la venta se registra con ese pago.
+function ptVigilar(c) {
+  if (ptVigia) clearTimeout(ptVigia);
+  const hasta = Date.now() + 120000;
+  const mirar = async () => {
+    if (ptIntentoAnterior !== c || ptCobro || Date.now() > hasta) return;
+    let d = null;
+    try { d = await ptPedir('GET', '/estado?ref=' + encodeURIComponent(c.referencia) + '&verificar=1'); } catch (e) { d = null; }
+    if (ptIntentoAnterior !== c || ptCobro) return;
+    if (d && d.ok && d.estado === 'pagado') { ptIntentoAnterior = null; ptCobro = c; return ptPagado(d); }
+    ptVigia = setTimeout(mirar, 4000);
+  };
+  ptVigia = setTimeout(mirar, 4000);
+}
+// Antes de cobrar otra vez la misma venta, se revisa si el intento anterior terminó pagado
+async function ptRevisarAnterior(monto, total) {
+  const c = ptIntentoAnterior;
+  if (!c || c.monto !== monto || c.total !== total) { ptIntentoAnterior = null; return false; }
+  let d = null;
+  try { d = await ptPedir('GET', '/estado?ref=' + encodeURIComponent(c.referencia) + '&verificar=1'); } catch (e) { d = null; }
+  if (d && d.ok && d.estado === 'pagado') { ptIntentoAnterior = null; ptCobro = c; await ptPagado(d); return true; }
+  if (d && d.ok && ['en_point', 'enviado', 'accion'].includes(d.estado)) { ptCobro = c; ptEsperando('El cobro anterior todavía está en el Point: páguelo o cancélelo ahí.'); ptSondear(0); return true; }
+  ptIntentoAnterior = null;
+  return false;
+}
+
 // Cuánto se cobra con tarjeta en esta venta (con el Point integrado, "Tarjeta" es el botón de Débito)
 function montoTarjetaPoint() {
   const total = parseInt(document.getElementById('resumenVenta').dataset.total) || 0;
@@ -2937,6 +2965,11 @@ async function cobrarConPoint(monto) {
   }
   // Un pago ya confirmado cuya venta no alcanzó a registrarse: se registra sin volver a cobrar
   if (pagoPointPendiente && pagoPointPendiente.monto === monto && pagoPointPendiente.total === total) { return registrarPagado(pagoPointPendiente); }
+  // v2.4.1: si el intento anterior de esta misma venta terminó pagado (o sigue en el Point), no se cobra otra vez
+  if (ptIntentoAnterior) {
+    ptVentana(`<div class="pt-centro"><div class="pt-tit" id="ptTitulo">Revisando el cobro anterior…</div><div class="pt-monto">${ptPesos(monto)}</div></div>`);
+    if (await ptRevisarAnterior(monto, total)) return;
+  }
   const tienda = ptNombreTienda(sucursal);
   ptVentana(`<div class="pt-centro"><div class="pt-tienda">Point de ${tienda}</div><div class="pt-monto">${ptPesos(monto)}</div>
     <div class="pt-tit" id="ptTitulo">Enviando el cobro al Point…</div></div>`);
@@ -2978,7 +3011,7 @@ function ptSondear(n) {
   ptSondeo = setTimeout(async () => {
     const c = ptCobro;
     if (!c) return;
-    const verificar = Date.now() - c.creada > 60000 && n % 5 === 0;
+    const verificar = Date.now() - c.creada > 3000; // v2.4.1: el servidor confirma con Mercado Pago (como mucho cada 3 s)
     let d = null;
     try { d = await ptPedir('GET', '/estado?ref=' + encodeURIComponent(c.referencia) + (verificar ? '&verificar=1' : '')); } catch (e) { d = null; }
     if (!ptCobro || ptCobro !== c) return;
@@ -3018,7 +3051,7 @@ async function registrarPagado(pago) {
   pagoPointListo = null;
   const registrada = antes > 0 && pedidoLineas.length === 0;
   if (registrada) {
-    pagoPointPendiente = null;
+    pagoPointPendiente = null; ptIntentoAnterior = null;
     ptCerrarVentana();
     if (!pagoDividido) selMedio('efectivo');
     pintarModoPoint();
@@ -3034,6 +3067,7 @@ async function registrarPagado(pago) {
 function ptNoPagado(estado) {
   const c = ptCobro; ptCobro = null;
   if (ptReloj) { clearInterval(ptReloj); ptReloj = null; }
+  ptIntentoAnterior = c; ptVigilar(c);
   const motivo = { cancelado: 'Se canceló el cobro.', vencido: 'Pasaron 3 minutos sin pagar.', fallido: 'La tarjeta fue rechazada o el pago falló.', devuelto: 'El pago se devolvió.' }[estado] || '';
   ptVentana(`<div class="pt-centro"><div class="pt-tit pt-mal" id="ptTitulo">El pago no se completó</div><div class="pt-monto">${ptPesos(c.monto)}</div>
     <div class="pt-sub">${motivo} La venta no se registró y el pedido sigue abierto.</div>
@@ -3046,7 +3080,7 @@ window.ptCancelar = async function() {
   let d = null;
   try { d = await ptPedir('POST', '/cancelar', { referencia: c.referencia }); } catch (e) { d = null; }
   if (d && d.ok && d.estado === 'pagado') return ptPagado(d);
-  if (d && d.ok && ['cancelado', 'vencido', 'fallido'].includes(d.estado)) { ptCobro = null; ptCerrarVentana(); showToast('Cobro cancelado'); return; }
+  if (d && d.ok && ['cancelado', 'vencido', 'fallido'].includes(d.estado)) { ptCobro = null; ptIntentoAnterior = c; ptVigilar(c); ptCerrarVentana(); showToast('Cobro cancelado'); return; }
   ptEsperando('El cobro ya está en el Point: cancélelo en el mismo Point (salga de la pantalla de cobro y confirme). Esta pantalla avanza sola.');
 };
 window.ptCerrarVentana = ptCerrarVentana;
@@ -3110,7 +3144,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.4.0';
+const CAJA_VERSION = '2.4.1';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3296,7 +3330,7 @@ window.registrarVenta = async function() {
     ultimaVentaRegistrada = venta;
     pedidoLineas = [];
     resetPagoDividido();
-    pagoSinIntegracion = false; pintarModoPoint(); // v2.4.0
+    pagoSinIntegracion = false; ptIntentoAnterior = null; pintarModoPoint(); // v2.4.0 · v2.4.1
     renderPedido();
     await cargarUltimasVentas();
     showToast(`✅ Venta registrada · $${total.toLocaleString('es-CL')}`);
@@ -3354,7 +3388,7 @@ window.cerrarYCobrarMesa = async function() {
     showToast(`✅ Mesa cobrada · $${total.toLocaleString('es-CL')}`);
     pedidoLineas = [];
     resetPagoDividido();
-    pagoSinIntegracion = false; pintarModoPoint(); // v2.4.0
+    pagoSinIntegracion = false; ptIntentoAnterior = null; pintarModoPoint(); // v2.4.0 · v2.4.1
     volverAMesas();
   } catch(e) {
     alert('Error al cobrar mesa: ' + e.message);

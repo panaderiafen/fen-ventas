@@ -1,79 +1,63 @@
-# fën caja · v2.3.1
+# fën caja · v2.4.1
 
-**Arreglo chico sobre la v2.3.0: vuelven los dos correos que te llegan al cerrar caja con descuadre y cuando una cajera pide anular una venta.** Todo lo demás es igual a la v2.3.0. · 22 de octubre de 2026
+**Arreglo sobre la v2.4.0, después de la prueba del 29 oct en Ainavillo: la venta pagada con el Point se registra en unos segundos (antes 30 a 40) y, si un cobro "no completado" igual termina pagado, se registra ese pago en vez de cobrar otra vez.** Todo lo demás es igual a la v2.4.0. · 29 de octubre de 2026
 
-## v2.3.1: vuelven los correos de descuadre y de anulación
-La v2.3.0 quitó todas las llamadas a Apps Script, y con ellas se fueron también dos correos que usas. En esta versión vuelven **solo esos dos**, igual que en la v2.2.0:
-
-1. **Descuadre al cerrar caja:** si el cierre tiene diferencia, te llega el correo "Descuadre de caja" con la sucursal, la fecha de la caja, la cajera, la diferencia total, la diferencia en efectivo y la nota de la cajera (lo envía el script de ventas, `caja/webhook-ventas`).
-2. **Solicitud de anulación:** cuando una cajera pide anular una venta, te llega el correo con la venta, el total, el medio de pago y el motivo (lo envía el script de caja, `caja/webhook-caja`).
-
-- Los dos salen **sin esperar**: si el script tarda o no responde, el cierre y la solicitud siguen igual (los datos ya quedaron en Firestore y Sistema Fën → Hoy los muestra).
-- Llevan, como antes, el token de la sesión de Firebase y la clave única, así que los scripts que ya tienes los aceptan y un envío repetido no llega dos veces.
-- **Arreglo de paso:** la ventana para escribir la nota del descuadre quedaba **debajo** de la ventana del cierre (así venía desde la v2.1), y en algunos equipos no se podía tocar "Continuar y cerrar caja". Ahora queda encima.
-- **Nada más vuelve:** ni la copia de los cierres o la merma a la planilla, ni la lista de recetas (CSV), ni las ventas mensuales.
-
-### Instalación (2 minutos)
-1. GitHub, repo **fen-ventas**, **raíz** → **Add file → Upload files** → `index.html` de este zip (reemplaza el de la v2.3.0) → **Commit changes**. Guarda este README en `respaldos/caja-v2.3.1/`.
-2. Espera 1 o 2 minutos y recarga los equipos de caja (Ctrl+Shift+R en el PC; en la tablet, cerrar y abrir).
-
-**Nada que cambiar en las reglas ni en Apps Script:** las reglas de Firestore siguen en v1.5.0 y los dos scripts (`webhook-caja` y `webhook-ventas`) siguen funcionando tal como están.
-
-### Lista de verificación v2.3.1
-- [ ] Productos → abajo dice **Caja v2.3.1**.
-- [ ] Pide anular una venta de prueba → te llega el correo de la solicitud de anulación.
-- [ ] Cierra una caja de prueba con una diferencia (por ejemplo, $100 menos en efectivo) y escribe la nota → te llega el correo "Descuadre de caja".
-- [ ] Un cierre sin diferencia no manda correo.
-
-### Si algo sale mal
-Sube de nuevo el `index.html` de la v2.3.0 (`caja-v2.3.0.zip`): todo funciona igual, solo que sin esos dos correos.
+## v2.4.1
+- Mientras espera el pago, la caja pide al servidor de cobros que confirme con Mercado Pago (necesita **fen-point 0.4.1**).
+- Un cobro vencido o cancelado se sigue mirando 2 minutos; antes de "Volver a cobrar" se revisa el intento anterior. (En la prueba, Mercado Pago no dejó pagar un cobro vencido o cancelado: es un resguardo.)
+- Si la venta se cobra de otra forma (por ejemplo, en efectivo), el intento anterior deja de mirarse.
+- Dónde va: igual que la v2.4.0 (`index.html` a la raíz de fen-ventas; este README a `respaldos/caja-v2.4.1/`). Primero el Worker 0.4.1.
+- Pruebas: `pruebas/caja241/caja-v241.test.js` (15: las 11 de la v2.4.0 contra la v2.4.1 y 4 nuevas).
 
 ---
 
-# Lo que trae la v2.3.0 (sigue igual)
+# fën caja · v2.4.0
 
-**Etapa 2b del plan de coherencia: el catálogo se administra solo en Sistema Fën.** Va con **Sistema Fën v0.75.0** y las **reglas de Firestore v1.5.0** de fen-ventas.
+**Cobro con el Point de Mercado Pago integrado.** Cuando el Point de la tienda está en modo integrado (PDV), el botón "Tarjeta" manda el cobro al Point y la venta se registra sola cuando Mercado Pago confirma el pago. Cuando el Point está en modo normal, la caja funciona exactamente como antes. · 29 de octubre de 2026
 
-## Para qué
-Tus decisiones: un dueño por cosa; unir por ID, nunca por nombre; se crea en un solo lugar y los demás piden; una sola lista de áreas (la de Sistema Fën); la venta guarda su foto; nada se borra. Desde esta versión **la caja solo vende lo que está habilitado** en Sistema Fën → Catálogo y, si falta algo, **lo pide**.
+## Dónde va
+| Archivo | Dónde |
+|---|---|
+| `index.html` | GitHub, repo **fen-ventas**, **raíz** (Upload files; reemplaza al de la v2.3.1) |
+| `README.md` | repo fen-ventas, carpeta `respaldos/caja-v2.4.0/` |
 
-## Qué cambia
-1. **Productos:** ninguna cuenta crea ni cambia productos en la caja (ni precios, ni área, ni receta, ni activar o desactivar). Se hace en **Sistema Fën → Catálogo → Productos**. La pestaña Productos de la caja ahora tiene:
-   - **Pedir producto** (todas las cuentas) y **Tus pedidos** (con su estado: Pendiente, Aprobado o Rechazado, y la respuesta).
-   - Los tipos de leche y los motivos de merma (igual que antes).
-   - Solo la administración: la **lista de productos para mirar**, con el aviso de los productos **sin área**.
-2. **Pedir producto** (también en la pantalla de venta, junto a "Vista general"): un diálogo en la página con el nombre, un precio sugerido (con IVA, opcional) y una nota. Se guarda en `solicitudes_producto` y aparece en Sistema Fën → Hoy y → Catálogo → Productos → Pedidos. Cuando lo resuelves, la cajera ve "Aprobado" (o "Rechazado" con el motivo) y el producto aparece en la caja al recargarla.
-3. **Áreas (pestañas):** la lista fija de Sistema Fën: **Panadería, Bollería, Pastelería, Cafetería y Reventa**. La pestaña antigua **REV es la misma Reventa** (los productos con área REV o REVENTA salen juntos en "Reventa"). Un producto con un área que no está en la lista (o vacía) **ya no cae en Bollería**: sale en la pestaña **"Sin área"** y la lista de la administración lo avisa (corrígelo en el Catálogo). La caja ya no crea, cambia ni borra áreas.
-4. **La venta guarda su foto:** cada línea de una venta lleva `catalogoId`, `tipo` (receta, reventa o cargo), `area`, `recetaId` o `reventaId` y `unidadesPorVenta` (si el producto las tiene), tal como estaba el producto al vender (un producto anterior al catálogo usa su ID de receta de siempre). El resumen de cada cierre (`resumenes_caja`) lleva también, por producto, `catalogoId`, `tipo`, `recetaId` y `reventaId`. Así Finanzas y el Plan de Panadería saben qué se vendió aunque el producto cambie después.
-5. **Sin Apps Script ni planillas:** la caja ya no llama a ningún script ni lee la planilla. Se quitaron: la lista de recetas de Producción (CSV), "Recetas sin producto en B2C", vincular recetas, "Revisar sincronización", las áreas, la reconciliación de nombres históricos (equivalencias), "Ventas mensuales hacia fën-producción", **la copia de los cierres a la planilla** (y su aviso "no alcanzó a llegar a la planilla" y "Cierres sin pasar a planilla"), la copia de la merma a la planilla y (solo en la v2.3.0) los correos de anulación y descuadre, que vuelven en la v2.3.1. Todo queda en Firestore, donde lo lee Sistema Fën (Hoy muestra las anulaciones por aprobar y los descuadres).
-6. **El cierre** guarda el resumen como siempre. Si no alcanzara a guardarse (por ejemplo, sin conexión), la caja queda marcada (`resumenPendiente`) y se reintenta sola al elegir la sucursal y a medianoche; en Sistema Fën → Ventas de caja aparece en "Cierres sin resumen" con "Generar resumen".
-7. Sigue igual: vender, el stock por tarjeta y lotes, la merma (Stock → Merma; registrarla queda en el informe de merma), anulaciones, mesas, la impresión, los reportes, la evaluación de caja y los tiempos de pago.
+**Antes:** publicar el servidor de cobros **fen-point 0.4.0** en Cloudflare (la caja le pregunta el modo del Point). Reglas de Firestore y Apps Script: **nada que cambiar**.
 
-## Lecturas y escrituras
-- **Menos:** ya no se lee la lista de recetas (CSV) ni las áreas de Firestore, y ya no hay envíos al script.
-- **Pedir producto:** 1 escritura por pedido; "Tus pedidos": 1 lectura por pedido de esa cuenta (los suyos), al abrir el diálogo o la pestaña Productos.
-- **Lista de la administración:** los productos, una vez al abrir la lista.
-- La venta y el cierre: las mismas lecturas y escrituras que la v2.2.0.
+## Qué cambia para la vendedora
+- **El modo lo manda el Point.** La caja pregunta el modo del Point de su tienda al entrar y cada 3 minutos.
+  - **Point en modo integrado:** en "Medio de pago" aparece "Point integrado"; Débito y Crédito se juntan en **"Tarjeta"** (el Point sabe cuál es).
+  - **Point en modo normal, o sin respuesta del servidor:** la caja es la de siempre (Efectivo, Débito, Crédito, Transferencia).
+- **Cobrar con tarjeta (integrado):** al tocar "Registrar pago", el monto aparece solo en el Point. La pantalla "El cliente paga en el Point" muestra cuánto falta para que venza (3 minutos) y los botones **Cancelar cobro** y **Cobrar sin integración**.
+  - **Pagado:** la venta se registra sola con el tipo real (débito o crédito; prepago y dinero en cuenta se suman a débito) y el número de la orden de Mercado Pago.
+  - **Rechazado, cancelado o vencido:** no se registra nada; el pedido sigue abierto para volver a cobrar o cambiar el medio de pago.
+  - **Cancelar:** si el cobro ya llegó al Point, se cancela en el mismo Point (salir de la pantalla de cobro y confirmar); la caja lo avisa y avanza sola.
+- **Pago dividido:** la parte con tarjeta (casilla "Tarjeta") es la única que va al Point.
+- **Efectivo y transferencia:** no tocan el Point.
+- **Plan B (sin conexión con el Point):** la caja muestra los pasos: cancelar en el Point si el cobro alcanzó a llegar, pasar el Point a modo normal (**Más opciones › Ajustes › Modo de vinculación**), digitar el monto y registrar con Débito o Crédito. Esa venta queda marcada (`pagoSinIntegracion`) para cuadrarla con el reporte de Mercado Pago. La venta siguiente vuelve sola al cobro integrado.
+- **Si el pago se confirmó pero la venta no alcanzó a registrarse** (por ejemplo, se cortó internet): la caja lo dice y "Registrar venta" la registra con el pago ya confirmado, sin volver a cobrar.
+- **Cierre de caja:** lo cobrado con el Point integrado aparece arriba de Débito y Crédito ("confirmado por Mercado Pago, no se cuenta"); abajo se escribe solo lo cobrado sin integración. El arqueo lo suma solo.
+- **Una venta cobrada con el Point integrado no cambia de medio de pago** desde "Últimas ventas" (lo confirmó Mercado Pago).
+- **Cada equipo recuerda su tienda:** la primera vez queda anotada; si después se elige la otra, pregunta "Este equipo suele trabajar en …, ¿seguro que quiere entrar como …?". No bloquea.
 
-## Archivos
-```
-index.html      la caja v2.3.1   → GitHub, repo fen-ventas, raíz
-README.md       este archivo     → GitHub, repo fen-ventas, respaldos/caja-v2.3.1/
-```
-`parche_v231.py` (solo para quien mantiene la caja) arma este `index.html` desde la v2.2.0: aplica `parche_v230.py` y le suma los dos correos.
+## Qué guarda
+- `ventas/{id}.pagoPoint`: `{ referencia, ordenId, pagoId, tipoPago, medio, monto }` en las ventas cobradas con el Point integrado; `pagoSinIntegracion: true` en las cobradas a mano con el Point integrado (plan B).
+- `cajas/{id}.totalesPoint`: `{ debito, credito }`, en la misma escritura de los totales (sin escrituras nuevas).
+- En el equipo: `fen_caja_tienda_equipo` (la tienda del equipo).
+- Lo demás, igual que la v2.3.1. Sistema Fën lee las ventas y los cierres como siempre.
 
-## Instalación de la v2.3.0 (si vienes de la v2.2.0; unos 5 minutos, en este orden)
-1. **Primero las reglas:** consola de Firebase → proyecto **fen-ventas** → Firestore → **Reglas** → pega `firestore.rules` (**v1.5.0**, viene en el zip de Sistema Fën v0.75.0) → **Publicar**. Sin ellas, "Pedir producto" dice que faltan las reglas; con ellas, la caja v2.2.0 ya no puede crear productos (por eso va primero y la caja justo después).
-2. **La caja:** GitHub, repo **fen-ventas**, **raíz** → **Add file → Upload files** → `index.html` de este zip → **Commit changes**. Guarda este README en `respaldos/caja-v2.3.0/`.
-3. Espera 1 o 2 minutos y recarga los equipos de caja (Ctrl+Shift+R en el PC; en la tablet, cerrar y abrir).
+## Costo
+Firestore: las mismas lecturas y escrituras por venta; al abrir el cierre, una lectura de la caja. El servidor de cobros (Cloudflare, gratis) recibe: el modo del Point cada 3 minutos por equipo, el cobro y una pregunta cada 2 segundos mientras se espera el pago.
 
-## Lista de verificación v2.3.0
-- [ ] Productos → abajo dice **Caja v2.3.0**; no hay formulario de producto ni "Recetas sin producto"; está **Pedir producto**.
-- [ ] Venta: las pestañas son Panadería, Bollería, Pastelería, Cafetería y **Reventa** (las que tienen productos); lo que antes estaba en REV sale en Reventa.
-- [ ] Vende un pan y un producto de reventa: el cobro, el ticket y el stock se ven igual. En Firebase → `ventas`, la última venta: cada línea tiene `catalogoId`, `tipo`, `area` y `recetaId` o `reventaId`.
-- [ ] **Pedir producto** con un nombre de prueba → en "Tus pedidos" dice Pendiente → en Sistema Fën → Hoy dice "1 producto pedido" → resuélvelo (o recházalo) en Catálogo → Productos → Pedidos → en la caja dice Aprobado (o Rechazado) con la respuesta.
-- [ ] Cierra la caja: se cierra sin avisos de planilla; en `resumenes_caja/<id>` cada producto trae `catalogoId` y `tipo`.
-- [ ] Con la cuenta de administración: Productos → Lista de productos (solo para mirar). Si hay productos "sin área", el aviso los nombra: corrígelos en el Catálogo.
+## Límites conocidos
+- Si se anula una venta cobrada con el Point integrado, el cierre todavía la cuenta como cobrada con tarjeta (el dinero se cobró; la devolución se hace en Mercado Pago).
+- Las mesas usan el mismo cobro integrado al "Cobrar y cerrar mesa".
 
-## Si algo sale mal
-Sube de nuevo el `index.html` de la v2.2.0 (`respaldos/caja-v2.2.0/` o `caja-v2.2.0.zip`). Ojo: con las reglas v1.5.0, la v2.2.0 ya no deja a las cajeras crear productos ni áreas (la administración sí); vender, cerrar y lo demás funciona igual. Lo vendido con la v2.3.0 queda bien (los campos nuevos simplemente no se usan).
+## Pruebas
+`pruebas/caja24/caja-v240.test.js` (12): el parche reproduce el archivo; sin secretos; Point en modo normal = caja de siempre; cobro integrado pagado con crédito; efectivo sin Point y prepago como débito; pago dividido; vencido y volver a cobrar; cancelar en el Point; plan B; cierre que cuadra; el equipo recuerda su tienda; no se cambia el medio de una venta del Point. Capturas en `pruebas/capturas/caja240/`.
+
+## Checklist
+- [ ] Servidor de cobros en 0.4.0 (su dirección lo dice).
+- [ ] Subir `index.html` a la raíz de fen-ventas; abajo en Productos dice "Caja v2.4.0".
+- [ ] Con el Point de Barros Arana en **modo normal**: la caja se ve y cobra como siempre.
+- [ ] Piloto en horario tranquilo: Sistema Fën → Ventas de caja → Point → Barros Arana "Pasar a integrado" y reiniciar el Point; en la caja aparece "Point integrado" (o al volver a entrar); una venta chica con "Tarjeta"; revisar que quede registrada y en "Cobros recientes".
+- [ ] Probar una vez el plan B en el Point (Más opciones › Ajustes › Modo de vinculación).
