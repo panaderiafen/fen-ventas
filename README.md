@@ -1,3 +1,27 @@
+# fën caja · v2.6.0
+
+**Etapa 2 de la revisión de la caja B2C: cada venta se guarda de una sola vez.** La venta, la marca de los productos vendidos, los totales de la caja, el descuento de stock y su movimiento van juntos en un lote de escrituras: o queda todo o no queda nada. Igual al cobrar una mesa (venta, totales y cierre de la mesa). Además, **la versión se ve** en la pantalla de ingreso y en el encabezado, al lado del correo. · 29 de octubre de 2026
+
+## Qué cambia
+- **Sin ventas a medias:** si se corta internet al registrar, la caja avisa "Error al registrar" y el pedido sigue abierto para reintentar; no queda una venta sin sumar a la caja ni stock sin descontar. Es la causa más probable de los cierres que no cuadraban.
+- **El stock se descuenta restando** lo que sale (antes se escribía el número nuevo): si dos equipos venden el mismo pan a la vez, los dos descuentos cuentan. Si se vende más de lo que había, el lote puede quedar en negativo (antes quedaba en 0 y la diferencia se perdía).
+- **Para la vendedora, nada cambia** salvo la versión a la vista.
+- Si la caja no puede leer el stock antes de vender (sin conexión), sigue el camino de siempre, como antes.
+
+## Dónde va (repo fen-ventas, raíz, los cuatro juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png` (el logo no cambia, pero se sube igual). Este README a `respaldos/caja-v2.6.0/`. Reglas de Firestore, Apps Script y servidor de cobros: sin cambios.
+
+## Checklist
+- [ ] Los cuatro archivos en la raíz de fen-ventas, en una sola subida.
+- [ ] Al abrir la caja dice "Caja v2.6.0" debajo de Entrar y "· v2.6.0" al lado del correo.
+- [ ] Una venta en efectivo, una con tarjeta y una de un pan con stock: se registran como siempre y el stock baja.
+
+## Pruebas
+- `pruebas/caja26/caja-v260.test.js` (18): las de la v2.5.0 contra la v2.6.0; versión a la vista; una venta = un lote; si el lote falla no queda nada y el pedido sigue.
+- `pruebas/caja26/caja-v260-azar.test.js`: **150 ventas al azar** (con y sin control de stock, permanentes, lotes de hoy, ayer y antes de ayer, los cuatro medios y pago dividido) dejan exactamente los mismos datos en la v2.6.0 que en la v2.5.0: ventas, totales, stock por lote, movimientos y productos marcados; un lote por venta.
+
+---
+
 # fën caja · v2.5.0
 
 **Etapa 1 de la revisión de la caja B2C: el archivo pasa de 4,9 MB a unos 380 KB.** El logo, que estaba incrustado dos veces (2,3 MB cada una), queda como imagen aparte de 53 KB; los estilos y el código, en sus propios archivos. **Nada más cambia:** la caja hace exactamente lo mismo que la v2.4.1 (se comprueba juntando los archivos de nuevo). · 29 de octubre de 2026

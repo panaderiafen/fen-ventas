@@ -1,7 +1,7 @@
-// fën caja v2.5.0 · código (antes dentro de index.html)
+// fën caja v2.6.0 · código
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -1737,6 +1737,31 @@ async function incrementarTotalesCaja(pagoData, total) {
   }
 }
 
+// ─── v2.6.0: cada venta de una sola vez (lote de escrituras) ───────────────
+// Un id como los de Firestore (20 letras y números al azar), para conocer el id de la venta antes de guardarla.
+function idNuevo() {
+  const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const b = new Uint8Array(20); crypto.getRandomValues(b);
+  return Array.from(b, x => abc[x % abc.length]).join('');
+}
+// Los productos que se venden por primera vez quedan marcados (tuvoVentas), en el mismo lote
+function marcarProductosEnLote(lote, lineas) {
+  const nuevos = [];
+  for (const id of [...new Set((lineas || []).map(l => l.id).filter(Boolean))]) {
+    const prod = productos.find(p => p.id === id);
+    if (prod && !prod.tuvoVentas) { lote.update(doc(db, 'productos', id), { tuvoVentas: true }); nuevos.push(prod); }
+  }
+  return nuevos;
+}
+// Los mismos incrementos de incrementarTotalesCaja, en el lote
+function totalesCajaEnLote(lote, pagoData, total) {
+  const cambios = { totalVentas: increment(total), nVentas: increment(1) };
+  if (pagoData.pagos) pagoData.pagos.forEach(p => { cambios[`totales.${p.medio}`] = increment(p.monto); });
+  else cambios[`totales.${pagoData.medioPago}`] = increment(total);
+  if (pagoData.pagoPoint) cambios[`totalesPoint.${pagoData.pagoPoint.medio}`] = increment(pagoData.pagoPoint.monto);
+  lote.update(doc(db, 'cajas', cajaId), cambios);
+}
+
 // Enruta el botón "Registrar pago / Cobrar" según el modo activo
 window.confirmarPagoBoton = function() {
   // v2.4.0: con el Point integrado, la parte con tarjeta se cobra primero en el Point
@@ -2041,7 +2066,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.5.0';
+const CAJA_VERSION = '2.6.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2170,13 +2195,34 @@ window.registrarVenta = async function() {
   const planStock = await planearStockVenta(pedidoLineas, venta.fecha);
   agregarTarjetaYLotes(venta.lineas, pedidoLineas, planStock);
   try {
+    if (planStock) {
+      // v2.6.0: la venta, los productos vendidos, los totales de la caja, el stock y su movimiento, de una sola vez
+      const lote = writeBatch(db);
+      const ventaRef = doc(db, 'ventas', idNuevo());
+      lote.set(ventaRef, venta);
+      const marcados = marcarProductosEnLote(lote, venta.lineas);
+      totalesCajaEnLote(lote, pagoData, total);
+      const descontadosLote = [];
+      for (const p of planStock) {
+        if (!p) continue;
+        for (const e of p.escrituras) {
+          // Se resta lo que sale (no se escribe el número nuevo): dos equipos a la vez no se pisan
+          lote.update(p.stockRef, Object.assign({ [`entradas.${e.key}`]: increment(-e.cantidad) }, e.extra || {}));
+          descontadosLote.push({ productoId: p.productoId, key: e.key, cantidad: e.cantidad });
+        }
+      }
+      const mov = descontadosLote.filter(d => d && d.cantidad > 0);
+      if (mov.length) lote.set(doc(db, 'stockMovimientos', idNuevo()), { tipo: 'venta', ventaId: ventaRef.id, sucursal, descontados: mov, usuario: usuario.email, fecha: Timestamp.now() });
+      await lote.commit();
+      marcados.forEach(p => { p.tuvoVentas = true; });
+    } else {
     const ventaRef = await addDoc(collection(db, 'ventas'), venta);
     await marcarProductosConVenta(venta.lineas);
     // Actualizar caja
     await incrementarTotalesCaja(pagoData, total);
     // v2.1.1: se anota de qué lote salió cada unidad, para devolverla ahí si la venta se anula
     const descontados = [];
-    if (planStock) {
+    if (false) {
       // v2.2.0: el mismo descuento de siempre, ya decidido antes de guardar la venta
       for (const p of planStock) {
         if (!p) continue;
@@ -2224,6 +2270,7 @@ window.registrarVenta = async function() {
     }
     }
     await registrarMovimientoVenta(ventaRef.id, descontados);
+    } // v2.6.0: fin del camino sin plan de stock (como antes)
     ultimaVentaRegistrada = venta;
     pedidoLineas = [];
     resetPagoDividido();
@@ -2276,11 +2323,14 @@ window.cerrarYCobrarMesa = async function() {
   };
   agregarTarjetaYLotes(venta.lineas, pedidoLineas, null); // v2.2.0
   try {
-    await addDoc(collection(db, 'ventas'), venta);
-    await marcarProductosConVenta(venta.lineas);
-    await incrementarTotalesCaja(pagoData, total);
-    // El stock NO se vuelve a descontar acá — ya se descontó al agregar cada producto a la mesa.
-    await updateDoc(doc(db, 'mesas', mesaActivaId), { estado: 'cerrada', cierre: Timestamp.now(), total });
+    // v2.6.0: de una sola vez. El stock NO se vuelve a descontar acá — ya se descontó al agregar cada producto a la mesa.
+    const lote = writeBatch(db);
+    lote.set(doc(db, 'ventas', idNuevo()), venta);
+    const marcados = marcarProductosEnLote(lote, venta.lineas);
+    totalesCajaEnLote(lote, pagoData, total);
+    lote.update(doc(db, 'mesas', mesaActivaId), { estado: 'cerrada', cierre: Timestamp.now(), total });
+    await lote.commit();
+    marcados.forEach(p => { p.tuvoVentas = true; });
     ultimaVentaRegistrada = venta;
     showToast(`✅ Mesa cobrada · $${total.toLocaleString('es-CL')}`);
     pedidoLineas = [];
