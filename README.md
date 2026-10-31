@@ -1,3 +1,30 @@
+# fën caja · v3.1.0
+
+**Ajustes pedidos por Emmanuel el 31 oct**, con la caja y la venta tranquilas. Va junto con **Sistema Fën v0.121.0**. Reglas de Firestore: sin cambios (fen-ventas v1.8.0). · 31 de octubre de 2026
+
+## Qué cambia
+1. **La caja se entera sola de las anulaciones.** Cuando la administración aprueba o rechaza en Sistema Fën una anulación pedida desde esta caja, aparece un aviso ("Anulación aprobada: venta de $X") y se actualizan las ventas del turno, sin recargar la página.
+2. **El arqueo se mantiene al día solo** (también después de una anulación aprobada). "Actualizar arqueo" queda de respaldo. Cuesta una lectura por cada cambio de la caja.
+3. **Siempre parte en Tarjeta.** Al abrir la caja y después de cada venta (también al cobrar una mesa) queda seleccionada Tarjeta, aunque la venta anterior haya sido en efectivo o transferencia.
+4. **El medio de pago elegido se nota más:** borde grueso, fondo más fuerte y negrita.
+5. **Texto para el sobre:** al confirmar un cierre con retiro, aparece el texto para el sobre (sucursal, fecha, monto y quién cerró) con **Copiar**, **Imprimir** (en la impresora de comandas, como la comanda) y **Listo**.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`. Súbalo con la caja cerrada o en un momento sin ventas.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.1.0".
+- [ ] Al abrir la caja, Tarjeta está seleccionada y se ve marcada.
+- [ ] Una venta en efectivo: después de registrarla, vuelve a Tarjeta.
+- [ ] Pedir una anulación y aprobarla en Sistema Fën: en la caja aparece el aviso y la venta queda anulada sin recargar; el arqueo baja solo.
+- [ ] Al cerrar con retiro, aparece el texto para el sobre; probar Imprimir.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v310.test.js` (3, navegador con Firebase en memoria): Tarjeta por defecto y marcada; arqueo que cambia solo y aviso de anulación aprobada; texto para el sobre al cerrar (390 px, sin ventanas del navegador).
+- Las pruebas de la v3.0.0 (retiro, ingreso, anular, cierre en tres pasos, falla sin nada a medias) siguen pasando.
+
+---
+
 # fën caja · v3.0.0
 
 **Etapa 4 de la revisión de la caja B2C: efectivo del turno** (bocetos "Efectivo de la caja" aprobados por Emmanuel el 30 oct; mapa v15). Va junto con **Sistema Fën v0.119.0** y las **reglas fen-ventas v1.7.0**. · 31 de octubre de 2026

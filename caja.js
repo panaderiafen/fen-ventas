@@ -1,9 +1,9 @@
-// fën caja v3.0.0 · código
+// fën caja v3.1.0 · código
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.0.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.0.0'; // v3.0.0
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { armarResumen } from './resumen-caja.js?v=3.1.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.1.0'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -84,7 +84,7 @@ window.reimprimirVentaTurno = function(ventaId) {
 };
 // ── Pago dividido ──
 let pagoDividido = false;
-let medioSeleccionado = 'efectivo';
+let medioSeleccionado = 'debito';   // v3.1.0: parte siempre en Tarjeta (el botón débito dice "Tarjeta" con el Point integrado)
 let descTipo = 'pct';
 let cajaId = null;
 let esAdmin = false;
@@ -139,6 +139,7 @@ window.login = async function() {
 
 window.cerrarSesion = async function() {
   if (confirm('¿Cerrar sesión?')) {
+    dejarDeEscucharCaja(); // v3.1.0
     sucursal = null;
     pedidoLineas = [];
     await signOut(auth);
@@ -1851,7 +1852,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.0.0';
+const CAJA_VERSION = '3.1.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2074,6 +2075,7 @@ window.registrarVenta = async function() {
     pedidoLineas = [];
     resetPagoDividido();
     pagoSinIntegracion = false; ptIntentoAnterior = null; pintarModoPoint(); // v2.4.0 · v2.4.1
+    selMedio('debito'); // v3.1.0: después de cada venta vuelve a Tarjeta
     renderPedido();
     await cargarUltimasVentas();
     showToast(`Venta registrada · $${total.toLocaleString('es-CL')}`);
@@ -2135,6 +2137,7 @@ window.cerrarYCobrarMesa = async function() {
     pedidoLineas = [];
     resetPagoDividido();
     pagoSinIntegracion = false; ptIntentoAnterior = null; pintarModoPoint(); // v2.4.0 · v2.4.1
+    selMedio('debito'); // v3.1.0
     volverAMesas();
   } catch(e) {
     alert('Error al cobrar mesa: ' + e.message);
@@ -2257,6 +2260,7 @@ async function verificarCaja() {
     document.getElementById('cardAbrirCaja').classList.add('hidden');
     document.getElementById('cardCajaAbierta').classList.remove('hidden');
     mostrarResumenCaja(snap.docs[0].data());
+    escucharCaja(cajaId); // v3.1.0
     await cargarUltimasVentas();
   }
   await avisarCajaAnterior();
@@ -2539,6 +2543,7 @@ window.abrirCaja = async function() {
     cajaId = ref.id;
     document.getElementById('cardAbrirCaja').classList.add('hidden');
     document.getElementById('cardCajaAbierta').classList.remove('hidden');
+    escucharCaja(cajaId); // v3.1.0
     mostrarResumenCaja({ fecha: hoy, montoInicial: monto, totales: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 }, totalVentas: 0, nVentas: 0 });
     showToast('Caja abierta');
   } catch(e) { alert('Error al abrir caja: ' + e.message); }
@@ -2553,6 +2558,11 @@ function filaRes(txt, monto, cls) {
   return `<div class="resumen-row${cls ? ' ' + cls : ''}"><span>${txt}</span><span>${monto}</span></div>`;
 }
 function mostrarResumenCaja(data) {
+  pintarArqueo(data);
+  cargarMovsCaja();
+}
+// v3.1.0: solo pinta el arqueo (lo usa también la escucha de la caja, sin volver a leer los movimientos)
+function pintarArqueo(data) {
   _cajaArqueo = data || {};
   const t = _cajaArqueo.totales || {};
   const tp = _cajaArqueo.totalesPoint || {};
@@ -2571,7 +2581,6 @@ function mostrarResumenCaja(data) {
     (point ? `<div class="ef-ayuda" style="margin:-2px 0 4px">Con el Point integrado: $${n(point)}</div>` : '') +
     filaRes('Transferencia', '$' + n(t.transferencia)) +
     filaRes(`Total ventas (${_cajaArqueo.nVentas || 0})`, '$' + n(_cajaArqueo.totalVentas), 'total');
-  cargarMovsCaja();
 }
 
 // Los retiros e ingresos del turno (una consulta por la caja abierta, sin índices)
@@ -2721,6 +2730,89 @@ window.confirmarAnularMov = async function () {
     err.textContent = 'No se pudo anular: ' + (e.message || e) + '. Si la administración ya lo recibió, se corrige en Sistema Fën.';
   }
   btn.disabled = false; btn.textContent = 'Anular';
+};
+
+// ═══════════════════════════
+// v3.1.0 · LA CAJA SE ENTERA SOLA
+// El arqueo se mantiene al día (una lectura por cambio de la caja) y, cuando la administración aprueba o rechaza
+// una anulación pedida desde esta caja, aparece un aviso y se actualizan las ventas del turno, sin recargar.
+// ═══════════════════════════
+let _oyentesCaja = [];
+function dejarDeEscucharCaja() { _oyentesCaja.forEach(f => { try { f(); } catch (e) {} }); _oyentesCaja = []; }
+function escucharCaja(id) {
+  dejarDeEscucharCaja();
+  if (!id) return;
+  let nMovs = null;
+  _oyentesCaja.push(onSnapshot(doc(db, 'cajas', id), sn => {
+    if (!sn.exists() || id !== cajaId) return;
+    const d = sn.data(), m = movsDeCaja(d), n = m.nIngresos + m.nRetiros;
+    pintarArqueo(d);
+    if (nMovs !== null && n !== nMovs) cargarMovsCaja();   // los movimientos se leen solo si cambiaron
+    nMovs = n;
+  }, e => console.warn('No se pudo escuchar la caja:', e)));
+  const estados = {};
+  let primera = true;
+  _oyentesCaja.push(onSnapshot(query(collection(db, 'solicitudes_anulacion'), where('cajaId', '==', id)), sn => {
+    const avisos = [];
+    sn.docs.forEach(dc => {
+      const x = dc.data(), antes = estados[dc.id];
+      if (!primera && antes === 'pendiente' && x.estado !== 'pendiente') avisos.push(x);
+      estados[dc.id] = x.estado;
+    });
+    primera = false;
+    if (!avisos.length) return;
+    avisos.forEach(x => showToast(x.estado === 'aprobada'
+      ? `Anulación aprobada: venta de $${parseInt(x.total || 0).toLocaleString('es-CL')}`
+      : `Anulación rechazada: venta de $${parseInt(x.total || 0).toLocaleString('es-CL')}`, x.estado === 'aprobada' ? 'ok' : 'error'));
+    cargarUltimasVentas();
+  }, e => console.warn('No se pudo escuchar las anulaciones:', e)));
+}
+
+// ═══════════════════════════
+// v3.1.0 · TEXTO PARA EL SOBRE DEL RETIRO (al confirmar el cierre)
+// ═══════════════════════════
+let _sobre = null;
+function textoSobre(x) {
+  const [y, mm, dd] = String(x.dia || '').split('-');
+  return { suc: x.suc === 'ainavillo' ? 'Ainavillo' : 'Barros Arana', fecha: dd ? `${dd}-${mm}-${y}` : '', monto: pesosEf(x.monto), quien: x.quien || '' };
+}
+function mostrarSobre(x) {
+  _sobre = textoSobre(x);
+  document.getElementById('sobreTexto').innerHTML =
+    `<div class="sobre-l1">${escHtml(_sobre.suc)} · ${escHtml(_sobre.fecha)}</div><div class="sobre-monto">${escHtml(_sobre.monto)}</div><div class="sobre-l3">Retiro al cerrar · cerró: ${escHtml(_sobre.quien)}</div>`;
+  document.getElementById('modalSobre').classList.add('open');
+}
+window.cerrarSobre = function () { document.getElementById('modalSobre').classList.remove('open'); };
+window.copiarSobre = async function () {
+  if (!_sobre) return;
+  const t = `${_sobre.suc} · ${_sobre.fecha} · ${_sobre.monto} · Retiro al cerrar · cerró: ${_sobre.quien}`;
+  try { await navigator.clipboard.writeText(t); showToast('Texto copiado'); } catch (e) { showToast('No se pudo copiar', 'error'); }
+};
+// Imprime el texto en la impresora de comandas (QZ Tray en el PC; navegador/RawBT en Android), como la comanda
+window.imprimirSobre = async function () {
+  if (!_sobre) return;
+  const s = _sobre;
+  const metodo = localStorage.getItem('metodoImpresion') || (navigator.userAgent.includes('Android') ? 'navegador' : 'qz');
+  if (metodo === 'qz') {
+    if (typeof qz === 'undefined') { showToast('No se pudo cargar QZ Tray', 'error'); return; }
+    try {
+      if (!qz.websocket.isActive()) await qz.websocket.connect();
+      const config = qz.configs.create(await qz.printers.getDefault());
+      const ESC = '\x1B', GS = '\x1D';
+      let cmd = ESC + '@' + ESC + 'a' + '\x01' + 'SOBRE · RETIRO DE CAJA\n' + '--------------------------------\n';
+      cmd += s.suc + '\n' + s.fecha + '\n\n' + GS + '!' + '\x11' + s.monto + '\n' + GS + '!' + '\x00' + '\nCerro: ' + s.quien + '\n';
+      cmd += '\nFirma: ______________________\n' + GS + 'V' + '\x42' + '\x05';
+      await qz.print(config, [{ type: 'raw', format: 'command', flavor: 'plain', data: cmd }]);
+      showToast('Enviado a la impresora');
+    } catch (e) { showToast('No se pudo imprimir: ' + e.message, 'error'); }
+    return;
+  }
+  document.getElementById('cmdSucursal').textContent = 'SOBRE · RETIRO DE CAJA';
+  document.getElementById('cmdFecha').textContent = `${s.suc} · ${s.fecha}`;
+  document.getElementById('cmdLineas').innerHTML = `Cerró: ${escHtml(s.quien)}<br/><br/>Firma: ______________________`;
+  document.getElementById('cmdTotal').textContent = `RETIRO: ${s.monto}`;
+  document.getElementById('cmdMedio').textContent = '';
+  window.print();
 };
 
 // Actualizar arqueo visible en pantalla
@@ -2911,6 +3003,7 @@ window.confirmarCierreCiego = async function() {
 
     document.getElementById('modalCierreCiego').classList.remove('open');
     if (cajaDocId === cajaId) {
+      dejarDeEscucharCaja(); // v3.1.0
       cajaId = null;
       _cajaArqueo = null;
       document.getElementById('cardAbrirCaja').classList.remove('hidden');
@@ -2919,6 +3012,7 @@ window.confirmarCierreCiego = async function() {
       avisarCajaAnterior();
     }
     showToast(ef.retiro > 0 ? `Caja cerrada · retiro ${pesosEf(ef.retiro)}` : 'Caja cerrada correctamente');
+    if (ef.retiro > 0) mostrarSobre({ suc: cajaData.sucursal || sucursal, dia, monto: ef.retiro, quien: usuario.email }); // v3.1.0
 
     // v2.3.1: aviso por correo del descuadre. Sale sin esperar: el cierre no depende de él.
     if (hayDiferencia) avisarPorCorreo(APPS_SCRIPT_URL_VENTAS_FEN, {
