@@ -1,3 +1,44 @@
+# fën caja · v3.0.0
+
+**Etapa 4 de la revisión de la caja B2C: efectivo del turno** (bocetos "Efectivo de la caja" aprobados por Emmanuel el 30 oct; mapa v15). Va junto con **Sistema Fën v0.119.0** y las **reglas fen-ventas v1.7.0**. · 31 de octubre de 2026
+
+## Qué cambia
+1. **Retiro de efectivo** con la caja abierta: pago a proveedor (proveedor y N° de boleta o factura), a la caja de administración u otro. Muestra cómo cambia lo que debería haber.
+2. **Ingreso de efectivo** que no es venta: sencillo de la caja de administración, aporte del dueño u otro.
+3. **El arqueo** ahora dice: fondo inicial, ventas en efectivo, ingresos, retiros y **efectivo que debería haber**. Al lado, los **movimientos del turno** con quién y a qué hora. Un movimiento equivocado se **anula** con su motivo (nada se borra).
+4. **Cierre en tres pasos:**
+   - **1 · Lo contado**, sin ver el sistema (como siempre; lo del Point integrado no se cuenta).
+   - **2 · Cómo quedó:** debería haber, contado y si cuadra, falta o sobra. Si no cuadra, se elige qué cree que pasó (vuelto mal dado, retiro sin anotar, venta sin registrar, no sé u otro) y una nota (obligatoria solo en "Otro"). Si vuelve a contar, queda anotado cuántas veces.
+   - **3 · Qué queda y qué se retira:** el fondo para el turno siguiente (sugerido $25.000) y el **retiro a la caja de administración = contado − fondo**, que se anota solo.
+   - Se acabó la ventana del navegador "¿Confirmas el cierre?": el paso 2 es la confirmación.
+5. **De una sola vez:** cada retiro o ingreso con los contadores de la caja; el cierre con su evaluación y el retiro. Si se corta internet, no queda nada a medias.
+6. El retiro del cierre, los retiros "a la caja de administración" y el sencillo **llegan a Sistema Fën → Efectivo → Por recibir de las cajas**: ya no hay que anotarlos a mano.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y **`efectivo-caja.js` (nuevo)**. Este README a `Respaldo/`.
+Ojo: es el repo **fen-ventas** (la caja), no sistema-fen. Si falta `efectivo-caja.js`, la caja no abre.
+
+## Orden de la subida (importante)
+1. **Primero las reglas fen-ventas v1.7.0** (vienen con Sistema Fën v0.119.0). Sin ellas, la caja no puede guardar retiros ni cerrar.
+2. Sistema Fën v0.119.0, a su repo.
+3. Esta caja, a fen-ventas.
+Hágalo **con la caja cerrada** o antes de abrir el turno.
+
+## Checklist
+- [ ] Reglas fen-ventas v1.7.0 publicadas.
+- [ ] Los seis archivos en la raíz de **fen-ventas**; recargar la caja. Al lado del correo dice "· v3.0.0".
+- [ ] Abrir caja: sugiere el saldo del turno anterior.
+- [ ] Caja → "Retiro de efectivo" de prueba ($1.000, Otro, "prueba") y anularlo: el arqueo vuelve a como estaba.
+- [ ] Al cierre: contar, ver "Cómo quedó", dejar el fondo y confirmar.
+- [ ] Sistema Fën → Efectivo: aparece el retiro en "Por recibir de las cajas"; presionar **Recibir** cuando la plata esté en la caja de administración.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/modelo.test.mjs` (9): debería haber, cierre con los números del boceto (falta $1.500, retiro $76.400), fondo, motivos y lo que llega a Sistema Fën.
+- `pruebas/caja30/caja-v300.test.js` (5, navegador con Firebase en memoria): retiro, ingreso, anular y cierre en tres pasos; cierre que cuadra y volver a contar; falla de conexión sin nada a medias; Sistema Fën recibe el retiro y confirma el sencillo; versiones y sin ventanas del navegador. Sin desborde a 390 y 768 px; capturas a 390 y 1440 px.
+- Las reglas v1.7.0 se revisaron a mano (el emulador de Firebase no se pudo descargar en esta sesión).
+
+---
+
 # fën caja · v2.9.0
 
 **Cierre de la Etapa 3 de la revisión de la caja B2C** (pedido por Emmanuel el 29 oct, para pilotear el Point el 30 oct en la mañana). Va junto con **Sistema Fën v0.117.0**. Para la vendedora solo cambia que ya no hay emojis. · 30 de octubre de 2026

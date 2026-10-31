@@ -1,8 +1,9 @@
-// fën caja v2.9.0 · código
+// fën caja v3.0.0 · código
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=2.9.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { armarResumen } from './resumen-caja.js?v=3.0.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.0.0'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -1850,7 +1851,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '2.9.0';
+const CAJA_VERSION = '3.0.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2538,23 +2539,189 @@ window.abrirCaja = async function() {
     cajaId = ref.id;
     document.getElementById('cardAbrirCaja').classList.add('hidden');
     document.getElementById('cardCajaAbierta').classList.remove('hidden');
-    mostrarResumenCaja({ montoInicial: monto, totales: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 }, totalVentas: 0, nVentas: 0 });
+    mostrarResumenCaja({ fecha: hoy, montoInicial: monto, totales: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 }, totalVentas: 0, nVentas: 0 });
     showToast('Caja abierta');
   } catch(e) { alert('Error al abrir caja: ' + e.message); }
   btn.disabled = false; btn.textContent = 'Abrir caja';
 };
 
-function mostrarResumenCaja(data) {
-  const t = data.totales || {};
-  document.getElementById('resumenCaja').innerHTML = `
-    <div class="resumen-row"><span>Monto inicial</span><span>$${parseInt(data.montoInicial||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row"><span>Efectivo</span><span>$${parseInt(t.efectivo||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row"><span>Débito</span><span>$${parseInt(t.debito||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row"><span>Crédito</span><span>$${parseInt(t.credito||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row"><span>Transferencia</span><span>$${parseInt(t.transferencia||0).toLocaleString('es-CL')}</span></div>
-    <div class="resumen-row total"><span>Total ventas (${data.nVentas||0})</span><span>$${parseInt(data.totalVentas||0).toLocaleString('es-CL')}</span></div>
-  `;
+// ═══════════════════════════
+// v3.0.0 · ARQUEO CON RETIROS E INGRESOS
+// ═══════════════════════════
+let _cajaArqueo = null; // la última lectura de la caja abierta (para el efecto de un retiro o ingreso)
+function filaRes(txt, monto, cls) {
+  return `<div class="resumen-row${cls ? ' ' + cls : ''}"><span>${txt}</span><span>${monto}</span></div>`;
 }
+function mostrarResumenCaja(data) {
+  _cajaArqueo = data || {};
+  const t = _cajaArqueo.totales || {};
+  const tp = _cajaArqueo.totalesPoint || {};
+  const m = movsDeCaja(_cajaArqueo);
+  const n = v => parseInt(v || 0).toLocaleString('es-CL');
+  const point = (parseInt(tp.debito) || 0) + (parseInt(tp.credito) || 0);
+  document.getElementById('resumenCaja').innerHTML =
+    filaRes('Fondo inicial', '$' + n(_cajaArqueo.montoInicial)) +
+    filaRes('Ventas en efectivo', '$' + n(t.efectivo)) +
+    filaRes(`Ingresos (${m.nIngresos})`, '+ $' + n(m.ingresos), 'ef-mas') +
+    filaRes(`Retiros (${m.nRetiros})`, '− $' + n(m.retiros), 'ef-menos') +
+    filaRes('Efectivo que debería haber', pesosEf(deberiaHaber(_cajaArqueo)), 'total ef-deberia') +
+    `<div style="height:8px"></div>` +
+    filaRes('Débito', '$' + n(t.debito)) +
+    filaRes('Crédito', '$' + n(t.credito)) +
+    (point ? `<div class="ef-ayuda" style="margin:-2px 0 4px">Con el Point integrado: $${n(point)}</div>` : '') +
+    filaRes('Transferencia', '$' + n(t.transferencia)) +
+    filaRes(`Total ventas (${_cajaArqueo.nVentas || 0})`, '$' + n(_cajaArqueo.totalVentas), 'total');
+  cargarMovsCaja();
+}
+
+// Los retiros e ingresos del turno (una consulta por la caja abierta, sin índices)
+async function cargarMovsCaja() {
+  const box = document.getElementById('movsCajaLista');
+  if (!box) return;
+  if (!cajaId) { box.innerHTML = '<div class="empty">Sin retiros ni ingresos en este turno.</div>'; return; }
+  try {
+    const sn = await getDocs(query(collection(db, 'caja_movimientos'), where('cajaId', '==', cajaId)));
+    const movs = sn.docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.motivo !== 'cierre')
+      .sort((a, b) => (b.creado?.seconds || 0) - (a.creado?.seconds || 0));
+    _movsTurno = {};
+    if (!movs.length) { box.innerHTML = '<div class="empty">Sin retiros ni ingresos en este turno.</div>'; return; }
+    box.innerHTML = movs.map(x => {
+      _movsTurno[x.id] = x;
+      const sale = x.tipo === 'retiro';
+      const hora = x.creado?.toDate ? x.creado.toDate().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '';
+      const det = [x.detalle, x.documento ? 'N° ' + x.documento : '', x.nota].filter(Boolean).map(escHtml).join(' · ');
+      const estado = x.anulado ? `<span class="ef-tag-anulado">Anulado${x.anulado.motivo ? ': ' + escHtml(x.anulado.motivo) : ''}</span>`
+        : x.recibido ? '<span class="ef-tag-recibido">Recibido por la administración</span>'
+        : `<button type="button" class="btn-anular" onclick="abrirAnularMov('${x.id}')">Anular</button>`;
+      return `<div class="ef-mov${x.anulado ? ' anulado' : ''}">
+        <span class="ef-chip-tipo ${sale ? 'sale' : 'entra'}">${sale ? 'Retiro' : 'Ingreso'}</span>
+        <div class="ef-mov-texto"><b>${escHtml(textoMotivoCaja(x.tipo, x.motivo))}</b>${det ? `<span>${det}</span>` : ''}<span class="ef-mov-hora">${escHtml(hora)} · ${escHtml(x.por || '')}</span>${estado}</div>
+        <span class="ef-mov-monto ${sale ? 'sale' : 'entra'}">${sale ? '− ' : '+ '}${pesosEf(x.monto)}</span>
+      </div>`;
+    }).join('');
+  } catch (e) { console.error('No se pudieron cargar los movimientos de efectivo:', e); }
+}
+let _movsTurno = {};
+
+// ── Retiro o ingreso ──
+let _mcTipo = 'retiro', _mcMotivo = '';
+window.abrirMovCaja = function (tipo) {
+  if (!cajaId) return;
+  _mcTipo = tipo === 'ingreso' ? 'ingreso' : 'retiro';
+  _mcMotivo = '';
+  const sale = _mcTipo === 'retiro';
+  document.getElementById('mcTitulo').textContent = sale ? 'Retiro de efectivo' : 'Ingreso de efectivo';
+  document.getElementById('mcTitulo').className = 'modal-title ' + (sale ? 'ef-sale' : 'ef-entra');
+  document.getElementById('mcAyuda').textContent = sale ? 'Plata que sale de la caja con la caja abierta. Queda en el arqueo.' : 'Plata que entra a la caja y no es una venta. Queda en el arqueo.';
+  document.getElementById('mcMotivosLbl').textContent = sale ? 'Para qué' : 'De dónde viene';
+  document.getElementById('btnMcGuardar').textContent = sale ? 'Registrar retiro' : 'Registrar ingreso';
+  ['mcMonto', 'mcNota'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('mcError').textContent = '';
+  pintarMotivosMov();
+  document.getElementById('modalMovCaja').classList.add('open');
+  setTimeout(() => document.getElementById('mcMonto').focus(), 50);
+};
+function pintarMotivosMov() {
+  document.getElementById('mcMotivos').innerHTML = MOTIVOS_CAJA[_mcTipo].map(([k, txt]) =>
+    `<button type="button" class="ef-chip${k === _mcMotivo ? ' sel' : ''}" aria-pressed="${k === _mcMotivo}" onclick="elegirMotivoMov('${k}')">${escHtml(txt)}</button>`).join('');
+  const m = MOTIVOS_CAJA[_mcTipo].find(x => x[0] === _mcMotivo);
+  const campos = document.getElementById('mcCampos');
+  const antes = { det: (document.getElementById('mcDetalle') || {}).value || '', doc: (document.getElementById('mcDocumento') || {}).value || '' };
+  if (m && m[2] === 'proveedor') {
+    campos.innerHTML = `<label for="mcDetalle">Proveedor</label><input type="text" id="mcDetalle" maxlength="120" autocomplete="off"/>
+      <label for="mcDocumento">N° de boleta o factura <span class="ef-opcional">(si la hay)</span></label><input type="text" id="mcDocumento" maxlength="40" autocomplete="off"/>`;
+  } else if (m && m[2] === 'detalle') {
+    campos.innerHTML = `<label for="mcDetalle">De qué se trata</label><input type="text" id="mcDetalle" maxlength="120" autocomplete="off"/>`;
+  } else campos.innerHTML = '';
+  if (document.getElementById('mcDetalle')) document.getElementById('mcDetalle').value = antes.det;
+  if (document.getElementById('mcDocumento')) document.getElementById('mcDocumento').value = antes.doc;
+  actualizarEfectoMov();
+}
+window.elegirMotivoMov = function (k) { _mcMotivo = k; pintarMotivosMov(); };
+window.actualizarEfectoMov = function () {
+  const box = document.getElementById('mcEfecto');
+  const monto = leerPesos(document.getElementById('mcMonto').value);
+  if (!(monto > 0) || !_cajaArqueo) { box.innerHTML = ''; return; }
+  const antes = deberiaHaber(_cajaArqueo);
+  const despues = antes + (_mcTipo === 'retiro' ? -monto : monto);
+  const m = MOTIVOS_CAJA[_mcTipo].find(x => x[0] === _mcMotivo);
+  box.innerHTML = `En el arqueo, el efectivo que debería haber ${_mcTipo === 'retiro' ? 'baja' : 'sube'} de <b>${pesosEf(antes)}</b> a <b>${pesosEf(despues)}</b>.` +
+    (m && m[3] ? (_mcTipo === 'retiro' ? ' La administración lo recibe en Sistema Fën → Efectivo.' : ' Sale de la caja de administración; la administración lo confirma en Sistema Fën.') : '') +
+    (despues < 0 ? '<br><b>Ojo: queda menos que cero en la caja. Revise el monto.</b>' : '');
+};
+window.cerrarMovCaja = function () { document.getElementById('modalMovCaja').classList.remove('open'); };
+window.guardarMovCaja = async function () {
+  const err = document.getElementById('mcError');
+  const btn = document.getElementById('btnMcGuardar');
+  err.textContent = '';
+  if (!cajaId) { err.textContent = 'La caja ya no está abierta.'; return; }
+  const dia = normalizarFechaCaja((_cajaArqueo && _cajaArqueo.fecha) || '') || fechaLocalHoy();
+  const r = revisarMovCaja({
+    tipo: _mcTipo, motivo: _mcMotivo,
+    monto: document.getElementById('mcMonto').value,
+    detalle: (document.getElementById('mcDetalle') || {}).value,
+    documento: (document.getElementById('mcDocumento') || {}).value,
+    nota: document.getElementById('mcNota').value
+  }, dia);
+  if (r.error) { err.textContent = r.error; return; }
+  const textoBtn = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const sale = r.mov.tipo === 'retiro';
+    // El movimiento y los contadores de la caja, de una sola vez (o queda todo o no queda nada)
+    const lote = writeBatch(db);
+    lote.set(doc(db, 'caja_movimientos', idNuevo()), { ...r.mov, cajaId, sucursal, por: usuario.email, creado: Timestamp.now() });
+    lote.update(doc(db, 'cajas', cajaId), sale
+      ? { 'efectivoMovs.retiros': increment(r.mov.monto), 'efectivoMovs.nRetiros': increment(1) }
+      : { 'efectivoMovs.ingresos': increment(r.mov.monto), 'efectivoMovs.nIngresos': increment(1) });
+    await lote.commit();
+    cerrarMovCaja();
+    const sn = await getDoc(doc(db, 'cajas', cajaId));
+    if (sn.exists()) mostrarResumenCaja(sn.data());
+    showToast(sale ? 'Retiro registrado' : 'Ingreso registrado');
+  } catch (e) {
+    err.textContent = 'No se pudo guardar: ' + (e.message || e) + '. Revise la conexión e intente de nuevo.';
+  }
+  btn.disabled = false; btn.textContent = textoBtn;
+};
+
+// ── Anular un retiro o ingreso del turno (nada se borra) ──
+let _amId = null;
+window.abrirAnularMov = function (id) {
+  const x = _movsTurno[id];
+  if (!x) return;
+  _amId = id;
+  document.getElementById('amResumen').textContent = `${x.tipo === 'retiro' ? 'Retiro' : 'Ingreso'} · ${textoMotivoCaja(x.tipo, x.motivo)} · ${pesosEf(x.monto)}. Queda anotado como anulado y el arqueo vuelve a como estaba.`;
+  document.getElementById('amMotivo').value = '';
+  document.getElementById('amError').textContent = '';
+  document.getElementById('modalAnularMov').classList.add('open');
+};
+window.cerrarAnularMov = function () { document.getElementById('modalAnularMov').classList.remove('open'); };
+window.confirmarAnularMov = async function () {
+  const err = document.getElementById('amError');
+  const motivo = document.getElementById('amMotivo').value.replace(/\s+/g, ' ').trim().slice(0, 200);
+  const x = _movsTurno[_amId];
+  if (!x) return;
+  if (motivo.length < 3) { err.textContent = 'Escriba por qué se anula.'; return; }
+  const btn = document.getElementById('btnAmConfirmar');
+  btn.disabled = true; btn.textContent = 'Anulando...';
+  try {
+    const sale = x.tipo === 'retiro';
+    const lote = writeBatch(db);
+    lote.update(doc(db, 'caja_movimientos', _amId), { anulado: { por: usuario.email, en: Timestamp.now(), motivo }, pendienteAdmin: false });
+    lote.update(doc(db, 'cajas', x.cajaId), sale
+      ? { 'efectivoMovs.retiros': increment(-x.monto), 'efectivoMovs.nRetiros': increment(-1) }
+      : { 'efectivoMovs.ingresos': increment(-x.monto), 'efectivoMovs.nIngresos': increment(-1) });
+    await lote.commit();
+    cerrarAnularMov();
+    const sn = await getDoc(doc(db, 'cajas', x.cajaId));
+    if (sn.exists() && x.cajaId === cajaId) mostrarResumenCaja(sn.data());
+    showToast('Movimiento anulado');
+  } catch (e) {
+    err.textContent = 'No se pudo anular: ' + (e.message || e) + '. Si la administración ya lo recibió, se corrige en Sistema Fën.';
+  }
+  btn.disabled = false; btn.textContent = 'Anular';
+};
 
 // Actualizar arqueo visible en pantalla
 window.actualizarArqueo = async function() {
@@ -2568,16 +2735,21 @@ window.actualizarArqueo = async function() {
   btn.disabled = false; btn.textContent = '↻ Actualizar arqueo';
 };
 
-// Abre el modal de cierre ciego (NO muestra totales del sistema)
-// targetCajaId opcional: permite reutilizar el mismo modal para cerrar retroactivamente
-// una caja de otro día desde el panel admin (Reportes > Eval. caja > Cajas sin cerrar)
+// ═══════════════════════════
+// v3.0.0 · CIERRE EN TRES PASOS
+// 1. Lo contado, a ciegas (como siempre). 2. Cómo quedó: debería vs. contado, y si no cuadra, qué cree que pasó.
+// 3. El fondo que queda (sugerido $25.000) y el retiro a la caja de administración (contado − fondo).
+// targetCajaId opcional: una caja de un día anterior que quedó abierta.
+// ═══════════════════════════
+let _cc = null; // { cajaId, caja, montos, efectivo, difs, motivo, volvio }
 window.cerrarCaja = function(targetCajaId) {
-  document.getElementById('cierrEfectivo').value  = '';
-  document.getElementById('cierrDebito').value    = '';
-  document.getElementById('cierrCredito').value   = '';
-  document.getElementById('cierrTransfer').value  = '';
-  document.getElementById('cierrRetirado').value  = '';
+  ['cierrEfectivo', 'cierrDebito', 'cierrCredito', 'cierrTransfer', 'cierreFondo', 'cierreNota'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('cierreTargetCajaId').value = targetCajaId || cajaId || '';
+  document.getElementById('ccError1').textContent = '';
+  document.getElementById('ccError2').textContent = '';
+  document.getElementById('ccPaso1').classList.remove('hidden');
+  document.getElementById('ccPaso2').classList.add('hidden');
+  _cc = { volvio: 0 };
   document.getElementById('modalCierreCiego').classList.add('open');
   infoPointCierre(targetCajaId || cajaId); // v2.4.0
 };
@@ -2602,166 +2774,170 @@ window.cerrarModalCierre = function() {
   document.getElementById('modalCierreCiego').classList.remove('open');
 };
 
-// Pide una nota obligatoria de justificación cuando el cierre de caja tiene diferencias
-// (a favor o en contra, mismo trato para ambas). Devuelve el texto escrito, o null si se canceló.
-let _resolverNotaDescuadre = null;
-function pedirNotaDescuadre(difs) {
-  const partes = [];
-  if (difs.difEfectivo !== 0) partes.push(`Efectivo: ${difs.difEfectivo > 0 ? '+' : ''}$${difs.difEfectivo.toLocaleString('es-CL')}`);
-  if (difs.difDebito !== 0)   partes.push(`Débito: ${difs.difDebito > 0 ? '+' : ''}$${difs.difDebito.toLocaleString('es-CL')}`);
-  if (difs.difCredito !== 0)  partes.push(`Crédito: ${difs.difCredito > 0 ? '+' : ''}$${difs.difCredito.toLocaleString('es-CL')}`);
-  if (difs.difTransfer !== 0) partes.push(`Transferencia: ${difs.difTransfer > 0 ? '+' : ''}$${difs.difTransfer.toLocaleString('es-CL')}`);
-
-  const total = difs.difTotal ?? (difs.difEfectivo + difs.difDebito + difs.difCredito + difs.difTransfer);
-  const tipoSaldo = total >= 0 ? 'a favor' : 'en contra';
-  const montoTexto = `${total >= 0 ? '+' : '-'}$${Math.abs(total).toLocaleString('es-CL')}`;
-
-  document.getElementById('notaDescuadreResumen').innerHTML =
-    `La caja no está cuadrada, tienes un <b>saldo ${tipoSaldo} ${montoTexto}</b>${partes.length ? ` (${partes.join(' · ')})` : ''}. Por favor tómate el tiempo en verificar qué pasó realmente con ese dinero y anota la información <b>DETALLADA</b> en el recuadro de abajo.`;
-  document.getElementById('notaDescuadreTexto').value = '';
-  document.getElementById('modalNotaDescuadre').classList.add('open');
-  return new Promise(resolve => { _resolverNotaDescuadre = resolve; });
-}
-
-window.confirmarNotaDescuadre = function() {
-  const texto = document.getElementById('notaDescuadreTexto').value.trim();
-  if (!texto) { alert('Por favor escribe una breve explicación antes de continuar.'); return; }
-  document.getElementById('modalNotaDescuadre').classList.remove('open');
-  if (_resolverNotaDescuadre) { _resolverNotaDescuadre(texto); _resolverNotaDescuadre = null; }
+// Paso 1 → 2: lee la caja una vez y calcula cómo quedó
+window.siguienteCierre = async function () {
+  const err = document.getElementById('ccError1');
+  err.textContent = '';
+  const val = id => document.getElementById(id).value.trim();
+  if (val('cierrEfectivo') === '') { err.textContent = 'Escriba cuánto efectivo contó (puede ser 0).'; return; }
+  const ent = id => Math.max(0, parseInt(val(id)) || 0);
+  const montos = { efectivo: ent('cierrEfectivo'), debito: ent('cierrDebito'), credito: ent('cierrCredito'), transfer: ent('cierrTransfer') };
+  const id = document.getElementById('cierreTargetCajaId').value || cajaId;
+  const btn = document.getElementById('btnCierreSiguiente');
+  btn.disabled = true; btn.textContent = 'Revisando...';
+  try {
+    const sn = await getDoc(doc(db, 'cajas', id));
+    if (!sn.exists()) throw new Error('La caja ya no existe');
+    const caja = sn.data();
+    if (caja.estado !== 'abierta') throw new Error('Esa caja ya está cerrada');
+    _cc = { ..._cc, cajaId: id, caja, montos, motivo: _cc && _cc.motivo || '' };
+    pintarPaso2();
+    document.getElementById('ccPaso1').classList.add('hidden');
+    document.getElementById('ccPaso2').classList.remove('hidden');
+    document.getElementById('cierreFondo').value = fondoSugerido(montos.efectivo).toLocaleString('es-CL');
+    actualizarRetiroCierre();
+  } catch (e) { err.textContent = 'No se pudo revisar la caja: ' + (e.message || e); }
+  btn.disabled = false; btn.textContent = 'Siguiente';
 };
-
-window.cancelarNotaDescuadre = function() {
-  document.getElementById('modalNotaDescuadre').classList.remove('open');
-  if (_resolverNotaDescuadre) { _resolverNotaDescuadre(null); _resolverNotaDescuadre = null; }
+window.volverCierre = function () {
+  _cc.volvio = (_cc.volvio || 0) + 1; // queda anotado cuántas veces se volvió a contar
+  document.getElementById('ccPaso2').classList.add('hidden');
+  document.getElementById('ccPaso1').classList.remove('hidden');
+};
+// Diferencias por medio (iguales a las de siempre; el efectivo ahora descuenta retiros y suma ingresos)
+function difsCierre(caja, montos) {
+  const t = caja.totales || {}, tp = caja.totalesPoint || {};
+  const manDebito = montos.debito + (parseInt(tp.debito) || 0);
+  const manCredito = montos.credito + (parseInt(tp.credito) || 0);
+  const ef = calcularCierreEfectivo(caja, montos.efectivo, 0);
+  return {
+    efectivo: ef.diferencia,
+    debito: manDebito - (parseInt(t.debito) || 0),
+    credito: manCredito - (parseInt(t.credito) || 0),
+    transfer: montos.transfer - (parseInt(t.transferencia) || 0),
+    manDebito, manCredito, deberia: ef.deberia
+  };
+}
+function pintarPaso2() {
+  const d = difsCierre(_cc.caja, _cc.montos);
+  _cc.difs = d;
+  const estado = v => v === 0 ? '<span class="ef-ok">Cuadra</span>' : v < 0 ? `<span class="ef-falta">Falta ${pesosEf(-v)}</span>` : `<span class="ef-sobra">Sobra ${pesosEf(v)}</span>`;
+  const otros = [['Débito', d.debito], ['Crédito', d.credito], ['Transferencia', d.transfer]].filter(x => x[1] !== 0);
+  document.getElementById('ccResultado').innerHTML =
+    filaRes('Efectivo que debería haber', pesosEf(d.deberia)) +
+    filaRes('Efectivo contado', pesosEf(_cc.montos.efectivo)) +
+    filaRes('Efectivo', estado(d.efectivo), 'total') +
+    otros.map(x => filaRes(x[0], estado(x[1]))).join('');
+  const hay = d.efectivo !== 0 || otros.length > 0;
+  document.getElementById('ccDescuadre').classList.toggle('hidden', !hay);
+  if (hay) pintarMotivosCierre();
+}
+function pintarMotivosCierre() {
+  document.getElementById('ccMotivos').innerHTML = MOTIVOS_DESCUADRE.map(([k, txt]) =>
+    `<button type="button" class="ef-chip${k === _cc.motivo ? ' sel' : ''}" aria-pressed="${k === _cc.motivo}" onclick="elegirMotivoCierre('${k}')">${escHtml(txt)}</button>`).join('');
+  document.getElementById('cierreNotaLbl').textContent = _cc.motivo === 'otro' ? 'Nota (cuente qué pasó)' : 'Nota (opcional)';
+}
+window.elegirMotivoCierre = function (k) { _cc.motivo = k; pintarMotivosCierre(); };
+window.actualizarRetiroCierre = function () {
+  if (!_cc || !_cc.caja) return;
+  const f = leerPesos(document.getElementById('cierreFondo').value);
+  const r = calcularCierreEfectivo(_cc.caja, _cc.montos.efectivo, f);
+  document.getElementById('ccRetiro').textContent = r.error ? '—' : pesosEf(r.retiro);
 };
 
 window.confirmarCierreCiego = async function() {
   const btn = document.getElementById('btnConfirmarCierre');
-  const manEfectivo  = parseInt(document.getElementById('cierrEfectivo').value)  || 0;
-  let manDebito      = parseInt(document.getElementById('cierrDebito').value)    || 0;
-  let manCredito     = parseInt(document.getElementById('cierrCredito').value)   || 0;
-  const manTransfer  = parseInt(document.getElementById('cierrTransfer').value)  || 0;
-  const montoRetirado = parseInt(document.getElementById('cierrRetirado').value) || 0;
-  const targetCajaId  = document.getElementById('cierreTargetCajaId').value || cajaId;
-
-  // Confirmación reforzada: se muestra un resumen de lo ingresado y se pide confirmar explícitamente,
-  // para evitar cierres accidentales con un solo clic.
-  const totalIngresado = manEfectivo + manDebito + manCredito + manTransfer;
-  const confirmado = confirm(
-    `¿Confirmas el cierre de caja con estos montos?\n\n` +
-    `Efectivo: $${manEfectivo.toLocaleString('es-CL')}\n` +
-    `Débito: $${manDebito.toLocaleString('es-CL')}\n` +
-    `Crédito: $${manCredito.toLocaleString('es-CL')}\n` +
-    `Transferencia: $${manTransfer.toLocaleString('es-CL')}\n` +
-    `Total contado: $${totalIngresado.toLocaleString('es-CL')}\n\n` +
-    `Esta acción no se puede deshacer directamente (aunque un admin podrá corregirla después desde Reportes).`
-  );
-  if (!confirmado) return;
+  const err = document.getElementById('ccError2');
+  err.textContent = '';
+  if (!_cc || !_cc.caja) return;
+  const { caja: cajaData, cajaId: cajaDocId, montos, difs } = _cc;
+  const hayDiferencia = difs.efectivo !== 0 || difs.debito !== 0 || difs.credito !== 0 || difs.transfer !== 0;
+  const nota = document.getElementById('cierreNota').value.replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (hayDiferencia && !_cc.motivo) { err.textContent = 'Elija qué cree que pasó con la diferencia.'; return; }
+  if (hayDiferencia && _cc.motivo === 'otro' && nota.length < 3) { err.textContent = 'Cuente en la nota qué pasó.'; return; }
+  const fondoTxt = document.getElementById('cierreFondo').value;
+  const ef = calcularCierreEfectivo(cajaData, montos.efectivo, leerPesos(fondoTxt));
+  if (fondoTxt.trim() === '') { err.textContent = 'Escriba el fondo que queda (puede ser 0).'; return; }
+  if (ef.error) { err.textContent = ef.error; return; }
 
   btn.disabled = true; btn.textContent = 'Cerrando...';
   try {
-    const cajaSnap = await getDoc(doc(db, 'cajas', targetCajaId));
-    const cajaData = cajaSnap.data();
-    const cajaDocId = targetCajaId;
     const t = cajaData.totales || {};
     const montoInicial = parseInt(cajaData.montoInicial) || 0;
-    // v2.4.0: lo cobrado con el Point integrado ya está confirmado: se suma a lo contado
-    const tPoint = cajaData.totalesPoint || {};
-    manDebito += parseInt(tPoint.debito) || 0;
-    manCredito += parseInt(tPoint.credito) || 0;
+    const mv = movsDeCaja(cajaData);
+    const movsNeto = mv.ingresos - mv.retiros;
+    // Sistema: solo ventas (sin monto inicial), como siempre
+    const sistEfectivo = parseInt(t.efectivo) || 0, sistDebito = parseInt(t.debito) || 0, sistCredito = parseInt(t.credito) || 0;
+    const sistTransfer = parseInt(t.transferencia) || 0, sistTotal = parseInt(cajaData.totalVentas) || 0;
+    const manEfectivo = montos.efectivo, manEfectivoNeto = manEfectivo - montoInicial;
+    const manDebito = difs.manDebito, manCredito = difs.manCredito, manTransfer = montos.transfer;
+    const manTotal = manEfectivoNeto + manDebito + manCredito + manTransfer;
+    // v3.0.0: el efectivo descuenta lo que entró y salió con la caja abierta (movsNeto)
+    const difEfectivo = difs.efectivo, difDebito = difs.debito, difCredito = difs.credito, difTransfer = difs.transfer;
+    const difTotal = difEfectivo + difDebito + difCredito + difTransfer;
+    const notaDescuadre = hayDiferencia ? [textoDescuadre(_cc.motivo), nota].filter(Boolean).join(': ') : '';
+    const ahora = Timestamp.now();
+    const dia = normalizarFechaCaja(cajaData.fecha) || cajaData.fecha || fechaLocalHoy();
 
-    // Sistema: solo ventas (sin monto inicial)
-    const sistEfectivo = parseInt(t.efectivo)        || 0;
-    const sistDebito   = parseInt(t.debito)          || 0;
-    const sistCredito  = parseInt(t.credito)         || 0;
-    const sistTransfer = parseInt(t.transferencia)   || 0;
-    const sistTotal    = parseInt(cajaData.totalVentas) || 0;
-
-    // Cajero: desconta el monto inicial del efectivo contado
-    const manEfectivoNeto = manEfectivo - montoInicial;
-    const manTotal        = manEfectivoNeto + manDebito + manCredito + manTransfer;
-
-    // Diferencias sobre ventas netas (sin el inicial)
-    const difEfectivo = manEfectivoNeto - sistEfectivo;
-    const difDebito   = manDebito       - sistDebito;
-    const difCredito  = manCredito      - sistCredito;
-    const difTransfer = manTransfer     - sistTransfer;
-    const difTotal    = manTotal        - sistTotal;
-
-    // Saldo que queda en caja para el turno siguiente
-    // = efectivo físico contado − monto retirado (si se registró retiro)
-    const saldoSiguiente = montoRetirado > 0 ? manEfectivo - montoRetirado : null;
-
-    // Si hay cualquier diferencia (a favor o en contra, mismo trato), se exige una nota antes de continuar
-    let notaDescuadre = '';
-    const hayDiferencia = difEfectivo !== 0 || difDebito !== 0 || difCredito !== 0 || difTransfer !== 0;
-    if (hayDiferencia) {
-      notaDescuadre = await pedirNotaDescuadre({ difEfectivo, difDebito, difCredito, difTransfer, difTotal });
-      if (notaDescuadre === null) {
-        btn.disabled = false; btn.textContent = 'Confirmar cierre';
-        return;
-      }
-    }
-
-    // Cerrar caja en Firestore
-    await updateDoc(doc(db, 'cajas', cajaDocId), {
-      estado: 'cerrada', cierre: Timestamp.now(),
-      ...(saldoSiguiente !== null ? { saldoSiguiente } : {})
+    // La caja, su evaluación y el retiro a la caja de administración, de una sola vez
+    const lote = writeBatch(db);
+    lote.update(doc(db, 'cajas', cajaDocId), {
+      estado: 'cerrada', cierre: ahora, saldoSiguiente: ef.fondo, fondoSiguiente: ef.fondo, retiroCierre: ef.retiro
     });
-
-    // Guardar evaluación de cierre ciego
-    await addDoc(collection(db, 'evaluacion_caja'), {
+    lote.set(doc(db, 'evaluacion_caja', idNuevo()), {
       cajaId: cajaDocId, sucursal: cajaData.sucursal || sucursal, usuario: cajaData.usuario || usuario.email,
+      cerradoPor: usuario.email,
       fecha: cajaData.fecha || fechaLocalHoy(),
       nVentas: cajaData.nVentas || 0,
       montoInicial,
       apertura: cajaData.apertura,
-      cierre: Timestamp.now(),
-      // Sistema (solo ventas)
+      cierre: ahora,
       sistEfectivo, sistDebito, sistCredito, sistTransfer, sistTotal,
-      // Cajero (efectivo ya descontado el inicial)
-      manEfectivo, manEfectivoNeto,
-      manDebito, manCredito, manTransfer, manTotal,
-      // Diferencias
+      manEfectivo, manEfectivoNeto, manDebito, manCredito, manTransfer, manTotal,
       difEfectivo, difDebito, difCredito, difTransfer, difTotal,
-      // Nota de justificación (obligatoria si hubo cualquier diferencia)
-      ...(hayDiferencia ? { notaDescuadre } : {}),
-      // Retiro y saldo siguiente (opcionales)
-      ...(montoRetirado > 0 ? { montoRetirado, saldoSiguiente } : {})
+      // v3.0.0
+      ingresosTurno: mv.ingresos, retirosTurno: mv.retiros, movsNeto, deberiaEfectivo: ef.deberia,
+      fondo: ef.fondo, montoRetirado: ef.retiro, saldoSiguiente: ef.fondo,
+      vecesVolvioAContar: _cc.volvio || 0,
+      ...(hayDiferencia ? { notaDescuadre, motivoDescuadre: _cc.motivo } : {})
     });
+    if (ef.retiro > 0) {
+      lote.set(doc(db, 'caja_movimientos', idNuevo()), {
+        cajaId: cajaDocId, sucursal: cajaData.sucursal || sucursal, tipo: 'retiro', motivo: 'cierre', monto: ef.retiro,
+        dia, mes: dia.slice(0, 7), nota: '', pendienteAdmin: true, por: usuario.email, creado: ahora
+      });
+    }
+    await lote.commit();
 
     document.getElementById('modalCierreCiego').classList.remove('open');
-
-    // Si se estaba cerrando la caja de la sesión activa, se limpia el estado de la pantalla de ventas.
-    // Si en cambio era una caja atrasada de otro día (cerrada desde el panel admin), la sesión activa no se toca.
-    if (targetCajaId === cajaId) {
+    if (cajaDocId === cajaId) {
       cajaId = null;
+      _cajaArqueo = null;
       document.getElementById('cardAbrirCaja').classList.remove('hidden');
       document.getElementById('cardCajaAbierta').classList.add('hidden');
     } else {
       avisarCajaAnterior();
     }
-    showToast('Caja cerrada correctamente');
+    showToast(ef.retiro > 0 ? `Caja cerrada · retiro ${pesosEf(ef.retiro)}` : 'Caja cerrada correctamente');
 
-    // v2.3.1: aviso por correo del descuadre (como en la v2.2.0). Sale sin esperar: el cierre no depende de él.
+    // v2.3.1: aviso por correo del descuadre. Sale sin esperar: el cierre no depende de él.
     if (hayDiferencia) avisarPorCorreo(APPS_SCRIPT_URL_VENTAS_FEN, {
       tipo: 'descuadre_caja',
       filaCaja: {
         sucursal: cajaData.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana',
-        fecha: fechaDMY(cajaData.fecha || fechaLocalHoy()), // la fecha de la caja, no la de hoy
+        fecha: fechaDMY(cajaData.fecha || fechaLocalHoy()),
         usuario: cajaData.usuario || usuario.email,
         difTotal, difEfectivo, notaDescuadre
       }
     });
 
-    // v2.3.0: el resumen del cierre (resumenes_caja). Ya no se copia a la planilla:
-    // la diferencia y su nota quedan también en evaluacion_caja (Sistema Fën la muestra en Hoy).
+    // v2.3.0: el resumen del cierre (resumenes_caja)
     const cajaDataFinal = (await getDoc(doc(db, 'cajas', cajaDocId))).data();
     await cerrarResumen(cajaDocId, cajaDataFinal);
   } catch(e) {
-    alert('Error al cerrar caja: ' + e.message);
-    btn.disabled = false; btn.textContent = 'Confirmar cierre';
+    err.textContent = 'No se pudo cerrar la caja: ' + (e.message || e) + '. Nada quedó a medias: intente de nuevo.';
   }
+  btn.disabled = false; btn.textContent = 'Confirmar cierre';
 };
 
 // Devuelve YYYY-MM-DD en fecha LOCAL (no UTC). toISOString() convierte a UTC y en Chile
