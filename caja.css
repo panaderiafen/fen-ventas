@@ -1,4 +1,4 @@
-/* fën caja v3.1.0 · estilos */
+/* fën caja v3.2.0 · estilos */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #F4F8FC; color: #1C2B3A; min-height: 100vh; }
 
@@ -480,3 +480,12 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .sobre-l1 { font-size: 15px; font-weight: 700; color: #33475B; }
 .sobre-monto { font-size: 30px; font-weight: 800; color: var(--marino); margin: 6px 0; }
 .sobre-l3 { font-size: 13px; color: var(--suave); overflow-wrap: anywhere; }
+
+/* v3.2.0 · Abrir con más fondo del que dejó el cierre, y confirmaciones dentro de la página */
+#modalAperturaDistinta, #modalConfirmar { z-index: 300; } /* encima de cualquier otra ventana (también la del Point) */
+.ef-chips-col { flex-direction: column; margin-top: 12px; }
+.ef-chips-col .ef-chip { width: 100%; text-align: left; padding: 10px 14px; border-radius: 12px; line-height: 1.3; }
+.ef-chip-sub { display: block; font-size: 12px; font-weight: 400; color: var(--suave); margin-top: 2px; }
+.cf-texto { font-size: 14px; color: #33475B; line-height: 1.5; margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+#modalConfirmar .modal-btns .btn, #modalAperturaDistinta .modal-btns .btn { min-height: 48px; }
+.modal .btn:focus-visible, .ef-chip:focus-visible { outline: 2px solid var(--marino); outline-offset: 2px; }

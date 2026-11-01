@@ -1,9 +1,9 @@
-// fën caja v3.1.1 · código
+// fën caja v3.2.0 · código
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.1.1'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.1.1'; // v3.0.0
+import { armarResumen } from './resumen-caja.js?v=3.2.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.2.0'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -49,6 +49,45 @@ function avisarPorCorreo(url, datos) {
 }
 
 function escHtml(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
+
+// v3.2.0 · Confirmación dentro de la página (reemplaza window.confirm). Devuelve una promesa con true o false.
+// El foco parte en el botón seguro (el de volver); Escape o un clic fuera de la ventana cancelan.
+let _cfCerrar = null;
+function preguntar(texto, op = {}) {
+  const ov = document.getElementById('modalConfirmar');
+  if (!ov) return Promise.resolve(false);
+  if (_cfCerrar) _cfCerrar(false); // si quedó otra pregunta abierta, se da por cancelada
+  const bSi = document.getElementById('btnCfSi'), bNo = document.getElementById('btnCfNo');
+  document.getElementById('cfTitulo').textContent = op.titulo || 'Confirmar';
+  document.getElementById('cfTexto').textContent = texto;
+  bSi.textContent = op.si || 'Aceptar';
+  bNo.textContent = op.no || 'Cancelar';
+  bSi.className = 'btn ' + (op.peligro ? 'btn-danger' : 'btn-primary');
+  const antes = document.activeElement;
+  return new Promise(resolve => {
+    const tecla = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrar(false); }
+      else if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === bNo ? bSi : bNo).focus(); }
+    };
+    const fuera = e => { if (e.target === ov) cerrar(false); };
+    function cerrar(r) {
+      _cfCerrar = null;
+      ov.classList.remove('open');
+      document.removeEventListener('keydown', tecla, true);
+      ov.removeEventListener('click', fuera);
+      bSi.onclick = bNo.onclick = null;
+      if (antes && antes !== document.body && typeof antes.focus === 'function' && document.contains(antes)) antes.focus();
+      resolve(r);
+    }
+    _cfCerrar = cerrar;
+    bSi.onclick = () => cerrar(true);
+    bNo.onclick = () => cerrar(false);
+    document.addEventListener('keydown', tecla, true);
+    ov.addEventListener('click', fuera);
+    ov.classList.add('open');
+    bNo.focus();
+  });
+}
 // Todos los productos (también inactivos), leídos una sola vez por sesión.
 let _prodsTodosCache = null;
 async function productosEnMemoria() {
@@ -138,7 +177,7 @@ window.login = async function() {
 };
 
 window.cerrarSesion = async function() {
-  if (confirm('¿Cerrar sesión?')) {
+  if (await preguntar('¿Cerrar sesión en este equipo?', { titulo: 'Cerrar sesión', si: 'Cerrar sesión', no: 'Volver' })) { // v3.2.0
     dejarDeEscucharCaja(); // v3.1.0
     sucursal = null;
     pedidoLineas = [];
@@ -354,7 +393,8 @@ async function cargarStockAmbas() {
 window.selSucursal = async function(s) {
   // v2.4.0: el equipo recuerda su tienda; si se elige la otra, se pregunta (no se bloquea)
   const tiendaEq = tiendaDelEquipo();
-  if (tiendaEq && tiendaEq !== s && !confirm(`Este equipo suele trabajar en ${ptNombreTienda(tiendaEq)}. ¿Seguro que quiere entrar como ${ptNombreTienda(s)}?`)) return;
+  if (tiendaEq && tiendaEq !== s && !(await preguntar(`Este equipo suele trabajar en ${ptNombreTienda(tiendaEq)}. ¿Seguro que quiere entrar como ${ptNombreTienda(s)}?`,
+    { titulo: 'Otra tienda', si: `Entrar como ${ptNombreTienda(s)}`, no: 'Volver' }))) return; // v3.2.0
   recordarTiendaEquipo(s);
   sucursal = s;
   document.getElementById('sucursalScreen').style.display = 'none';
@@ -1054,6 +1094,7 @@ window.crearMesa = async function() {
 // Abre una mesa: carga sus líneas actuales en el carrito compartido (misma grilla y pedido de "Nueva venta")
 window.abrirMesa = async function(mesaId) {
   try {
+    await esperarMesa(); // v3.2.0: si quedó algo guardándose, se lee la mesa ya al día
     const snap = await getDoc(doc(db, 'mesas', mesaId));
     if (!snap.exists()) { alert('Mesa no encontrada'); return; }
     const m = snap.data();
@@ -1089,25 +1130,27 @@ window.volverAMesas = function() {
 // Si tenía productos cargados, se devuelve el stock de cada uno antes de cerrarla.
 window.cancelarMesa = async function() {
   if (!mesaActivaId) return;
+  const mesaId = mesaActivaId; // v3.2.0
   const nLineas = pedidoLineas.length;
   const msg = nLineas > 0
-    ? `Esta mesa tiene ${nLineas} línea(s) cargada(s) por un total de $${pedidoLineas.reduce((a,l)=>a+l.total,0).toLocaleString('es-CL')}. Al cancelar se devolverá todo el stock y NO se registrará ninguna venta. ¿Confirmas?`
+    ? `Esta mesa tiene ${nLineas} línea(s) cargada(s) por un total de $${pedidoLineas.reduce((a,l)=>a+l.total,0).toLocaleString('es-CL')}. Al cancelar se devuelve todo el stock y no se registra ninguna venta. ¿Confirma?`
     : '¿Cancelar esta mesa vacía?';
-  if (!confirm(msg)) return;
+  if (!(await preguntar(msg, { titulo: 'Cancelar mesa', si: 'Cancelar mesa', no: 'Volver', peligro: true }))) return; // v3.2.0
+  if (mesaActivaId !== mesaId) return;
 
   try {
-    // Devolver stock de cada línea (si la mesa tenía productos cargados)
+    // v3.2.0: el stock devuelto de cada línea y la mesa cancelada, en una sola escritura.
+    // Como antes, la devolución va a la categoría de la línea (no al lote elegido).
+    const ajustes = [];
     for (const l of pedidoLineas) {
       const prod = productos.find(p => p.id === l.id);
       const conControl = prod ? prod.controlStock !== false : true;
       if (!conControl) continue;
       const esPermanente = prod && prod.autoEliminar === false;
       const cat = esPermanente ? 'permanente' : l.categoriaStock;
-      await ajustarStock(l.id, cat, l.cantidad);
+      ajustes.push({ id: l.id, cat, delta: l.cantidad });
     }
-    await updateDoc(doc(db, 'mesas', mesaActivaId), {
-      estado: 'cancelada', cierre: Timestamp.now(), canceladoPor: usuario.email
-    });
+    await guardarMesaYStock(mesaId, { estado: 'cancelada', cierre: Timestamp.now(), canceladoPor: usuario.email }, ajustes, true);
     showToast('Mesa cancelada');
     pedidoLineas = [];
     resetPagoDividido();
@@ -1117,9 +1160,92 @@ window.cancelarMesa = async function() {
   }
 };
 
-// Guarda el estado actual del carrito (líneas + totales) en el documento de la mesa activa
-async function persistirMesa() {
-  if (!mesaActivaId) return;
+// v3.2.0 · MESAS EN UNA SOLA ESCRITURA
+// Agregar o quitar un producto de una mesa guarda el stock y la mesa juntos (o queda todo o no queda nada).
+// Las escrituras de mesa van en fila, una después de otra, en el orden de los toques.
+let _colaMesa = Promise.resolve();
+function esperarMesa() { return _colaMesa.catch(() => {}); }
+
+// Lo que cambia en el stock con un ajuste (mismo cálculo que ajustarStock / ajustarStockLote), sin escribir.
+// entradas: la copia leída del documento, que se va actualizando para el ajuste siguiente del mismo producto.
+function planearAjusteMesa(entradas, a) {
+  if (a.loteFecha) {
+    const qtyActual = entradas[a.loteFecha] || 0;
+    entradas[a.loteFecha] = Math.max(0, qtyActual + a.delta);
+    return;
+  }
+  const entradasCat = Object.entries(entradas)
+    .filter(([k, q]) => q > 0 && getCategoriaFecha(k) === a.cat)
+    .sort(([x], [y]) => x.localeCompare(y)); // la más antigua primero
+  if (!entradasCat.length) return;
+  if (a.delta < 0) {
+    let toDeduct = Math.abs(a.delta); // FIFO: descontar de la más antigua primero
+    for (const [key, qty] of entradasCat) {
+      if (toDeduct <= 0) break;
+      const deducir = Math.min(qty, toDeduct);
+      entradas[key] = Math.max(0, qty - deducir);
+      toDeduct -= deducir;
+    }
+  } else {
+    const [key, qty] = entradasCat[entradasCat.length - 1]; // se devuelve a la entrada más reciente
+    entradas[key] = qty + a.delta;
+  }
+}
+
+// ajustes: [{ id, cat, loteFecha?, delta }] (delta < 0 descuenta, > 0 devuelve). datosMesa: lo que se escribe en la mesa.
+// Una lectura por producto (como antes) y un solo lote: el stock se resta o suma con increment (dos equipos no se pisan).
+async function escribirMesaYStock(mesaId, datosMesa, ajustes) {
+  const porProducto = new Map();
+  for (const a of ajustes) {
+    if (!a || !a.delta) continue;
+    if (!porProducto.has(a.id)) porProducto.set(a.id, []);
+    porProducto.get(a.id).push(a);
+  }
+  const planes = [];
+  for (const [productoId, lista] of porProducto) {
+    const stockKey = `${sucursal}_${productoId}`;
+    const ref = doc(db, 'stock', stockKey);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) continue;
+    const antes = { ...(snap.data().entradas || {}) };
+    const despues = { ...antes };
+    lista.forEach(a => planearAjusteMesa(despues, a));
+    const cambios = Object.keys(despues).filter(k => (despues[k] || 0) !== (antes[k] || 0));
+    if (cambios.length) planes.push({ productoId, stockKey, ref, antes, despues, cambios, cats: lista.filter(a => !a.loteFecha).map(a => a.cat) });
+  }
+  const lote = writeBatch(db);
+  for (const p of planes) {
+    const upd = {};
+    p.cambios.forEach(k => { upd[`entradas.${k}`] = increment((p.despues[k] || 0) - (p.antes[k] || 0)); });
+    lote.update(p.ref, upd);
+  }
+  lote.update(doc(db, 'mesas', mesaId), datosMesa);
+  await lote.commit();
+  // En pantalla, igual que antes: el stock queda como se escribió
+  if (!planes.length) return;
+  for (const p of planes) {
+    if (window._stockMap && window._stockMap[p.stockKey]?.entradas) p.cambios.forEach(k => { window._stockMap[p.stockKey].entradas[k] = p.despues[k]; });
+    p.cats.forEach(cat => {
+      const el = document.getElementById(`sqty-${cat}-${p.productoId}`);
+      if (el && window._stockMap) el.textContent = getQtyCategoria(window._stockMap[p.stockKey], cat);
+    });
+  }
+  renderProductos();
+}
+
+// Pone en la fila la escritura de la mesa. esperar: true para que el error llegue a quien llama (cancelar mesa).
+function guardarMesaYStock(mesaId, datosMesa, ajustes, esperar) {
+  const tarea = _colaMesa.catch(() => {}).then(() => escribirMesaYStock(mesaId, datosMesa, ajustes || []));
+  _colaMesa = tarea;
+  if (esperar) return tarea;
+  return tarea.catch(e => {
+    console.error('Error guardando mesa:', e);
+    showToast('No se pudo guardar la mesa. Revise la conexión.', 'error');
+  });
+}
+
+// Las líneas y totales del carrito, tal como se guardan en la mesa
+function datosMesaActual() {
   const subtotal  = pedidoLineas.reduce((a, l) => a + (l.totalBruto || 0), 0);
   const descuento = pedidoLineas.reduce((a, l) => a + (l.descMonto  || 0), 0);
   const total     = pedidoLineas.reduce((a, l) => a + (l.total      || 0), 0);
@@ -1129,9 +1255,14 @@ async function persistirMesa() {
     descMonto: l.descMonto, total: l.total, categoriaStock: l.categoriaStock, loteFecha: l.loteFecha || '',
     clienteNombre: l.clienteNombre || '', tipoLeche: l.tipoLeche || '', nota: l.nota || ''
   }));
-  try {
-    await updateDoc(doc(db, 'mesas', mesaActivaId), { lineas: lineasPlano, subtotal, descuento, total });
-  } catch(e) { console.error('Error guardando mesa:', e); }
+  return { lineas: lineasPlano, subtotal, descuento, total };
+}
+
+// Guarda el estado actual del carrito (líneas + totales) en el documento de la mesa activa.
+// v3.2.0: ajustes de stock opcionales, en la misma escritura.
+function persistirMesa(ajustes) {
+  if (!mesaActivaId) return Promise.resolve();
+  return guardarMesaYStock(mesaActivaId, datosMesaActual(), ajustes || []);
 }
 
 // ═══════════════════════════
@@ -1204,16 +1335,14 @@ window.agregarAlPedidoConLote = function(id, loteFecha) {
   renderPedido();
 
   // En modo mesa: el stock se descuenta al agregar (no al cobrar), y se guarda de inmediato en Firestore
+  // v3.2.0: el stock y la mesa en una sola escritura
   if (modoVenta === 'mesa-detail') {
+    const ajustes = [];
     if (conControl) {
-      if (loteFecha) {
-        ajustarStockLote(id, loteFecha, -1);
-      } else {
-        const cat = esPermanente ? 'permanente' : categoriaStockActiva;
-        ajustarStock(id, cat, -1);
-      }
+      if (loteFecha) ajustes.push({ id, loteFecha, delta: -1 });
+      else ajustes.push({ id, cat: esPermanente ? 'permanente' : categoriaStockActiva, delta: -1 });
     }
-    persistirMesa();
+    persistirMesa(ajustes);
   }
 };
 
@@ -1376,22 +1505,27 @@ window.cambiarQty = function(i, delta) {
       }
     }
   }
+  const cantAntes = linea.cantidad;
   pedidoLineas[i].cantidad = Math.max(1, linea.cantidad + delta);
   pedidoLineas[i].totalBruto = pedidoLineas[i].cantidad * linea.precio;
   calcularDescLinea(pedidoLineas[i]);
   renderPedido();
 
-  if (modoVenta === 'mesa-detail') {
+  // v3.2.0: el stock y la mesa en una sola escritura. Se mueve solo lo que de verdad cambió
+  // (con 1 unidad, el "−" no baja la cantidad y antes igual devolvía 1 al stock).
+  const cambio = pedidoLineas[i].cantidad - cantAntes;
+  if (modoVenta === 'mesa-detail' && cambio !== 0) {
+    const ajustes = [];
     if (conControl) {
       if (linea.loteFecha) {
-        ajustarStockLote(linea.id, linea.loteFecha, -delta);
+        ajustes.push({ id: linea.id, loteFecha: linea.loteFecha, delta: -cambio });
       } else {
         const esPermanente = prod && prod.autoEliminar === false;
         const cat = esPermanente ? 'permanente' : linea.categoriaStock;
-        ajustarStock(linea.id, cat, -delta); // delta>0 (agregó) descuenta; delta<0 (quitó) devuelve
+        ajustes.push({ id: linea.id, cat, delta: -cambio }); // agregó: descuenta; quitó: devuelve
       }
     }
-    persistirMesa();
+    persistirMesa(ajustes);
   }
 };
 
@@ -1403,16 +1537,17 @@ window.eliminarLinea = function(i) {
   if (modoVenta === 'mesa-detail' && linea) {
     const prod = productos.find(p => p.id === linea.id);
     const conControl = prod ? prod.controlStock !== false : true;
+    const ajustes = []; // v3.2.0: el stock y la mesa en una sola escritura
     if (conControl) {
       if (linea.loteFecha) {
-        ajustarStockLote(linea.id, linea.loteFecha, linea.cantidad);
+        ajustes.push({ id: linea.id, loteFecha: linea.loteFecha, delta: linea.cantidad });
       } else {
         const esPermanente = prod && prod.autoEliminar === false;
         const cat = esPermanente ? 'permanente' : linea.categoriaStock;
-        ajustarStock(linea.id, cat, linea.cantidad); // devuelve toda la cantidad de esa línea
+        ajustes.push({ id: linea.id, cat, delta: linea.cantidad }); // devuelve toda la cantidad de esa línea
       }
     }
-    persistirMesa();
+    persistirMesa(ajustes);
   }
 };
 
@@ -1856,10 +1991,14 @@ function ptSinConexion(monto, msg, intento) {
 window.ptPlanB = async function(directo) {
   const c = ptCobro;
   if (c && !directo) {
-    if (!confirm('¿Cobrar esta venta sin integración? Si el cobro ya aparece en el Point, cancélelo ahí antes de digitar el monto.')) return;
-    ptCobro = null;
-    try { await ptPedir('POST', '/cancelar', { referencia: c.referencia }); } catch (e) {}
-    ptIntentoAnterior = c; ptVigilar(c); // v3.1.1: si igual se paga en el Point, la caja avisa
+    if (!(await preguntar('¿Cobrar esta venta sin integración? Si el cobro ya aparece en el Point, cancélelo ahí antes de digitar el monto.',
+      { titulo: 'Cobrar sin integración', si: 'Cobrar sin integración', no: 'Volver', peligro: true }))) return; // v3.2.0
+    if (c.resuelto) return; // v3.2.0: mientras se preguntaba, el cobro se pagó en el Point
+    if (ptCobro === c) { // v3.2.0: si mientras tanto se canceló solo, no hay nada que cancelar
+      ptCobro = null;
+      try { await ptPedir('POST', '/cancelar', { referencia: c.referencia }); } catch (e) {}
+      ptIntentoAnterior = c; ptVigilar(c); // v3.1.1: si igual se paga en el Point, la caja avisa
+    }
   }
   ptCerrarVentana();
   pagoSinIntegracion = true;
@@ -1897,7 +2036,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.1.1';
+const CAJA_VERSION = '3.2.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2169,6 +2308,7 @@ window.cerrarYCobrarMesa = async function() {
   };
   agregarTarjetaYLotes(venta.lineas, pedidoLineas, null); // v2.2.0
   try {
+    await esperarMesa(); // v3.2.0: primero terminan de guardarse los últimos toques de la mesa
     // v2.6.0: de una sola vez. El stock NO se vuelve a descontar acá — ya se descontó al agregar cada producto a la mesa.
     const lote = writeBatch(db);
     lote.set(doc(db, 'ventas', idNuevo()), venta);
@@ -2545,17 +2685,26 @@ window.confirmarSolicitudAnulacion = async function() {
 
 // Busca el último cierre de caja de esta sucursal que tenga saldoSiguiente
 // y lo sugiere como monto inicial del turno siguiente
-async function cargarSaldoSugerido() {
+// v3.2.0: también lo recuerda (_fondoDejado) para preguntar al abrir con más plata, sin volver a leer.
+let _fondoDejado = null;      // { sucursal, saldo } del último cierre, o null si no hay
+let _fondoDejadoProm = null;  // la lectura en curso (abrirCaja la espera si todavía no termina)
+function cargarSaldoSugerido() {
+  _fondoDejadoProm = leerSaldoSugerido();
+  return _fondoDejadoProm;
+}
+async function leerSaldoSugerido() {
   const hint = document.getElementById('saldoSugeridoHint');
   const input = document.getElementById('cajaMontoInicial');
   if (!hint || !input) return;
   hint.style.display = 'none';
+  const suc = sucursal;
   try {
     const snap = await getDocs(query(
       collection(db, 'cajas'),
       where('sucursal', '==', sucursal),
       where('estado', '==', 'cerrada')
     ));
+    if (suc === sucursal) _fondoDejado = null; // v3.2.0
     if (snap.empty) return;
     // Buscar la más reciente con saldoSiguiente
     const cierres = snap.docs.map(d => d.data())
@@ -2565,6 +2714,7 @@ async function cargarSaldoSugerido() {
     const ultimo = cierres[0];
     const saldo = parseInt(ultimo.saldoSiguiente);
     if (saldo < 0) return;
+    if (suc === sucursal) _fondoDejado = { sucursal: suc, saldo }; // v3.2.0
     hint.textContent = `Saldo sugerido del turno anterior: $${saldo.toLocaleString('es-CL')} — puedes ajustarlo si es necesario`;
     hint.style.display = 'block';
     // Pre-llenar solo si el campo está vacío
@@ -2576,23 +2726,139 @@ window.abrirCaja = async function() {
   const btn   = document.getElementById('btnAbrirCaja');
   const monto = parseInt(document.getElementById('cajaMontoInicial').value) || 0;
   btn.disabled = true; btn.textContent = 'Abriendo...';
+  // v3.2.0: si se abre con más de lo que dejó el cierre anterior, primero se pregunta de dónde viene la diferencia
+  if (!_fondoDejadoProm) cargarSaldoSugerido();
+  try { await _fondoDejadoProm; } catch (e) {}
+  const dejado = _fondoDejado && _fondoDejado.sucursal === sucursal ? _fondoDejado.saldo : null;
+  if (dejado != null && monto > dejado) {
+    btn.disabled = false; btn.textContent = 'Abrir caja';
+    abrirAperturaDistinta(dejado, monto);
+    return;
+  }
+  await crearCaja(monto, null);
+  btn.disabled = false; btn.textContent = 'Abrir caja';
+};
+
+// v3.2.0: abre la caja en un solo lote. op: null (como siempre) o { dejado, abrio, motivo }:
+//   motivo 'sencillo_admin' | 'aporte_dueno' → abre con el fondo que dejó el cierre y anota un ingreso por la diferencia
+//     (igual que "Ingreso de efectivo" con la caja abierta); 'ya_estaba' → abre con lo escrito y deja anotado aperturaDistinta.
+// Devuelve '' si abrió, o el texto del error.
+async function crearCaja(monto, op) {
   const hoy = fechaLocalHoy();
+  const nuevaId = idNuevo();
+  const caja = {
+    sucursal, usuario: usuario.email, fecha: hoy,
+    montoInicial: monto, estado: 'abierta',
+    totales: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 },
+    totalVentas: 0, nVentas: 0,
+    apertura: Timestamp.now()
+  };
+  let mov = null;
+  if (op && (op.motivo === 'sencillo_admin' || op.motivo === 'aporte_dueno')) {
+    const r = revisarMovCaja({
+      tipo: 'ingreso', motivo: op.motivo, monto: String(op.abrio - op.dejado),
+      nota: `Al abrir la caja: el cierre anterior dejó ${pesosEf(op.dejado)} y había ${pesosEf(op.abrio)}`
+    }, hoy);
+    if (r.error) return r.error;
+    mov = { ...r.mov, cajaId: nuevaId, sucursal, por: usuario.email, creado: caja.apertura };
+    caja.montoInicial = op.dejado;
+    // Los mismos contadores que suma un ingreso con la caja abierta (la caja recién nace, así que parten en el ingreso)
+    caja.efectivoMovs = { ingresos: mov.monto, retiros: 0, nIngresos: 1, nRetiros: 0 };
+  } else if (op && op.motivo === 'ya_estaba') {
+    caja.aperturaDistinta = { dejado: op.dejado, abrio: op.abrio, motivo: 'ya_estaba' };
+  }
   try {
-    const ref = await addDoc(collection(db, 'cajas'), {
-      sucursal, usuario: usuario.email, fecha: hoy,
-      montoInicial: monto, estado: 'abierta',
-      totales: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 },
-      totalVentas: 0, nVentas: 0,
-      apertura: Timestamp.now()
-    });
-    cajaId = ref.id;
+    const lote = writeBatch(db);
+    lote.set(doc(db, 'cajas', nuevaId), caja);
+    if (mov) lote.set(doc(db, 'caja_movimientos', idNuevo()), mov);
+    await lote.commit();
+    cajaId = nuevaId;
     document.getElementById('cardAbrirCaja').classList.add('hidden');
     document.getElementById('cardCajaAbierta').classList.remove('hidden');
     escucharCaja(cajaId); // v3.1.0
-    mostrarResumenCaja({ fecha: hoy, montoInicial: monto, totales: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 }, totalVentas: 0, nVentas: 0 });
-    showToast('Caja abierta');
-  } catch(e) { alert('Error al abrir caja: ' + e.message); }
-  btn.disabled = false; btn.textContent = 'Abrir caja';
+    mostrarResumenCaja(caja);
+    showToast(mov ? `Caja abierta · ingreso de ${pesosEf(mov.monto)} anotado` : 'Caja abierta');
+    return '';
+  } catch(e) {
+    if (!op) alert('Error al abrir caja: ' + e.message);
+    return 'No se pudo abrir la caja: ' + (e.message || e) + '. Revise la conexión e intente de nuevo.';
+  }
+}
+
+// ── v3.2.0 · Abrir con más fondo del que dejó el cierre: ¿de dónde viene? ──
+const OPCIONES_APERTURA = [
+  ['sencillo_admin', 'Sencillo de la caja de administración', 'Se anota como ingreso. La administración lo confirma.'],
+  ['aporte_dueno', 'Aporte del dueño', 'Se anota como ingreso.'],
+  ['ya_estaba', 'Ya estaba en la caja (el cierre se anotó mal)', 'No se anota ingreso; queda la diferencia para revisar.'],
+];
+let _ad = null; // { dejado, abrio, motivo }
+function abrirAperturaDistinta(dejado, abrio) {
+  _ad = { dejado, abrio, motivo: 'sencillo_admin', antes: document.activeElement };
+  document.getElementById('adTitulo').textContent = `Son ${pesosEf(abrio - dejado)} más que lo que dejó el cierre. ¿De dónde viene?`;
+  document.getElementById('adResumen').textContent = `El cierre anterior dejó ${pesosEf(dejado)} para este turno y usted escribió ${pesosEf(abrio)}.`;
+  document.getElementById('adError').textContent = '';
+  const b = document.getElementById('btnAdAbrir');
+  b.disabled = false; b.textContent = 'Abrir caja';
+  pintarAperturaDistinta();
+  document.getElementById('modalAperturaDistinta').classList.add('open');
+  document.addEventListener('keydown', teclaAperturaDistinta, true);
+  const sel = document.querySelector('#adOpciones .ef-chip.sel');
+  if (sel) sel.focus();
+}
+function pintarAperturaDistinta() {
+  if (!_ad) return;
+  document.getElementById('adOpciones').innerHTML = OPCIONES_APERTURA.map(([k, txt, sub]) =>
+    `<button type="button" class="ef-chip${k === _ad.motivo ? ' sel' : ''}" role="radio" aria-checked="${k === _ad.motivo}" tabindex="${k === _ad.motivo ? 0 : -1}" data-motivo="${k}" onclick="elegirAperturaDistinta('${k}')">${escHtml(txt)}<span class="ef-chip-sub">${escHtml(sub)}</span></button>`).join('');
+  const dif = pesosEf(_ad.abrio - _ad.dejado), fondo = pesosEf(_ad.dejado);
+  document.getElementById('adEfecto').innerHTML =
+    _ad.motivo === 'sencillo_admin' ? `La caja abre con <b>${fondo}</b> de fondo y anota un ingreso de <b>${dif}</b> · llega a Sistema Fën → Efectivo → Por recibir.`
+    : _ad.motivo === 'aporte_dueno' ? `La caja abre con <b>${fondo}</b> de fondo y anota un ingreso de <b>${dif}</b> como aporte del dueño.`
+    : `La caja abre con <b>${pesosEf(_ad.abrio)}</b> de fondo, sin ingreso. Queda anotado que el cierre dejó ${fondo}, para revisarlo.`;
+}
+window.elegirAperturaDistinta = function (k) {
+  if (!_ad) return;
+  _ad.motivo = k;
+  pintarAperturaDistinta();
+  const b = document.querySelector(`#adOpciones [data-motivo="${k}"]`);
+  if (b) b.focus();
+};
+// Escape vuelve; las flechas cambian de opción (como un grupo de opciones); Tab no sale de la ventana
+function teclaAperturaDistinta(e) {
+  if (!_ad) return;
+  if (document.getElementById('modalConfirmar').classList.contains('open')) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarAperturaDistinta(); return; }
+  const enOpciones = e.target && e.target.closest && e.target.closest('#adOpciones');
+  if (enOpciones && ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(e.key)) {
+    e.preventDefault();
+    const i = OPCIONES_APERTURA.findIndex(o => o[0] === _ad.motivo);
+    const paso = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1;
+    elegirAperturaDistinta(OPCIONES_APERTURA[(i + paso + OPCIONES_APERTURA.length) % OPCIONES_APERTURA.length][0]);
+    return;
+  }
+  if (e.key === 'Tab') {
+    const f = [document.querySelector('#adOpciones .ef-chip.sel'), document.getElementById('btnAdVolver'), document.getElementById('btnAdAbrir')].filter(Boolean);
+    const i = f.indexOf(document.activeElement);
+    e.preventDefault();
+    f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+  }
+}
+window.cerrarAperturaDistinta = function () {
+  document.getElementById('modalAperturaDistinta').classList.remove('open');
+  document.removeEventListener('keydown', teclaAperturaDistinta, true);
+  const antes = _ad && _ad.antes;
+  _ad = null;
+  if (antes && antes !== document.body && typeof antes.focus === 'function' && document.contains(antes)) antes.focus();
+};
+window.confirmarAperturaDistinta = async function () {
+  if (!_ad) return;
+  const b = document.getElementById('btnAdAbrir');
+  const err = document.getElementById('adError');
+  err.textContent = '';
+  b.disabled = true; b.textContent = 'Abriendo...';
+  const error = await crearCaja(_ad.motivo === 'ya_estaba' ? _ad.abrio : _ad.dejado, { dejado: _ad.dejado, abrio: _ad.abrio, motivo: _ad.motivo });
+  if (error) { err.textContent = error; b.disabled = false; b.textContent = 'Abrir caja'; return; }
+  _ad.antes = null;
+  cerrarAperturaDistinta();
 };
 
 // ═══════════════════════════
@@ -3047,6 +3313,8 @@ window.confirmarCierreCiego = async function() {
     await lote.commit();
 
     document.getElementById('modalCierreCiego').classList.remove('open');
+    // v3.2.0: este cierre pasa a ser el último: lo que deja es el fondo del turno siguiente
+    if ((cajaData.sucursal || sucursal) === sucursal) _fondoDejado = { sucursal, saldo: ef.fondo };
     if (cajaDocId === cajaId) {
       dejarDeEscucharCaja(); // v3.1.0
       cajaId = null;
@@ -3246,7 +3514,8 @@ programarRespaldoMedianoche();
 // Migra datos del formato viejo (hoy/ayer/antesayer/cuartoDia/merma como campos)
 // al nuevo formato (entradas: {"20260701": 10}) para AMBAS sucursales
 window.migrarStockFormato = async function() {
-  if (!confirm('¿Migrar todos los datos de stock al nuevo formato?\n\nEsto convierte el stock existente (Hoy/Ayer/Antesayer/Cuarto día/Merma) al nuevo sistema basado en fechas.\n\nSolo es necesario hacerlo una vez.')) return;
+  if (!(await preguntar('¿Migrar todos los datos de stock al nuevo formato?\n\nEsto convierte el stock existente (Hoy/Ayer/Antesayer/Cuarto día/Merma) al nuevo sistema basado en fechas.\n\nSolo es necesario hacerlo una vez.',
+    { titulo: 'Migrar stock', si: 'Migrar', no: 'Volver' }))) return; // v3.2.0
   const btn = document.getElementById('btnMigrarStock');
   btn.disabled = true; btn.textContent = 'Migrando...';
   try {
@@ -3529,7 +3798,8 @@ async function cargarStockLista() { await cargarStockPorCategoria(); }
 
 // Admin: registra la merma (Firestore: informe de merma y Sistema Fën) y la saca del stock. v2.3.0: ya no va a la planilla.
 window.registrarMermaItem = async function(productoId, nombre, cantidad, precioOriginal) {
-  if (!confirm(`¿Registrar merma de ${cantidad} ud. de "${nombre}"?\n\nQueda en el informe de merma y sale del stock.`)) return;
+  if (!(await preguntar(`¿Registrar merma de ${cantidad} ud. de "${nombre}"?\n\nQueda en el informe de merma y sale del stock.`,
+    { titulo: 'Registrar merma', si: 'Registrar merma', no: 'Volver' }))) return; // v3.2.0
   try {
     const stockRef  = doc(db, 'stock', `${sucursal}_${productoId}`);
     const stockSnap = await getDoc(stockRef);
@@ -3705,7 +3975,8 @@ window.confirmarMoverMerma = async function() {
   if (cantidad <= 0) { alert('Ingresa una cantidad válida'); return; }
   if (cantidad > max) { alert(`Solo hay ${max} ud. disponibles en esa fecha`); return; }
   if (!motivo) { alert('Selecciona un motivo antes de continuar'); return; }
-  if (!confirm(`¿Enviar ${cantidad} de ${max} ud. de "${nombre}" (${keyToFechaCL(fechaKey)}) a Merma?\n\nMotivo: ${motivo}`)) return;
+  if (!(await preguntar(`¿Enviar ${cantidad} de ${max} ud. de "${nombre}" (${keyToFechaCL(fechaKey)}) a Merma?\n\nMotivo: ${motivo}`,
+    { titulo: 'Enviar a Merma', si: 'Enviar a Merma', no: 'Volver' }))) return; // v3.2.0
 
   document.getElementById('modalMoverMerma').classList.remove('open');
 
@@ -4019,7 +4290,8 @@ async function calcularDiasSinRotar() {
 // catch-up automático no se ejecutó por alguna razón.
 window.forzarRotacionManual = async function() {
   if (!sucursal) return;
-  if (!confirm('¿Forzar una rotación de stock ahora?\n\nHoy → Ayer\nAyer → Antes de ayer\nAntes de ayer → Cuarto día\nCuarto día → Merma (queda pendiente de registrar)\n\nEsto normalmente ocurre solo de forma automática.')) return;
+  if (!(await preguntar('¿Forzar una rotación de stock ahora?\n\nHoy → Ayer\nAyer → Antes de ayer\nAntes de ayer → Cuarto día\nCuarto día → Merma (queda pendiente de registrar)\n\nEsto normalmente ocurre solo de forma automática.',
+    { titulo: 'Rotar stock', si: 'Rotar ahora', no: 'Volver' }))) return; // v3.2.0
   const btn = document.getElementById('btnForzarRotacion');
   if (btn) { btn.disabled = true; btn.textContent = 'Rotando...'; }
   try {

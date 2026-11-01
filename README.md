@@ -1,3 +1,38 @@
+# fën caja · v3.2.0
+
+**Tres arreglos aprobados por Emmanuel** después de la etapa 4 (efectivo del turno). Sistema Fën y reglas de Firestore: sin cambios (fen-ventas v1.8.0 ya lo permite). · 1 de noviembre de 2026
+
+## Qué cambia
+1. **Abrir la caja con más plata de la que dejó el cierre pregunta de dónde viene.** Si el monto inicial es mayor que el fondo que dejó el último cierre de la tienda, antes de abrir aparece "Son $X más que lo que dejó el cierre. ¿De dónde viene?":
+   - **Sencillo de la caja de administración** (viene elegido): la caja abre con el fondo que dejó el cierre y anota un ingreso por la diferencia, igual que "Ingreso de efectivo". Llega a Sistema Fën → Efectivo → Por recibir.
+   - **Aporte del dueño:** lo mismo, como aporte del dueño (no pasa por la caja de administración).
+   - **Ya estaba en la caja (el cierre se anotó mal):** abre con lo escrito, sin ingreso, y queda anotada la diferencia en la caja para revisarla.
+   - Si es igual o menos, o es la primera caja de la tienda, abre como siempre, sin preguntar.
+   - La caja y el ingreso se guardan de una sola vez: si se corta internet, no queda nada a medias.
+2. **Mesas de una sola vez.** Agregar, sumar, restar o quitar un producto de una mesa, y cancelar la mesa, guardan el stock y la mesa juntos. Antes eran varias escrituras y un corte podía dejar el stock movido sin la mesa (o al revés). Además, el "−" con 1 unidad ya no devuelve una unidad al stock por error.
+3. **Se acabaron las ventanas del navegador para confirmar.** Cerrar sesión, entrar a la otra tienda, cancelar mesa, cobrar sin integración, merma, rotación y migración de stock preguntan en una ventana de la caja: el botón de volver viene marcado y Escape cancela.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`. Súbalo con la caja cerrada o en un momento sin ventas. Cambian `index.html`, `caja.js` y `caja.css`; los otros van para que todo quede en la misma versión.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.2.0".
+- [ ] Abrir la caja con el monto sugerido: abre sin preguntar.
+- [ ] (Con un monto de prueba) Abrir con $1.000 más que lo sugerido: aparece la pregunta con "Sencillo de la caja de administración" elegido. Elegir "Ya estaba en la caja" para no anotar un ingreso de prueba; la caja abre con lo escrito.
+- [ ] En una mesa: agregar un producto con stock, sumar uno, restar uno y quitarlo. El stock en pantalla y en Stock queda como al principio.
+- [ ] Cancelar una mesa con productos: aparece la ventana de la caja (no la del navegador); "Volver" no hace nada; "Cancelar mesa" devuelve el stock.
+- [ ] Tocar "Salir": aparece la ventana de la caja; Escape la cierra sin salir.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v320.test.js` (8, navegador con Firebase en memoria):
+  - abrir con más que el cierre: pregunta y "Sencillo" abre con el fondo dejado y el ingreso en un solo lote (390 y 1280 px);
+  - "Aporte del dueño" y "Ya estaba en la caja"; Escape y "Volver" no abren; igual, menos o sin cierre anterior abre como siempre;
+  - mesas: agregar, sumar, restar, quitar y cancelar, cada uno en un solo lote y sin escrituras sueltas; cobrar mesa sigue igual;
+  - confirmación dentro de la página (foco, Tab, Escape); ningún `confirm(` en `caja.js`.
+- Las pruebas de la v3.1.0 y v3.1.1 siguen pasando.
+
+---
+
 # fën caja · v3.1.1
 
 **Corrección del cobro con el Point integrado** (incidente del 31 oct en Barros Arana: un débito de $5.500 pagado en el Point a las 19:07 que la caja no registró). Va junto con el **servidor de cobros fen-point 0.4.2** (lista de cobros recientes). Sistema Fën y reglas de Firestore: sin cambios. · 31 de octubre de 2026
