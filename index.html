@@ -4,13 +4,13 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>Fën · Ventas</title>
-<link rel="stylesheet" href="caja.css?v=3.1.0">
+<link rel="stylesheet" href="caja.css?v=3.1.1">
 </head>
 <body>
 
 <!-- ═══════════════════════════ LOGIN ═══════════════════════════ -->
 <div class="login-screen" id="loginScreen">
-  <img class="login-logo" src="logo-fen.png?v=3.1.0" alt="Fën"/>
+  <img class="login-logo" src="logo-fen.png?v=3.1.1" alt="Fën"/>
   <div class="login-card">
     <div class="login-title">Iniciar sesión</div>
     <label>Correo electrónico</label>
@@ -20,7 +20,7 @@
     <div class="login-error" id="loginError">Correo o contraseña incorrectos</div>
     <button class="btn-login" id="btnLogin" onclick="login()">Entrar</button>
   </div>
-  <div class="login-version">Caja v3.1.0</div>
+  <div class="login-version">Caja v3.1.1</div>
 </div>
 
 <!-- ═══════════════════════════ SUCURSAL ═══════════════════════════ -->
@@ -41,8 +41,8 @@
   <div class="app-marco" id="appMarco">
   <aside class="lateral" id="lateral" aria-label="Menú de la caja">
     <div class="lat-marca">
-      <img class="header-logo lat-logo" src="logo-fen.png?v=3.1.0" alt="Fën, panadería masa madre"/>
-      <div class="lat-fen" aria-hidden="true"><img src="logo-fen.png?v=3.1.0" alt=""/></div>
+      <img class="header-logo lat-logo" src="logo-fen.png?v=3.1.1" alt="Fën, panadería masa madre"/>
+      <div class="lat-fen" aria-hidden="true"><img src="logo-fen.png?v=3.1.1" alt=""/></div>
       <div class="header-title" id="headerSucursal">Fën</div>
       <div class="lat-tienda-corta" id="headerSucursalCorta" aria-hidden="true"></div>
     </div>
@@ -53,8 +53,8 @@
       <button type="button" class="nav-btn" onclick="showSection('productos', this)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12l-8 8-9-9V3h8zM7.5 7.5h.01"/></svg><span>Productos</span></button>
     </nav>
     <div class="lat-pie">
-      <div class="header-sub"><span id="headerUsuario"></span> <span class="header-version">· v3.1.0</span></div>
-      <div class="lat-version-corta" aria-hidden="true">v3.1.0</div>
+      <div class="header-sub"><span id="headerUsuario"></span> <span class="header-version">· v3.1.1</span></div>
+      <div class="lat-version-corta" aria-hidden="true">v3.1.1</div>
       <div class="lat-botones">
         <button type="button" class="btn-icon" onclick="cerrarSesion()">Salir</button>
         <button type="button" class="lat-colapsar" id="btnLateral" onclick="alternarLateral()" aria-label="Colapsar la barra" aria-expanded="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
@@ -380,7 +380,7 @@
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="abrirPedirProducto()">Pedir producto</button>
       <div class="pp-sub">Tus pedidos</div>
       <div id="misPedidosProd"><div class="empty">Cargando…</div></div>
-      <div class="pp-version">Caja v3.1.0</div>
+      <div class="pp-version">Caja v3.1.1</div>
     </div>
 
   </div>
@@ -612,6 +612,6 @@
 <div id="toastMsg"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.6/qz-tray.js"></script>
-<script type="module" src="caja.js?v=3.1.0"></script>
+<script type="module" src="caja.js?v=3.1.1"></script>
 </body>
 </html>

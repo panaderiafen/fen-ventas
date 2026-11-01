@@ -1,9 +1,9 @@
-// fën caja v3.1.0 · código
+// fën caja v3.1.1 · código
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.1.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.1.0'; // v3.0.0
+import { armarResumen } from './resumen-caja.js?v=3.1.1'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.1.1'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -1564,6 +1564,8 @@ let pagoPointListo = null;        // pago confirmado que se está registrando
 let pagoPointPendiente = null;    // pago confirmado cuya venta no alcanzó a registrarse (no se vuelve a cobrar)
 let ptCobro = null, ptSondeo = null, ptReloj = null;
 let ptIntentoAnterior = null, ptVigia = null;   // v2.4.1: el último cobro que no se completó (por si igual se pagó)
+const PT_VIGILAR_MS = 5 * 60 * 1000;             // v3.1.1: un cobro que quedó sin cerrar se sigue revisando 5 minutos
+const ptVigilados = new Map();                   // v3.1.1: referencia → { c, hasta } (no depende de la venta en pantalla)
 const ptNombreTienda = s => s === 'ainavillo' ? 'Ainavillo' : 'Barros Arana';
 const ptPesos = n => '$' + (parseInt(n) || 0).toLocaleString('es-CL');
 
@@ -1612,19 +1614,53 @@ function iniciarRevisionPoint() {
 }
 
 // v2.4.1: un cobro vencido o cancelado puede terminar pagado en el Point (la tarjeta ya estaba pasando).
-// Se sigue mirando 2 minutos; si se pagó, la venta se registra con ese pago.
+// v3.1.1: se sigue mirando 5 minutos todo cobro que quedó sin cerrar: vencido, cancelado, sin respuesta por un corte
+// de conexión o abandonado con "Cobrar sin integración". Si se pagó y su venta sigue en pantalla, se registra con ese
+// pago; si no, la caja avisa que hay un pago sin venta (para no cobrar dos veces).
 function ptVigilar(c) {
-  if (ptVigia) clearTimeout(ptVigia);
-  const hasta = Date.now() + 120000;
-  const mirar = async () => {
-    if (ptIntentoAnterior !== c || ptCobro || Date.now() > hasta) return;
+  if (!c || c.resuelto) return;
+  ptVigilados.set(c.referencia, { c, hasta: Date.now() + PT_VIGILAR_MS });
+  if (!ptVigia) ptVigia = setTimeout(ptMirarVigilados, 4000);
+}
+async function ptMirarVigilados() {
+  ptVigia = null;
+  for (const [ref, v] of [...ptVigilados]) {
+    const c = v.c;
+    if (c.resuelto || Date.now() > v.hasta) { ptVigilados.delete(ref); continue; }
+    if (ptCobro === c) continue; // lo está esperando la pantalla del cobro
     let d = null;
-    try { d = await ptPedir('GET', '/estado?ref=' + encodeURIComponent(c.referencia) + '&verificar=1'); } catch (e) { d = null; }
-    if (ptIntentoAnterior !== c || ptCobro) return;
-    if (d && d.ok && d.estado === 'pagado') { ptIntentoAnterior = null; ptCobro = c; return ptPagado(d); }
-    ptVigia = setTimeout(mirar, 4000);
-  };
-  ptVigia = setTimeout(mirar, 4000);
+    try { d = await ptPedir('GET', '/estado?ref=' + encodeURIComponent(ref) + '&verificar=1'); } catch (e) { d = null; }
+    if (c.resuelto) { ptVigilados.delete(ref); continue; }
+    if (d && !d.ok && d.status === 404) { ptVigilados.delete(ref); continue; } // el cobro nunca se creó
+    if (d && d.ok && d.estado === 'devuelto') { ptVigilados.delete(ref); continue; }
+    if (d && d.ok && d.estado === 'pagado') {
+      if (ptCobro || pagoPointListo) { v.hasta = Math.max(v.hasta, Date.now() + 30000); continue; } // hay otro cobro en curso: después
+      ptVigilados.delete(ref);
+      ptPagoEncontrado(c, d);
+    }
+  }
+  if (ptVigilados.size && !ptVigia) ptVigia = setTimeout(ptMirarVigilados, 4000);
+}
+// Un cobro que se dio por perdido apareció pagado
+function ptPagoEncontrado(c, d) {
+  c.resuelto = true;
+  const total = parseInt(document.getElementById('resumenVenta').dataset.total) || 0;
+  const mismaVenta = ptIntentoAnterior === c && pedidoLineas.length > 0 && total === c.total;
+  if (mismaVenta) { ptIntentoAnterior = null; ptCobro = c; showToast('El cobro anterior sí se pagó: no cobre de nuevo'); return ptPagado(d); }
+  if (ptIntentoAnterior === c) ptIntentoAnterior = null;
+  ptAvisoPagoSinVenta(c, d);
+}
+function ptAvisoPagoSinVenta(c, d) {
+  const hora = new Date(c.creada).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const txt = { debito: 'Débito', credito: 'Crédito', prepago: 'Prepago', dinero_en_cuenta: 'Dinero en cuenta (QR)' }[d.tipoPago] || 'Tarjeta';
+  ptVentana(`<div class="pt-centro"><div class="pt-tit pt-mal" id="ptTitulo">Pago recibido en el Point sin venta registrada</div>
+    <div class="pt-monto">${ptPesos(c.monto)}</div>
+    <div class="pt-sub">${txt} · cobro enviado a las ${hora}. Mercado Pago confirmó el pago, pero la venta no quedó registrada en la caja.</div>
+    <div class="pt-planb"><b>Qué hacer</b><ol>
+      <li>No vuelva a cobrar al cliente: ya pagó.</li>
+      <li>Si la venta no está registrada, regístrela con "Cobrar sin integración" → Débito por ${ptPesos(c.monto)}.</li>
+      <li>Si ya la cobró de nuevo a mano, el cliente pagó dos veces: avise a administración para devolver uno.</li></ol></div>
+    <button type="button" class="btn btn-success pt-uno" onclick="ptCerrarVentana()">Entendido</button></div>`);
 }
 // Antes de cobrar otra vez la misma venta, se revisa si el intento anterior terminó pagado
 async function ptRevisarAnterior(monto, total) {
@@ -1682,14 +1718,19 @@ async function cobrarConPoint(monto) {
   ptVentana(`<div class="pt-centro"><div class="pt-tienda">Point de ${tienda}</div><div class="pt-monto">${ptPesos(monto)}</div>
     <div class="pt-tit" id="ptTitulo">Enviando el cobro al Point…</div></div>`);
   const referencia = (sucursal === 'ainavillo' ? 'AI-' : 'BA-') + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+  // v3.1.1: el cobro se recuerda desde antes de enviarlo: si la respuesta no llega (corte de conexión), el servidor
+  // igual pudo crearlo y el cliente pagarlo. Antes se olvidaba y "Intentar de nuevo" creaba un segundo cobro.
+  const intento = { referencia, monto, total, creada: Date.now(), estado: 'enviado', tienda };
   let d;
   try { d = await ptPedir('POST', '/cobrar', { sucursal, monto, referencia, descripcion: 'Venta Fën ' + tienda }); }
-  catch (e) { return ptSinConexion(monto, 'No se pudo conectar con el servidor de cobros.'); }
+  catch (e) { return ptSinConexion(monto, 'No se pudo conectar con el servidor de cobros.', intento); }
   if (!d.ok) {
-    if (d.status === 409 && /queued|cola/i.test(d.mensaje || '')) return ptSinConexion(monto, 'El Point tiene otro cobro pendiente. Cancélelo en el Point (o espere 3 minutos) y vuelva a cobrar.');
-    return ptSinConexion(monto, d.mensaje || 'El servidor de cobros no aceptó el cobro.');
+    const seguro = [400, 401, 403].includes(d.status) ? null : intento; // rechazos que nunca crean el cobro
+    if (d.status === 409 && /queued|cola/i.test(d.mensaje || '')) return ptSinConexion(monto, 'El Point tiene otro cobro pendiente. Si el cliente no ha pagado, cancélelo en el Point (o espere 3 minutos) y vuelva a cobrar.', seguro);
+    return ptSinConexion(monto, d.mensaje || 'El servidor de cobros no aceptó el cobro.', seguro);
   }
-  ptCobro = { referencia, monto, total, creada: Date.now(), estado: d.estado || 'enviado', tienda };
+  intento.estado = d.estado || 'enviado';
+  ptCobro = intento;
   ptEsperando();
   ptSondear(0);
 }
@@ -1737,6 +1778,7 @@ function medioDeTipo(t) { return t === 'credito' ? 'credito' : 'debito'; }   // 
 
 async function ptPagado(d) {
   const c = ptCobro; ptCobro = null;
+  c.resuelto = true; ptVigilados.delete(c.referencia); // v3.1.1
   const medio = medioDeTipo(d.tipoPago);
   const pago = { referencia: c.referencia, ordenId: d.ordenId || '', pagoId: d.pagoId || '', tipoPago: d.tipoPago || '', medio, monto: c.monto, total: c.total };
   const txt = { debito: 'Débito', credito: 'Crédito', prepago: 'Prepago', dinero_en_cuenta: 'Dinero en cuenta (QR)' }[d.tipoPago] || 'Tarjeta';
@@ -1789,19 +1831,21 @@ window.ptCancelar = async function() {
   try { d = await ptPedir('POST', '/cancelar', { referencia: c.referencia }); } catch (e) { d = null; }
   if (d && d.ok && d.estado === 'pagado') return ptPagado(d);
   if (d && d.ok && ['cancelado', 'vencido', 'fallido'].includes(d.estado)) { ptCobro = null; ptIntentoAnterior = c; ptVigilar(c); ptCerrarVentana(); showToast('Cobro cancelado'); return; }
-  ptEsperando('El cobro ya está en el Point: cancélelo en el mismo Point (salga de la pantalla de cobro y confirme). Esta pantalla avanza sola.');
+  ptEsperando('Mercado Pago no dejó cancelar: el cobro ya está en el Point. Si el cliente ya pasó la tarjeta, no cancele nada: espere, esta pantalla avanza sola. Si no ha pagado, cancélelo en el mismo Point.');
 };
 window.ptCerrarVentana = ptCerrarVentana;
 
 function ptPasosPlanB() {
   return `<div class="pt-planb"><b>Cobrar sin integración</b><ol>
-    <li>Si el cobro ya aparece en el Point, cancélelo ahí primero.</li>
+    <li>Si el cliente ya pagó en el Point, no cobre de nuevo: toque "Intentar de nuevo" y la caja lo registra.</li>
+    <li>Si el cobro aparece en el Point y el cliente no ha pagado, cancélelo ahí primero.</li>
     <li>En el Point: Más opciones › Ajustes › Modo de vinculación › modo normal (sin integración).</li>
     <li>Digite el monto en el Point y cobre como antes.</li>
     <li>En la caja, elija Débito o Crédito y registre la venta.</li></ol></div>`;
 }
-function ptSinConexion(monto, msg) {
+function ptSinConexion(monto, msg, intento) {
   ptCobro = null;
+  if (intento) { ptIntentoAnterior = intento; ptVigilar(intento); } // v3.1.1
   ptVentana(`<div class="pt-centro"><div class="pt-tit pt-mal" id="ptTitulo">No se pudo cobrar en el Point</div><div class="pt-monto">${ptPesos(monto)}</div>
     <div class="pt-sub">${msg}</div>
     <button type="button" class="btn btn-secondary pt-uno" onclick="ptCerrarVentana(); confirmarPagoBoton()">Intentar de nuevo</button>
@@ -1815,6 +1859,7 @@ window.ptPlanB = async function(directo) {
     if (!confirm('¿Cobrar esta venta sin integración? Si el cobro ya aparece en el Point, cancélelo ahí antes de digitar el monto.')) return;
     ptCobro = null;
     try { await ptPedir('POST', '/cancelar', { referencia: c.referencia }); } catch (e) {}
+    ptIntentoAnterior = c; ptVigilar(c); // v3.1.1: si igual se paga en el Point, la caja avisa
   }
   ptCerrarVentana();
   pagoSinIntegracion = true;
@@ -1852,7 +1897,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.1.0';
+const CAJA_VERSION = '3.1.1';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });

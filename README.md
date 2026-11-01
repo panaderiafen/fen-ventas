@@ -1,3 +1,40 @@
+# fën caja · v3.1.1
+
+**Corrección del cobro con el Point integrado** (incidente del 31 oct en Barros Arana: un débito de $5.500 pagado en el Point a las 19:07 que la caja no registró). Va junto con el **servidor de cobros fen-point 0.4.2** (lista de cobros recientes). Sistema Fën y reglas de Firestore: sin cambios. · 31 de octubre de 2026
+
+## Qué pasaba
+La caja envió el cobro, el servidor lo creó y la clienta pagó, pero la respuesta no llegó a la caja (corte breve de conexión).
+La caja mostró "No se pudo cobrar en el Point" y **se olvidó de ese cobro**. Al tocar "Intentar de nuevo" creó un segundo cobro, que terminó cancelado. El primero quedó pagado y sin venta.
+
+## Qué cambia
+1. **El cobro se recuerda desde antes de enviarlo.** Si la respuesta no llega, "Intentar de nuevo" primero pregunta si ese cobro ya se pagó. Si se pagó, registra la venta con ese pago, sin un segundo cobro.
+2. **La caja vigila 5 minutos todo cobro que quedó sin cerrar** (sin respuesta, vencido, cancelado o abandonado con "Cobrar sin integración"). Antes eran 2 minutos y solo en algunos casos.
+   - Si aparece pagado y su venta sigue en pantalla: la registra sola y avisa "no cobre de nuevo".
+   - Si la venta ya no está (se cobró a mano o se pasó a otra): aparece **"Pago recibido en el Point sin venta registrada"**, con el monto, la hora y qué hacer (no cobrar de nuevo; registrarla con Débito; si se cobró dos veces, avisar a administración para devolver uno).
+3. **Textos más claros:**
+   - Al no poder cancelar: "Si el cliente ya pasó la tarjeta, no cancele nada: espere, esta pantalla avanza sola".
+   - En "No se pudo cobrar": "Si el cliente ya pagó en el Point, no cobre de nuevo: toque Intentar de nuevo".
+
+**Límite:** si se recarga la página o se cierra la caja durante esos 5 minutos, la vigilancia se pierde. El control de respaldo es la lista "Cobros recientes" de Sistema Fën (un "Pagado" sin su venta).
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`. Súbalo en un momento sin ventas. Cambian solo `index.html` y `caja.js`; los otros van para que todo quede en la misma versión.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.1.1".
+- [ ] Una venta con tarjeta normal: se envía al Point, se paga y se registra sola, como siempre.
+- [ ] (Opcional, con un monto chico) Enviar un cobro y tocar "Cobrar sin integración" sin pagar todavía. Pagarlo luego en el Point antes de que venza. En menos de 10 segundos la venta se registra sola, con el aviso "El cobro anterior sí se pagó: no cobre de nuevo". Después anule esa venta de prueba y devuelva el pago desde Mercado Pago.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v311.test.js` (4, navegador con Firebase y servidor de cobros simulados):
+  - corte de conexión e "Intentar de nuevo": registra con el cobro pagado, sin un segundo cobro;
+  - corte sin tocar nada: la caja lo descubre sola;
+  - venta registrada a mano y el cobro pagado después: aviso de pago sin venta, sin una segunda venta (390 px);
+  - cobro normal: igual que antes.
+- Con la v3.1.0, las tres primeras fallan (reproducen el incidente). Las pruebas de la v3.1.0 siguen pasando.
+
+---
+
 # fën caja · v3.1.0
 
 **Ajustes pedidos por Emmanuel el 31 oct**, con la caja y la venta tranquilas. Va junto con **Sistema Fën v0.121.0**. Reglas de Firestore: sin cambios (fen-ventas v1.8.0). · 31 de octubre de 2026
