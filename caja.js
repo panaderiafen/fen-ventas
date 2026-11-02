@@ -1,11 +1,12 @@
-// fën caja v3.3.0 · código
+// fën caja v3.3.1 · código
+// v3.3.1: después de una venta cobrada con el Point integrado, el medio de pago vuelve a Tarjeta (quedaba en Efectivo)
 // v3.3.0: cada equipo con su sucursal (la fija un administrador; reemplaza el "recuerda su tienda")
 //         y la sección "Ver la otra sucursal" (stock por tarjeta valorizado y lo vendido hoy, solo lectura)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.3.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.0'; // v3.0.0
+import { armarResumen } from './resumen-caja.js?v=3.3.1'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.1'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -1980,7 +1981,7 @@ async function registrarPagado(pago) {
   if (registrada) {
     pagoPointPendiente = null; ptIntentoAnterior = null;
     ptCerrarVentana();
-    if (!pagoDividido) selMedio('efectivo');
+    if (!pagoDividido) selMedio('debito'); // v3.3.1: vuelve a Tarjeta (antes quedaba en Efectivo después de cobrar con el Point)
     pintarModoPoint();
   } else {
     pagoPointPendiente = pago;
@@ -2244,7 +2245,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.3.0';
+const CAJA_VERSION = '3.3.1';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });

@@ -1,3 +1,21 @@
+# fën caja · v3.3.1
+
+**El medio de pago vuelve siempre a Tarjeta.** Después de una venta cobrada con el Point integrado, el selector quedaba en **Efectivo** (un resto de antes de la v3.1.0) y la venta siguiente partía en Efectivo. Ahora, después de cualquier venta (Point, efectivo, transferencia o mesa), vuelve a Tarjeta. Incluye todo lo de la v3.3.0. Reglas de Firestore y Sistema Fën: sin cambios. · 2 de noviembre de 2026
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`. Si aún no subió la v3.3.0, suba esta directamente (trae las dos cosas).
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.3.1".
+- [ ] Cobrar una venta con el Point: al terminar, el selector queda en Tarjeta.
+- [ ] Cobrar la siguiente en efectivo: al terminar, vuelve a Tarjeta.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v331.test.js` (390 y 1280 px): dos ventas seguidas pagadas en el Point y una en efectivo; después de cada una, el selector está en Tarjeta. Con el código anterior la prueba falla (queda en Efectivo).
+- `caja-v330.test.js` sigue pasando.
+
+---
+
 # fën caja · v3.3.0
 
 **Cada equipo con su sucursal y "Ver la otra sucursal"** (boceto "Equipos por sucursal", aprobado por Emmanuel). Reglas de Firestore: sin cambios (leer stock, cajas y ventas ya está permitido a quien tiene sesión). Sistema Fën: sin cambios. · 2 de noviembre de 2026
