@@ -1,9 +1,11 @@
-// fën caja v3.2.0 · código
+// fën caja v3.3.0 · código
+// v3.3.0: cada equipo con su sucursal (la fija un administrador; reemplaza el "recuerda su tienda")
+//         y la sección "Ver la otra sucursal" (stock por tarjeta valorizado y lo vendido hoy, solo lectura)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.2.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.2.0'; // v3.0.0
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { armarResumen } from './resumen-caja.js?v=3.3.0'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.0'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -154,7 +156,7 @@ onAuthStateChanged(auth, async (user) => {
     if (esStockViewer) {
       await iniciarVisorStock();
     } else {
-      mostrarSucursal();
+      await entrarSegunEquipo(); // v3.3.0: cada equipo entra a su sucursal
     }
   } else {
     mostrarLogin();
@@ -194,12 +196,50 @@ function mostrarLogin() {
   document.getElementById('appScreen').style.display = 'none';
 }
 
-function mostrarSucursal() {
+// v3.3.0: la pantalla de sucursal tiene tres formas:
+//   'elegir'     → equipo sin sucursal fija (el computador del administrador): elige cada vez, como antes
+//   'asignar'    → equipo nuevo y entró un administrador: fija la sucursal del equipo
+//   'sinAsignar' → equipo nuevo y entró un cajero: no puede seguir hasta que un administrador lo asigne
+const ICONO_TIENDA = '<span class="suc-icono" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l1.5-6h15L21 10M4 10v10h16V10M3 10h18M9 20v-6h6v6"/></svg></span>';
+function mostrarSucursal(modo = 'elegir') {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('sucursalScreen').style.display = 'flex';
   document.getElementById('appScreen').style.display = 'none';
-  document.getElementById('sucursalUsuario').textContent = `Hola, ${usuario.email}`;
+  const el = document.getElementById('sucursalScreen');
+  const hola = `Hola, ${escHtml(usuario.email)}`;
+  if (modo === 'sinAsignar') {
+    el.innerHTML = `<div class="sucursal-title">Este equipo aún no tiene sucursal</div>
+      <div class="sucursal-sub">${hola}</div>
+      <p class="sucursal-texto">Pídale a un administrador que entre en este equipo y lo asigne a Ainavillo o a Barros Arana. Es una sola vez.</p>
+      <button type="button" class="sucursal-btn sucursal-btn-centro" onclick="cerrarSesion()">Cerrar sesión</button>`;
+    return;
+  }
+  if (modo === 'asignar') {
+    el.innerHTML = `<div class="sucursal-title">¿En qué sucursal trabaja este equipo?</div>
+      <div class="sucursal-sub">${hola} · Queda fijo. Solo un administrador lo puede cambiar.</div>
+      ${Object.entries(SUCURSALES).map(([id, nombre]) => `<button type="button" class="sucursal-btn" onclick="asignarEquipo('${id}')">${ICONO_TIENDA}<div><div>${nombre}</div><div class="suc-detalle">Fijar este equipo en ${nombre}</div></div></button>`).join('')}
+      <button type="button" class="sucursal-btn sucursal-btn-libre" onclick="asignarEquipo('libre')"><div><div>Sin sucursal fija</div><div class="suc-detalle">Elegir cada vez (el computador del administrador)</div></div></button>`;
+    return;
+  }
+  el.innerHTML = `<div class="sucursal-title">¿En qué sucursal estás?</div>
+    <div class="sucursal-sub">${hola} · Este equipo no tiene sucursal fija</div>
+    ${Object.entries(SUCURSALES).map(([id, nombre]) => `<button type="button" class="sucursal-btn" onclick="selSucursal('${id}')">${ICONO_TIENDA}<div><div>${nombre}</div><div class="suc-detalle">${id === 'ainavillo' ? 'Ainavillo 764' : 'Barros Arana'}</div></div></button>`).join('')}`;
 }
+
+// v3.3.0: al entrar, el equipo va directo a su sucursal; si no tiene, se asigna (administrador) o se avisa (cajero)
+async function entrarSegunEquipo() {
+  const eq = sucursalDelEquipo();
+  if (SUCURSALES[eq]) return selSucursal(eq);
+  if (eq === 'libre') return mostrarSucursal('elegir');
+  return mostrarSucursal(esAdmin ? 'asignar' : 'sinAsignar');
+}
+
+window.asignarEquipo = async function(v) {
+  if (!esAdmin) return;
+  if (!fijarSucursalEquipo(v)) { showToast('Este navegador no deja guardar la sucursal del equipo (¿modo incógnito?)', 'error'); return; }
+  if (v === 'libre') { mostrarSucursal('elegir'); return; }
+  await selSucursal(v);
+};
 
 // ══════════════════════════════════
 // VISOR DE STOCK
@@ -391,12 +431,12 @@ async function cargarStockAmbas() {
 }
 
 window.selSucursal = async function(s) {
-  // v2.4.0: el equipo recuerda su tienda; si se elige la otra, se pregunta (no se bloquea)
-  const tiendaEq = tiendaDelEquipo();
-  if (tiendaEq && tiendaEq !== s && !(await preguntar(`Este equipo suele trabajar en ${ptNombreTienda(tiendaEq)}. ¿Seguro que quiere entrar como ${ptNombreTienda(s)}?`,
-    { titulo: 'Otra tienda', si: `Entrar como ${ptNombreTienda(s)}`, no: 'Volver' }))) return; // v3.2.0
-  recordarTiendaEquipo(s);
+  // v3.3.0: un equipo con sucursal fija solo entra a la suya (reemplaza el "recuerda su tienda" de la v2.4.0)
+  if (!SUCURSALES[s]) return;
+  const eq = sucursalDelEquipo();
+  if (SUCURSALES[eq] && eq !== s) return;
   sucursal = s;
+  document.getElementById('loginScreen').style.display = 'none'; // v3.3.0: el equipo fijo llega aquí sin pasar por la pantalla de sucursal
   document.getElementById('sucursalScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('headerSucursal').textContent = s === 'ainavillo' ? 'Ainavillo' : 'Barros Arana';
@@ -408,6 +448,7 @@ window.selSucursal = async function(s) {
   cargarStockLista();
   reintentarResumenesPendientes(); // v2.3.0: cierres cuyo resumen no alcanzó a guardarse
   iniciarRevisionPoint(); // v2.4.0: ¿el Point de esta tienda está integrado?
+  pintarEquipo(); // v3.3.0: "Ver la otra sucursal" y la sucursal de este equipo
 };
 
 // ═══════════════════════════
@@ -420,7 +461,8 @@ window.showSection = function(id, el) {
   if (el) el.classList.add('active');
   if (id === 'stock')     { cargarStockPorCategoria(); renderStockIngresoGrid(); inicializarFechaStock(); }
   if (id === 'productos') { cargarMisPedidos(); renderAllAreaUIs(); }
-  if (id === 'caja')      { cargarSaldoSugerido(); }
+  if (id === 'caja')      { cargarSaldoSugerido(); pintarEquipo(); }
+  if (id === 'otra')      { cargarOtraSucursal(false); } // v3.3.0
 };
 
 // ═══════════════════════════
@@ -2006,10 +2048,176 @@ window.ptPlanB = async function(directo) {
   showToast('Cobre en el Point digitando el monto, elija Débito o Crédito y registre la venta');
 };
 
-// ─── v2.4.0: cada equipo recuerda la tienda donde trabaja ───────────────────
-const CLAVE_TIENDA_EQUIPO = 'fen_caja_tienda_equipo';
-function tiendaDelEquipo() { try { return localStorage.getItem(CLAVE_TIENDA_EQUIPO) || ''; } catch (e) { return ''; } }
-function recordarTiendaEquipo(s) { try { if (!localStorage.getItem(CLAVE_TIENDA_EQUIPO)) localStorage.setItem(CLAVE_TIENDA_EQUIPO, s); } catch (e) {} }
+// ─── v3.3.0: cada equipo con su sucursal ────────────────────────────────────
+// La fija un administrador, una vez, en este equipo ('ainavillo', 'barros_arana' o 'libre' = elige cada vez).
+// Reemplaza el "recuerda su tienda" de la v2.4.0: esa memoria se borra y cada equipo parte sin sucursal.
+const CLAVE_SUCURSAL_EQUIPO = 'fen_caja_sucursal_equipo';
+const SUCURSALES = { ainavillo: 'Ainavillo', barros_arana: 'Barros Arana' };
+function sucursalDelEquipo() {
+  try { const v = localStorage.getItem(CLAVE_SUCURSAL_EQUIPO) || ''; return (v === 'libre' || SUCURSALES[v]) ? v : ''; } catch (e) { return ''; }
+}
+function fijarSucursalEquipo(v) {
+  try { localStorage.setItem(CLAVE_SUCURSAL_EQUIPO, v); return localStorage.getItem(CLAVE_SUCURSAL_EQUIPO) === v; } catch (e) { return false; }
+}
+try { localStorage.removeItem('fen_caja_tienda_equipo'); } catch (e) {}
+const otraSucursal = () => sucursal === 'ainavillo' ? 'barros_arana' : 'ainavillo';
+
+// La sección "Ver la otra sucursal" (nombre en el menú) y, para el administrador, la tarjeta "Sucursal de este equipo"
+function pintarEquipo() {
+  const otra = otraSucursal();
+  const txt = document.getElementById('navOtraTxt');
+  if (txt) txt.textContent = 'Ver ' + SUCURSALES[otra];
+  const card = document.getElementById('cardEquipo');
+  if (!card) return;
+  if (!esAdmin) { card.style.display = 'none'; return; }
+  const eq = sucursalDelEquipo();
+  const actual = SUCURSALES[eq] || (eq === 'libre' ? 'Sin sucursal fija (elige cada vez)' : 'Sin asignar');
+  card.style.display = '';
+  card.innerHTML = `<div class="card-title">Sucursal de este equipo</div>
+    <p class="equipo-actual">Ahora: <b>${escHtml(actual)}</b></p>
+    <div class="equipo-opciones">
+      ${[...Object.entries(SUCURSALES), ['libre', 'Sin sucursal fija']].map(([id, nombre]) =>
+        `<button type="button" class="btn-sm equipo-op${id === eq ? ' activo' : ''}" ${id === eq ? 'aria-current="true"' : ''} onclick="cambiarSucursalEquipo('${id}')">${nombre}</button>`).join('')}
+    </div>
+    <p class="pp-ayuda">Solo se ve si entra un administrador. Un equipo fijo entra directo a su sucursal; la otra solo se puede mirar en "Ver ${escHtml(SUCURSALES[otra])}".</p>`;
+}
+
+window.cambiarSucursalEquipo = async function(v) {
+  if (!esAdmin || v === sucursalDelEquipo()) return;
+  const nombre = SUCURSALES[v] || 'sin sucursal fija';
+  if (!(await preguntar(`Este equipo quedará en ${nombre}. La caja se vuelve a cargar.`, { titulo: 'Sucursal de este equipo', si: 'Cambiar', no: 'Volver' }))) return;
+  if (!fijarSucursalEquipo(v)) { showToast('Este navegador no deja guardar la sucursal del equipo', 'error'); return; }
+  location.reload();
+};
+
+// ─── v3.3.0: Ver la otra sucursal (solo lectura) ─────────────────────────────
+// Carga solo al abrir la sección (si lo cargado tiene más de 1 minuto) y con "Actualizar" (máximo una vez cada 30 s).
+// Lecturas: una por producto con control de stock, las cajas de hoy de esa sucursal (1 a 3) y las últimas 10 ventas.
+let otraCarga = { suc: null, ts: 0, cargando: false };
+const OTRA_CATS = [['hoy', 'Hoy'], ['ayer', 'Ayer'], ['antesayer', 'Ant.'], ['cuartoDia', '4to'], ['ultimaOferta', 'Últ.']];
+
+// Stock de un producto por tarjeta y su valor (puro: lo usa la prueba)
+function stockOtraDeProducto(prod, data) {
+  const esPerm = prod.autoEliminar === false;
+  const cats = {}; let total = 0, valor = 0;
+  Object.entries((data && data.entradas) || {}).forEach(([k, q]) => {
+    q = Number(q) || 0;
+    if (q <= 0) return;
+    let cat = getCategoriaFecha(k);
+    if (cat === 'merma') return;
+    if (esPerm || cat === 'permanente') cat = 'permanente';
+    cats[cat] = (cats[cat] || 0) + q;
+  });
+  Object.entries(cats).forEach(([cat, q]) => {
+    total += q;
+    valor += q * getPrecioProducto(prod, cat === 'permanente' ? 'hoy' : cat);
+  });
+  return { cats, total, valor };
+}
+
+window.cargarOtraSucursal = async function(forzar) {
+  const otra = otraSucursal();
+  const ahora = Date.now();
+  if (otraCarga.cargando) return;
+  if (otraCarga.suc === otra && ((!forzar && ahora - otraCarga.ts < 60000) || (forzar && ahora - otraCarga.ts < 30000))) {
+    if (forzar) showToast('Recién actualizado: espere unos segundos');
+    return;
+  }
+  otraCarga.cargando = true;
+  const btn = document.getElementById('btnOtraActualizar');
+  if (btn) btn.disabled = true;
+  document.getElementById('otraTitulo').textContent = SUCURSALES[otra];
+  document.getElementById('otraSobre').textContent = `Equipo de ${SUCURSALES[sucursal]} · mirando`;
+  try {
+    const conStock = productos.filter(p => p.controlStock !== false);
+    const hoy = fechaLocalHoy();
+    const [docsStock, snCajas] = await Promise.all([
+      Promise.all(conStock.map(p => getDoc(doc(db, 'stock', `${otra}_${p.id}`)))),
+      getDocs(query(collection(db, 'cajas'), where('sucursal', '==', otra), where('fecha', '==', hoy)))
+    ]);
+    pintarStockOtra(conStock.map((p, i) => ({ prod: p, existe: docsStock[i].exists(), ...stockOtraDeProducto(p, docsStock[i].exists() ? docsStock[i].data() : null) })));
+    const cajas = snCajas.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.apertura?.seconds || 0) - (b.apertura?.seconds || 0));
+    const abierta = cajas.find(c => c.estado === 'abierta');
+    const ultima = abierta || cajas[cajas.length - 1];
+    let ventas = [];
+    if (ultima) {
+      try {
+        const sn = await getDocs(query(collection(db, 'ventas'), where('cajaId', '==', ultima.id), orderBy('fecha', 'desc'), limit(10)));
+        ventas = sn.docs.map(d => d.data()).slice(0, 10);
+      } catch (e) {
+        // Falta el índice (cajaId + fecha): mientras se crea, se leen las ventas de esa caja y se ordenan aquí
+        console.warn('v3.3.0: falta el índice de ventas (cajaId ↑, fecha ↓). Créelo con el enlace de este error:', e && e.message);
+        const sn = await getDocs(query(collection(db, 'ventas'), where('cajaId', '==', ultima.id)));
+        ventas = sn.docs.map(d => d.data()).sort((a, b) => (b.fecha?.seconds || 0) - (a.fecha?.seconds || 0)).slice(0, 10);
+      }
+    }
+    pintarVentasOtra(cajas, abierta, ventas);
+    otraCarga = { suc: otra, ts: Date.now(), cargando: false };
+    document.getElementById('otraHora').textContent = 'Actualizado a las ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch (e) {
+    console.error('v3.3.0: no se pudo cargar la otra sucursal', e);
+    otraCarga.cargando = false;
+    showToast('No se pudo cargar ' + SUCURSALES[otra] + '. Revise la conexión y toque Actualizar.', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+};
+
+function pintarStockOtra(filas) {
+  const pesos = n => '$' + Math.round(n).toLocaleString('es-CL');
+  const hayPerm = filas.some(f => f.cats.permanente);
+  const cols = hayPerm ? [...OTRA_CATS, ['permanente', 'Sin venc.']] : OTRA_CATS;
+  // Con stock, por nombre; abajo, "Agotado" los que esa sucursal ha tenido alguna vez (tienen su ficha de stock)
+  const visibles = filas.filter(f => f.total > 0 || f.existe)
+    .sort((a, b) => (b.total > 0) - (a.total > 0) || String(a.prod.nombre).localeCompare(String(b.prod.nombre), 'es'));
+  const porCat = {}; let total = 0, valor = 0;
+  filas.forEach(f => { total += f.total; valor += f.valor; cols.forEach(([c]) => {
+    if (f.cats[c]) porCat[c] = (porCat[c] || 0) + f.cats[c] * getPrecioProducto(f.prod, c === 'permanente' ? 'hoy' : c);
+  }); });
+  const plantilla = `grid-template-columns: minmax(120px, 1.9fr) repeat(${cols.length}, minmax(34px, .6fr)) minmax(44px, .7fr) minmax(76px, 1fr)`;
+  const celda = q => q ? `<span class="otra-num">${q}</span>` : '<span class="otra-num otra-vacio">–</span>';
+  const el = document.getElementById('otraStock');
+  el.innerHTML = `<div class="otra-titulo-bloque">Stock por producto y por tarjeta</div>
+    <div class="otra-resumen-movil">Valor del stock <b>${pesos(valor)} · ${total} ud.</b></div>
+    <div class="otra-tabla-caja"><div class="otra-tabla">
+      <div class="otra-fila otra-cabecera" style="${plantilla}"><span>Producto</span>${cols.map(([, n]) => `<span class="otra-num">${n}</span>`).join('')}<span class="otra-num">Total</span><span class="otra-num">Valor</span></div>
+      ${visibles.length ? visibles.map(f => f.total > 0
+        ? `<div class="otra-fila" style="${plantilla}"><b>${escHtml(f.prod.nombre)}</b>${cols.map(([c]) => celda(f.cats[c])).join('')}<b class="otra-num">${f.total}</b><span class="otra-num">${pesos(f.valor)}</span></div>`
+        : `<div class="otra-fila" style="${plantilla}"><b>${escHtml(f.prod.nombre)}</b><span class="otra-agotado" style="grid-column: span ${cols.length}">Agotado</span><b class="otra-num">0</b><span class="otra-num">$0</span></div>`).join('')
+        : '<div class="empty">Sin stock</div>'}
+      <div class="otra-fila otra-pie" style="${plantilla}"><b>Valor por tarjeta</b>${cols.map(([c]) => `<span class="otra-num">${porCat[c] ? pesos(porCat[c]) : '–'}</span>`).join('')}<b class="otra-num">${total}</b><b class="otra-num otra-valor">${pesos(valor)}</b></div>
+    </div></div>
+    <div class="otra-tarjetas">${visibles.map(f => `<div class="otra-tarjeta"><div class="otra-tarjeta-cab"><b>${escHtml(f.prod.nombre)}</b>${f.total > 0
+        ? `<span><b>${f.total}</b> · ${pesos(f.valor)}</span></div><div class="otra-chips">${cols.filter(([c]) => f.cats[c]).map(([c, n]) => `<span class="otra-chip otra-chip-${c}">${n} ${f.cats[c]}</span>`).join('')}</div>`
+        : `<span class="otra-agotado">Agotado</span></div>`}</div>`).join('') || '<div class="empty">Sin stock</div>'}</div>
+    <p class="pp-ayuda">Valor = unidades × el precio de cada tarjeta (Hoy, Ayer, Ant., 4to, Últ.). No incluye la merma.</p>`;
+}
+
+function pintarVentasOtra(cajas, abierta, ventas) {
+  const pesos = n => '$' + Math.round(Number(n) || 0).toLocaleString('es-CL');
+  const medio = { efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', transferencia: 'Transferencia' };
+  const hora = ts => ts && ts.toDate ? ts.toDate().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  const totalDia = cajas.reduce((s, c) => s + (Number(c.totalVentas) || 0), 0);
+  const nDia = cajas.reduce((s, c) => s + (Number(c.nVentas) || 0), 0);
+  const estado = abierta ? `Caja abierta desde las ${hora(abierta.apertura)}` : cajas.length ? 'La caja de hoy ya se cerró' : 'Hoy aún no abre caja';
+  const el = document.getElementById('otraVentas');
+  el.innerHTML = `<div class="otra-titulo-bloque">Lo que lleva vendido hoy</div>
+    <div class="otra-total"><div><div class="otra-total-estado">${estado}</div><div class="otra-total-monto">${pesos(totalDia)}</div></div><div class="otra-total-n">${nDia} ${nDia === 1 ? 'venta' : 'ventas'}</div></div>
+    <div class="otra-titulo-bloque otra-sub">Últimas ventas</div>
+    <div class="otra-ventas-lista">${ventas.length ? ventas.map(v => {
+      const prods = (v.lineas || []).map(l => `${l.cantidad} ${escHtml(l.nombre)}`).join(' · ') || 'Venta';
+      const m = v.pagos ? 'Dividido' : (medio[v.medioPago] || v.medioPago || '');
+      return `<div class="otra-venta${v.anulada ? ' anulada' : ''}"><span class="otra-venta-hora">${hora(v.fecha)}</span><span>${prods}<span class="otra-venta-medio">${escHtml(m)}${v.anulada ? ' · anulada' : ''}</span></span><b>${pesos(v.total)}</b></div>`;
+    }).join('') : '<div class="empty">Sin ventas todavía</div>'}</div>
+    <p class="pp-ayuda">Se ven las últimas 10. Desde aquí no se cobra, no se anula ni se mueve stock.</p>`;
+}
+
+window.selOtraPestana = function(cual) {
+  const sec = document.getElementById('sec-otra');
+  sec.dataset.pestana = cual;
+  document.querySelectorAll('#sec-otra .otra-pestana').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.p === cual)));
+};
 
 // ═══════════════════════════
 // REGISTRAR VENTA
@@ -2036,7 +2244,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.2.0';
+const CAJA_VERSION = '3.3.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });

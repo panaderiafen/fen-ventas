@@ -4,13 +4,13 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>Fën · Ventas</title>
-<link rel="stylesheet" href="caja.css?v=3.2.0">
+<link rel="stylesheet" href="caja.css?v=3.3.0">
 </head>
 <body>
 
 <!-- ═══════════════════════════ LOGIN ═══════════════════════════ -->
 <div class="login-screen" id="loginScreen">
-  <img class="login-logo" src="logo-fen.png?v=3.2.0" alt="Fën"/>
+  <img class="login-logo" src="logo-fen.png?v=3.3.0" alt="Fën"/>
   <div class="login-card">
     <div class="login-title">Iniciar sesión</div>
     <label>Correo electrónico</label>
@@ -20,7 +20,7 @@
     <div class="login-error" id="loginError">Correo o contraseña incorrectos</div>
     <button class="btn-login" id="btnLogin" onclick="login()">Entrar</button>
   </div>
-  <div class="login-version">Caja v3.2.0</div>
+  <div class="login-version">Caja v3.3.0</div>
 </div>
 
 <!-- ═══════════════════════════ SUCURSAL ═══════════════════════════ -->
@@ -41,8 +41,8 @@
   <div class="app-marco" id="appMarco">
   <aside class="lateral" id="lateral" aria-label="Menú de la caja">
     <div class="lat-marca">
-      <img class="header-logo lat-logo" src="logo-fen.png?v=3.2.0" alt="Fën, panadería masa madre"/>
-      <div class="lat-fen" aria-hidden="true"><img src="logo-fen.png?v=3.2.0" alt=""/></div>
+      <img class="header-logo lat-logo" src="logo-fen.png?v=3.3.0" alt="Fën, panadería masa madre"/>
+      <div class="lat-fen" aria-hidden="true"><img src="logo-fen.png?v=3.3.0" alt=""/></div>
       <div class="header-title" id="headerSucursal">Fën</div>
       <div class="lat-tienda-corta" id="headerSucursalCorta" aria-hidden="true"></div>
     </div>
@@ -51,10 +51,11 @@
       <button type="button" class="nav-btn" onclick="showSection('stock', this)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8"/></svg><span>Stock</span></button>
       <button type="button" class="nav-btn" onclick="showSection('caja', this)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18v12H3zM3 11h18M7 15h3"/></svg><span>Caja</span></button>
       <button type="button" class="nav-btn" onclick="showSection('productos', this)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12l-8 8-9-9V3h8zM7.5 7.5h.01"/></svg><span>Productos</span></button>
+      <button type="button" class="nav-btn nav-otra" id="navOtra" onclick="showSection('otra', this)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span id="navOtraTxt">Ver la otra sucursal</span></button>
     </nav>
     <div class="lat-pie">
-      <div class="header-sub"><span id="headerUsuario"></span> <span class="header-version">· v3.2.0</span></div>
-      <div class="lat-version-corta" aria-hidden="true">v3.2.0</div>
+      <div class="header-sub"><span id="headerUsuario"></span> <span class="header-version">· v3.3.0</span></div>
+      <div class="lat-version-corta" aria-hidden="true">v3.3.0</div>
       <div class="lat-botones">
         <button type="button" class="btn-icon" onclick="cerrarSesion()">Salir</button>
         <button type="button" class="lat-colapsar" id="btnLateral" onclick="alternarLateral()" aria-label="Colapsar la barra" aria-expanded="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
@@ -345,6 +346,7 @@
   <!-- CAJA -->
   <div class="section" id="sec-caja">
     <div id="avisoCajaAnterior"></div>
+    <div class="card" id="cardEquipo" style="display:none"></div><!-- v3.3.0: sucursal de este equipo (solo administrador) -->
     <div class="card" id="cardAbrirCaja">
       <div class="card-title">Abrir caja</div>
       <label>Monto inicial en efectivo ($)</label>
@@ -372,6 +374,26 @@
   </div>
 
   <!-- PRODUCTOS · v2.3.0: se crean y se cambian solo en Sistema Fën → Catálogo; aquí se piden -->
+  <!-- v3.3.0 · VER LA OTRA SUCURSAL (solo lectura) -->
+  <div class="section" id="sec-otra" data-pestana="stock">
+    <div class="otra-cab">
+      <div><div class="otra-sobre" id="otraSobre">Mirando</div><h2 class="otra-h" id="otraTitulo">La otra sucursal</h2></div>
+      <div class="otra-acciones">
+        <span class="otra-solo">Solo lectura</span>
+        <span class="otra-hora" id="otraHora"></span>
+        <button type="button" class="otra-actualizar" id="btnOtraActualizar" onclick="cargarOtraSucursal(true)">Actualizar</button>
+      </div>
+    </div>
+    <div class="otra-pestanas" role="group" aria-label="Qué mirar">
+      <button type="button" class="otra-pestana" data-p="stock" aria-pressed="true" onclick="selOtraPestana('stock')">Stock</button>
+      <button type="button" class="otra-pestana" data-p="ventas" aria-pressed="false" onclick="selOtraPestana('ventas')">Lo vendido</button>
+    </div>
+    <div class="otra-cuerpo">
+      <div class="otra-stock" id="otraStock"><div class="empty">Cargando…</div></div>
+      <div class="otra-ventas" id="otraVentas"></div>
+    </div>
+  </div>
+
   <div class="section" id="sec-productos">
 
     <div class="card" id="cardPedirProducto">
@@ -380,7 +402,7 @@
       <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="abrirPedirProducto()">Pedir producto</button>
       <div class="pp-sub">Tus pedidos</div>
       <div id="misPedidosProd"><div class="empty">Cargando…</div></div>
-      <div class="pp-version">Caja v3.2.0</div>
+      <div class="pp-version">Caja v3.3.0</div>
     </div>
 
   </div>
@@ -639,6 +661,6 @@
 <div id="toastMsg"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.6/qz-tray.js"></script>
-<script type="module" src="caja.js?v=3.2.0"></script>
+<script type="module" src="caja.js?v=3.3.0"></script>
 </body>
 </html>

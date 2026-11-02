@@ -1,3 +1,46 @@
+# fën caja · v3.3.0
+
+**Cada equipo con su sucursal y "Ver la otra sucursal"** (boceto "Equipos por sucursal", aprobado por Emmanuel). Reglas de Firestore: sin cambios (leer stock, cajas y ventas ya está permitido a quien tiene sesión). Sistema Fën: sin cambios. · 2 de noviembre de 2026
+
+## Qué cambia
+1. **Cada equipo con su sucursal.** Reemplaza el "este equipo suele trabajar en…" de la v2.4.0: esa memoria se borra y **todos los equipos parten sin sucursal**.
+   - Si entra un **administrador** en un equipo sin sucursal: "¿En qué sucursal trabaja este equipo?" → Ainavillo, Barros Arana o **Sin sucursal fija** (elige cada vez; para el computador del administrador).
+   - Si entra un **cajero** en un equipo sin sucursal: "Este equipo aún no tiene sucursal. Pídale a un administrador…" (no puede seguir).
+   - Un equipo fijo entra **directo** a su sucursal, sin preguntar.
+   - Para cambiarlo: un administrador entra en ese equipo → **Caja** → tarjeta **"Sucursal de este equipo"** (solo la ve el administrador). La caja se vuelve a cargar.
+   - Se guarda en el navegador del equipo: si se borran los datos del navegador, o se usa otro navegador, el equipo vuelve a quedar sin sucursal.
+2. **Ver la otra sucursal** (menú: "Ver Ainavillo" o "Ver Barros Arana"), solo lectura:
+   - Stock por producto y por tarjeta (Hoy, Ayer, Ant., 4to, Últ., y "Sin venc." para los permanentes), valorizado, con el valor de cada tarjeta. No cuenta la merma. "Agotado" para lo que esa sucursal ha tenido y ya no tiene.
+   - Lo vendido hoy (suma de las cajas del día) y las últimas 10 ventas.
+   - En celular: tarjetas por producto y dos pestañas (Stock / Lo vendido).
+   - Sin botones para cobrar, anular ni mover stock.
+   - Lecturas: solo al abrir la sección (si lo cargado tiene más de 1 minuto) y con "Actualizar" (máximo una vez cada 30 s). Cada vez: una por producto con control de stock + las cajas de hoy de esa sucursal + 10 ventas.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos en una sola subida)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`. Súbalo en un momento sin ventas: después de subirlo, **cada tablet necesita que un administrador entre una vez** para fijar su sucursal.
+
+## Un índice en Firestore (una vez, recomendado)
+Para que "Últimas ventas" lea solo 10: Firebase → fen-ventas → Firestore → **Índices** → **Compuesto** → Crear índice: colección `ventas`, campos `cajaId` Ascendente y `fecha` Descendente, alcance Colección. Mientras no exista, la sección funciona igual pero lee todas las ventas de esa caja.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.3.0".
+- [ ] En la tablet, entrar con un usuario de cajero: aparece "Este equipo aún no tiene sucursal". Salir.
+- [ ] Entrar con usted (administrador) en la tablet: elegir su sucursal. Entra directo. Salir y entrar de nuevo: no pregunta.
+- [ ] Repetir en cada equipo de las tiendas. En su computador, elegir "Sin sucursal fija".
+- [ ] En un equipo fijo, el menú dice "Ver" + la otra sucursal: el stock y el valor calzan con el Stock de esa tienda; lo vendido calza con su caja.
+- [ ] Revisar en celular (pestañas Stock / Lo vendido) y en el computador.
+- [ ] Caja → "Sucursal de este equipo" aparece solo con usuario administrador.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v330.test.js` (4, navegador con Firebase en memoria, 390, 1280 y 1440 px):
+  - equipo sin asignar + cajero: no entra; la memoria de la v2.4.0 se borra;
+  - administrador asigna, entra directo al recargar, no puede pasar a la otra; cambia a "Sin sucursal fija" desde Caja, sin ventanas del navegador;
+  - cajero en equipo fijo no ve la tarjeta del equipo; equipo libre elige como antes;
+  - Ver Ainavillo: valores por tarjeta, permanentes, merma fuera, agotado, total de las cajas del día, 10 ventas, sin botones para operar, sin scroll horizontal, lecturas contadas.
+- Las pruebas de la v3.2.0 siguen pasando con el equipo en "Sin sucursal fija".
+
+---
+
 # fën caja · v3.2.0
 
 **Tres arreglos aprobados por Emmanuel** después de la etapa 4 (efectivo del turno). Sistema Fën y reglas de Firestore: sin cambios (fen-ventas v1.8.0 ya lo permite). · 1 de noviembre de 2026
