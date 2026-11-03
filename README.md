@@ -1,3 +1,25 @@
+# fën caja · v3.3.2
+
+**Point integrado o a mano, a la vista** (Emmanuel, 2 nov, al cerrar Ainavillo). Solo cambia lo que se ve: las ventas se guardan igual. Reglas de Firestore y Sistema Fën: sin cambios. · 2 de noviembre de 2026
+
+## Qué cambia
+1. **Arqueo de caja:** bajo Débito y bajo Crédito, cuánto fue con el **Point integrado** (confirmado por Mercado Pago venta por venta) y cuánto **a mano** (digitado en el Point), destacado. Reemplaza la línea "Con el Point integrado: $X". Si hay descuadre en tarjeta, se revisa lo cobrado a mano contra la lista del Point.
+2. **Ventas del turno:** cada venta con tarjeta lleva la etiqueta **"Point integrado"** (verde) o **"Point a mano"** (amarillo). Las de efectivo y transferencia, sin etiqueta.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.3.2".
+- [ ] Caja → Arqueo: bajo Débito y Crédito aparece "Point integrado $X · a mano $Y" (sin "a mano" si no hubo).
+- [ ] Venta → Ventas del turno: las ventas con tarjeta tienen su etiqueta.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v332.test.js` (390 y 1280 px): resumen dividido, etiquetas por venta, efectivo sin etiqueta, sin scroll horizontal.
+- `caja-v330.test.js` y `caja-v331.test.js` siguen pasando.
+
+---
+
 # fën caja · v3.3.1
 
 **El medio de pago vuelve siempre a Tarjeta.** Después de una venta cobrada con el Point integrado, el selector quedaba en **Efectivo** (un resto de antes de la v3.1.0) y la venta siguiente partía en Efectivo. Ahora, después de cualquier venta (Point, efectivo, transferencia o mesa), vuelve a Tarjeta. Incluye todo lo de la v3.3.0. Reglas de Firestore y Sistema Fën: sin cambios. · 2 de noviembre de 2026

@@ -1,12 +1,13 @@
-// fën caja v3.3.1 · código
+// fën caja v3.3.2 · código
+// v3.3.2: en el resumen, Débito y Crédito divididos en Point integrado y a mano; en Ventas del turno, la etiqueta de cada venta con tarjeta
 // v3.3.1: después de una venta cobrada con el Point integrado, el medio de pago vuelve a Tarjeta (quedaba en Efectivo)
 // v3.3.0: cada equipo con su sucursal (la fija un administrador; reemplaza el "recuerda su tienda")
 //         y la sección "Ver la otra sucursal" (stock por tarjeta valorizado y lo vendido hoy, solo lectura)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.3.1'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.1'; // v3.0.0
+import { armarResumen } from './resumen-caja.js?v=3.3.2'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.2'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -2245,7 +2246,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.3.1';
+const CAJA_VERSION = '3.3.2';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2716,6 +2717,11 @@ async function cargarUltimasVentas() {
           : `<button class="ultimas-venta-medio" onclick="abrirModalEditarMedio('${v.id}','${v.medioPago}')" title="Cambiar medio de pago">${medioLabel[v.medioPago] || v.medioPago}</button>`;
 
       const btnComanda = `<button onclick="reimprimirVentaTurno('${v.id}')" title="Reimprimir comanda">Comanda</button>`;
+      // v3.3.2: con tarjeta, si fue con el Point integrado o a mano (digitado en el Point)
+      const conTarjeta = v.pagos ? v.pagos.some(p => (p.medio === 'debito' || p.medio === 'credito') && p.monto > 0) : (v.medioPago === 'debito' || v.medioPago === 'credito');
+      const etqPoint = !conTarjeta || esAnulada ? ''
+        : v.pagoPoint ? '<span class="pt-etq pt-etq-integrado">Point integrado</span>'
+        : (v.pagoSinIntegracion || pointIntegrado) ? '<span class="pt-etq pt-etq-mano">Point a mano</span>' : '';
 
       const acciones = esAnulada
         ? `<div class="ultimas-venta-acciones"><span class="ultimas-venta-anulada-tag">Venta anulada${v.motivoAnulacion ? ': ' + v.motivoAnulacion : ''}</span>${btnComanda}</div>`
@@ -2730,7 +2736,7 @@ async function cargarUltimasVentas() {
         <div class="ultimas-venta-item${esAnulada ? ' anulada' : ''}">
           <div class="ultimas-venta-header">
             <span class="ultimas-venta-fecha">${fechaStr}</span>
-            ${medioBadge}
+            <span class="ultimas-venta-etqs">${etqPoint}${medioBadge}</span>
           </div>
           ${(v.lineas || []).map(l => `
             <div class="ultimas-venta-linea">
@@ -3096,11 +3102,19 @@ function pintarArqueo(data) {
     filaRes(`Retiros (${m.nRetiros})`, '− $' + n(m.retiros), 'ef-menos') +
     filaRes('Efectivo que debería haber', pesosEf(deberiaHaber(_cajaArqueo)), 'total ef-deberia') +
     `<div style="height:8px"></div>` +
-    filaRes('Débito', '$' + n(t.debito)) +
-    filaRes('Crédito', '$' + n(t.credito)) +
-    (point ? `<div class="ef-ayuda" style="margin:-2px 0 4px">Con el Point integrado: $${n(point)}</div>` : '') +
+    filaRes('Débito', '$' + n(t.debito)) + (point ? divisionPoint(t.debito, tp.debito) : '') +
+    filaRes('Crédito', '$' + n(t.credito)) + (point ? divisionPoint(t.credito, tp.credito) : '') +
     filaRes('Transferencia', '$' + n(t.transferencia)) +
     filaRes(`Total ventas (${_cajaArqueo.nVentas || 0})`, '$' + n(_cajaArqueo.totalVentas), 'total');
+}
+
+// v3.3.2: bajo Débito y Crédito, cuánto fue con el Point integrado (confirmado por Mercado Pago) y cuánto a mano
+// (digitado en el Point): lo cobrado a mano es lo que hay que revisar si no cuadra.
+function divisionPoint(total, integrado) {
+  const tot = parseInt(total) || 0, integ = Math.min(tot, parseInt(integrado) || 0), mano = tot - integ;
+  if (!tot) return '';
+  const n = v => '$' + v.toLocaleString('es-CL');
+  return `<div class="ef-ayuda pt-division">Point integrado ${n(integ)}${mano ? ` · <span class="pt-a-mano">a mano ${n(mano)}</span>` : ''}</div>`;
 }
 
 // Los retiros e ingresos del turno (una consulta por la caja abierta, sin índices)

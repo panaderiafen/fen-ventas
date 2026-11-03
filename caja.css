@@ -562,3 +562,11 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 @media (max-width: 760px) {
   .nav-otra span { font-size: 11px; line-height: 1.15; }
 }
+
+/* v3.3.2 · Point integrado o a mano */
+.pt-division { margin: -2px 0 6px; }
+.pt-a-mano { color: #8A4B00; font-weight: 700; }
+.ultimas-venta-etqs { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.pt-etq { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.pt-etq-integrado { color: #1D6B4F; background: #E3F3EC; }
+.pt-etq-mano { color: #7A4300; background: #FFF1D6; }
