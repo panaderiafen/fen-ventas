@@ -1,3 +1,51 @@
+# fën caja · v3.3.4
+
+**El texto del sobre se imprime en una etiqueta de 80 × 50 mm** (Emmanuel, 4 nov: papel de stickers de 80 mm de ancho). Incluye todo lo de la v3.3.3. Reglas de Firestore y Sistema Fën: sin cambios. · 4 de noviembre de 2026
+
+## Qué cambia
+- **Con QZ Tray (computador):** el sobre sale en 6 líneas, con menos espacio entre líneas y poco avance antes del corte: "SOBRE - RETIRO DE CAJA", sucursal y fecha, el monto grande, quién cerró y la línea de firma. Mide unos 35–40 mm.
+- **Desde el navegador (Android/RawBT u otra impresora):** una etiqueta propia de 80 × 50 mm, en una sola hoja, con el monto grande. Antes usaba el formato de la comanda, que salía más largo.
+- La comanda no cambia.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.3.4".
+- [ ] Al cerrar una caja → Imprimir el sobre: sale en una sola etiqueta, sin cortarse.
+- [ ] Si la impresora corta en medio de la etiqueta siguiente, avíseme: se ajusta el avance.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v334.test.js`: la etiqueta sale en una hoja de 80 × 50 mm y el contenido no se sale (con un monto de 7 dígitos y un correo largo).
+- `caja-v331` a `v333` siguen pasando.
+
+---
+
+# fën caja · v3.3.3
+
+**Abrir con menos de lo que dejó el cierre ahora pregunta qué pasó** (Emmanuel, 3 nov, caso Ainavillo: el cierre dejó $14.700 y se abrió con $0). Antes abría sin preguntar y la diferencia no quedaba anotada en ninguna parte. Incluye todo lo de la v3.3.2. Reglas de Firestore y Sistema Fën: sin cambios. · 3 de noviembre de 2026
+
+## Qué cambia
+Si el monto de apertura es **menor** que lo que dejó el cierre anterior, aparece la ventana "Son $X menos que lo que dejó el cierre. ¿Qué pasó?" con tres opciones:
+1. **Está todo: abrir con lo que dejó el cierre** (viene elegida). Se escribió mal el monto: abre con el fondo dejado.
+2. **Se llevó a la caja de administración.** Abre con el fondo dejado y anota un **retiro a la caja de administración** por la diferencia. Llega a Sistema Fën → Efectivo → Por recibir.
+3. **No está en la caja.** Abre con el fondo dejado y queda anotado. Si de verdad falta, al cerrar aparece como **faltante** y se revisa.
+
+Con **más** plata que el cierre, todo sigue igual que en la v3.2.0. Con el mismo monto, o sin cierre anterior, no pregunta.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.3.3".
+- [ ] Mañana, al abrir: si escribe menos de lo que dejó el cierre, aparece la pregunta. Con el mismo monto abre directo.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v333.test.js` (390 y 1280 px): las tres opciones, retiro y caja en un solo lote, teclado, con más sigue igual, igual o sin cierre no pregunta.
+- `caja-v330`, `v331` y `v332` siguen pasando. En `caja-v320.test.js` la parte "con menos abre como siempre" ya no aplica (cambio pedido).
+
+---
+
 # fën caja · v3.3.2
 
 **Point integrado o a mano, a la vista** (Emmanuel, 2 nov, al cerrar Ainavillo). Solo cambia lo que se ve: las ventas se guardan igual. Reglas de Firestore y Sistema Fën: sin cambios. · 2 de noviembre de 2026

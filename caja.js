@@ -1,4 +1,7 @@
-// fën caja v3.3.2 · código
+// fën caja v3.3.4 · código
+// v3.3.4: el texto del sobre se imprime en una etiqueta de 80 × 50 mm (QZ y navegador)
+// fën caja v3.3.3 · código (antes)
+// v3.3.3: abrir con MENOS de lo que dejó el cierre también pregunta (está todo / se llevó a la caja de administración / no está)
 // v3.3.2: en el resumen, Débito y Crédito divididos en Point integrado y a mano; en Ventas del turno, la etiqueta de cada venta con tarjeta
 // v3.3.1: después de una venta cobrada con el Point integrado, el medio de pago vuelve a Tarjeta (quedaba en Efectivo)
 // v3.3.0: cada equipo con su sucursal (la fija un administrador; reemplaza el "recuerda su tienda")
@@ -6,8 +9,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.3.2'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.2'; // v3.0.0
+import { armarResumen } from './resumen-caja.js?v=3.3.4'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.4'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -2246,7 +2249,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.3.2';
+const CAJA_VERSION = '3.3.4';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2945,7 +2948,8 @@ window.abrirCaja = async function() {
   if (!_fondoDejadoProm) cargarSaldoSugerido();
   try { await _fondoDejadoProm; } catch (e) {}
   const dejado = _fondoDejado && _fondoDejado.sucursal === sucursal ? _fondoDejado.saldo : null;
-  if (dejado != null && monto > dejado) {
+  // v3.3.3: también con MENOS de lo que dejó el cierre (antes abría sin preguntar y la diferencia se perdía de vista)
+  if (dejado != null && monto !== dejado) {
     btn.disabled = false; btn.textContent = 'Abrir caja';
     abrirAperturaDistinta(dejado, monto);
     return;
@@ -2981,6 +2985,18 @@ async function crearCaja(monto, op) {
     caja.efectivoMovs = { ingresos: mov.monto, retiros: 0, nIngresos: 1, nRetiros: 0 };
   } else if (op && op.motivo === 'ya_estaba') {
     caja.aperturaDistinta = { dejado: op.dejado, abrio: op.abrio, motivo: 'ya_estaba' };
+  } else if (op && op.motivo === 'a_admin') {
+    // v3.3.3 · Con menos: la diferencia se llevó a la caja de administración → abre con el fondo dejado y anota el retiro (Por recibir)
+    const r = revisarMovCaja({ tipo: 'retiro', motivo: 'caja_admin', monto: String(op.dejado - op.abrio),
+      nota: `Antes de abrir: el cierre anterior dejó ${pesosEf(op.dejado)} y había ${pesosEf(op.abrio)}` }, hoy);
+    if (r.error) return r.error;
+    mov = { ...r.mov, cajaId: nuevaId, sucursal, por: usuario.email, creado: caja.apertura };
+    caja.montoInicial = op.dejado;
+    caja.efectivoMovs = { ingresos: 0, retiros: mov.monto, nIngresos: 0, nRetiros: 1 };
+  } else if (op && op.motivo === 'falta') {
+    // v3.3.3 · Con menos y no se sabe dónde está: abre con el fondo dejado, así al cerrar aparece como faltante (y se revisa)
+    caja.montoInicial = op.dejado;
+    caja.aperturaDistinta = { dejado: op.dejado, abrio: op.abrio, motivo: 'falta' };
   }
   try {
     const lote = writeBatch(db);
@@ -2992,7 +3008,7 @@ async function crearCaja(monto, op) {
     document.getElementById('cardCajaAbierta').classList.remove('hidden');
     escucharCaja(cajaId); // v3.1.0
     mostrarResumenCaja(caja);
-    showToast(mov ? `Caja abierta · ingreso de ${pesosEf(mov.monto)} anotado` : 'Caja abierta');
+    showToast(mov ? `Caja abierta · ${mov.tipo === 'retiro' ? 'retiro' : 'ingreso'} de ${pesosEf(mov.monto)} anotado` : 'Caja abierta');
     return '';
   } catch(e) {
     if (!op) alert('Error al abrir caja: ' + e.message);
@@ -3006,10 +3022,18 @@ const OPCIONES_APERTURA = [
   ['aporte_dueno', 'Aporte del dueño', 'Se anota como ingreso.'],
   ['ya_estaba', 'Ya estaba en la caja (el cierre se anotó mal)', 'No se anota ingreso; queda la diferencia para revisar.'],
 ];
+// v3.3.3 · Abrir con MENOS de lo que dejó el cierre: ¿qué pasó con la diferencia?
+const OPCIONES_APERTURA_MENOS = [
+  ['estaba', 'Está todo: abrir con lo que dejó el cierre', 'Se escribió mal el monto.'],
+  ['a_admin', 'Se llevó a la caja de administración', 'Se anota como retiro. La administración lo recibe.'],
+  ['falta', 'No está en la caja', 'Al cerrar aparece como faltante, para revisarlo.'],
+];
+const opcionesAD = () => (_ad && _ad.abrio < _ad.dejado ? OPCIONES_APERTURA_MENOS : OPCIONES_APERTURA);
 let _ad = null; // { dejado, abrio, motivo }
 function abrirAperturaDistinta(dejado, abrio) {
-  _ad = { dejado, abrio, motivo: 'sencillo_admin', antes: document.activeElement };
-  document.getElementById('adTitulo').textContent = `Son ${pesosEf(abrio - dejado)} más que lo que dejó el cierre. ¿De dónde viene?`;
+  const menos = abrio < dejado;
+  _ad = { dejado, abrio, motivo: menos ? 'estaba' : 'sencillo_admin', antes: document.activeElement };
+  document.getElementById('adTitulo').textContent = menos ? `Son ${pesosEf(dejado - abrio)} menos que lo que dejó el cierre. ¿Qué pasó?` : `Son ${pesosEf(abrio - dejado)} más que lo que dejó el cierre. ¿De dónde viene?`;
   document.getElementById('adResumen').textContent = `El cierre anterior dejó ${pesosEf(dejado)} para este turno y usted escribió ${pesosEf(abrio)}.`;
   document.getElementById('adError').textContent = '';
   const b = document.getElementById('btnAdAbrir');
@@ -3022,11 +3046,15 @@ function abrirAperturaDistinta(dejado, abrio) {
 }
 function pintarAperturaDistinta() {
   if (!_ad) return;
-  document.getElementById('adOpciones').innerHTML = OPCIONES_APERTURA.map(([k, txt, sub]) =>
+  document.getElementById('adOpciones').innerHTML = opcionesAD().map(([k, txt, sub]) =>
     `<button type="button" class="ef-chip${k === _ad.motivo ? ' sel' : ''}" role="radio" aria-checked="${k === _ad.motivo}" tabindex="${k === _ad.motivo ? 0 : -1}" data-motivo="${k}" onclick="elegirAperturaDistinta('${k}')">${escHtml(txt)}<span class="ef-chip-sub">${escHtml(sub)}</span></button>`).join('');
   const dif = pesosEf(_ad.abrio - _ad.dejado), fondo = pesosEf(_ad.dejado);
+  const menos = pesosEf(_ad.dejado - _ad.abrio);
   document.getElementById('adEfecto').innerHTML =
-    _ad.motivo === 'sencillo_admin' ? `La caja abre con <b>${fondo}</b> de fondo y anota un ingreso de <b>${dif}</b> · llega a Sistema Fën → Efectivo → Por recibir.`
+    _ad.motivo === 'estaba' ? `La caja abre con <b>${fondo}</b> de fondo, lo que dejó el cierre.`
+    : _ad.motivo === 'a_admin' ? `La caja abre con <b>${fondo}</b> de fondo y anota un retiro de <b>${menos}</b> a la caja de administración · llega a Sistema Fën → Efectivo → Por recibir.`
+    : _ad.motivo === 'falta' ? `La caja abre con <b>${fondo}</b> de fondo. Si de verdad no está, al cerrar aparece un faltante de <b>${menos}</b> y queda anotado para revisarlo.`
+    : _ad.motivo === 'sencillo_admin' ? `La caja abre con <b>${fondo}</b> de fondo y anota un ingreso de <b>${dif}</b> · llega a Sistema Fën → Efectivo → Por recibir.`
     : _ad.motivo === 'aporte_dueno' ? `La caja abre con <b>${fondo}</b> de fondo y anota un ingreso de <b>${dif}</b> como aporte del dueño.`
     : `La caja abre con <b>${pesosEf(_ad.abrio)}</b> de fondo, sin ingreso. Queda anotado que el cierre dejó ${fondo}, para revisarlo.`;
 }
@@ -3045,9 +3073,9 @@ function teclaAperturaDistinta(e) {
   const enOpciones = e.target && e.target.closest && e.target.closest('#adOpciones');
   if (enOpciones && ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(e.key)) {
     e.preventDefault();
-    const i = OPCIONES_APERTURA.findIndex(o => o[0] === _ad.motivo);
+    const L = opcionesAD(), i = L.findIndex(o => o[0] === _ad.motivo);
     const paso = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1;
-    elegirAperturaDistinta(OPCIONES_APERTURA[(i + paso + OPCIONES_APERTURA.length) % OPCIONES_APERTURA.length][0]);
+    elegirAperturaDistinta(L[(i + paso + L.length) % L.length][0]);
     return;
   }
   if (e.key === 'Tab') {
@@ -3070,7 +3098,8 @@ window.confirmarAperturaDistinta = async function () {
   const err = document.getElementById('adError');
   err.textContent = '';
   b.disabled = true; b.textContent = 'Abriendo...';
-  const error = await crearCaja(_ad.motivo === 'ya_estaba' ? _ad.abrio : _ad.dejado, { dejado: _ad.dejado, abrio: _ad.abrio, motivo: _ad.motivo });
+  const error = _ad.motivo === 'estaba' ? await crearCaja(_ad.dejado, null)   // v3.3.3
+    : await crearCaja(_ad.motivo === 'ya_estaba' ? _ad.abrio : _ad.dejado, { dejado: _ad.dejado, abrio: _ad.abrio, motivo: _ad.motivo });
   if (error) { err.textContent = error; b.disabled = false; b.textContent = 'Abrir caja'; return; }
   _ad.antes = null;
   cerrarAperturaDistinta();
@@ -3332,21 +3361,29 @@ window.imprimirSobre = async function () {
     try {
       if (!qz.websocket.isActive()) await qz.websocket.connect();
       const config = qz.configs.create(await qz.printers.getDefault());
+      // v3.3.4 · Cabe en una etiqueta de 80 × 50 mm: 6 líneas con interlineado de 3 mm y poco avance antes del corte
       const ESC = '\x1B', GS = '\x1D';
-      let cmd = ESC + '@' + ESC + 'a' + '\x01' + 'SOBRE · RETIRO DE CAJA\n' + '--------------------------------\n';
-      cmd += s.suc + '\n' + s.fecha + '\n\n' + GS + '!' + '\x11' + s.monto + '\n' + GS + '!' + '\x00' + '\nCerro: ' + s.quien + '\n';
-      cmd += '\nFirma: ______________________\n' + GS + 'V' + '\x42' + '\x05';
+      let cmd = ESC + '@' + ESC + '3' + '\x18' + ESC + 'a' + '\x01' + ESC + 'E' + '\x01' + 'SOBRE - RETIRO DE CAJA\n' + ESC + 'E' + '\x00';
+      cmd += s.suc + ' - ' + s.fecha + '\n' + GS + '!' + '\x11' + s.monto + '\n' + GS + '!' + '\x00' + 'Cerro: ' + s.quien + '\n';
+      cmd += 'Firma: ______________________\n' + GS + 'V' + '\x42' + '\x02';
       await qz.print(config, [{ type: 'raw', format: 'command', flavor: 'plain', data: cmd }]);
       showToast('Enviado a la impresora');
     } catch (e) { showToast('No se pudo imprimir: ' + e.message, 'error'); }
     return;
   }
-  document.getElementById('cmdSucursal').textContent = 'SOBRE · RETIRO DE CAJA';
-  document.getElementById('cmdFecha').textContent = `${s.suc} · ${s.fecha}`;
-  document.getElementById('cmdLineas').innerHTML = `Cerró: ${escHtml(s.quien)}<br/><br/>Firma: ______________________`;
-  document.getElementById('cmdTotal').textContent = `RETIRO: ${s.monto}`;
-  document.getElementById('cmdMedio').textContent = '';
+  // v3.3.4 · Navegador: etiqueta propia de 80 × 50 mm (ya no usa la comanda, que salía más larga)
+  document.getElementById('sbTitulo').textContent = 'SOBRE · RETIRO DE CAJA';
+  document.getElementById('sbSuc').textContent = `${s.suc} · ${s.fecha}`;
+  document.getElementById('sbMonto').textContent = s.monto;
+  document.getElementById('sbQuien').textContent = `Cerró: ${s.quien}`;
+  let st = document.getElementById('pageSizeStyle');
+  if (!st) { st = document.createElement('style'); st.id = 'pageSizeStyle'; document.head.appendChild(st); }
+  st.textContent = '@page { size: 80mm 50mm; margin: 0; }';
+  document.body.classList.add('imp-sobre');
+  const fin = () => { document.body.classList.remove('imp-sobre'); window.removeEventListener('afterprint', fin); };
+  window.addEventListener('afterprint', fin);
   window.print();
+  setTimeout(fin, 1500);
 };
 
 // Actualizar arqueo visible en pantalla
