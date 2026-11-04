@@ -1,3 +1,29 @@
+# fën caja · v3.3.5
+
+**El sobre sale en el sticker prepicado de 53 mm** (Emmanuel, 4 nov: impresora ONE R-200, sticker de 80 mm, prepicado cada 53 mm, 1 mm de margen arriba y 2 mm abajo). Incluye la v3.3.4 (que no alcanzó a subir) y todo lo anterior. · 4 de noviembre de 2026
+
+## Qué cambia
+- **Con QZ Tray:** cada sobre avanza **exacto 53 mm** (424 puntos) y **no corta**: el sticker se separa a mano por el prepicado y el siguiente sobre cae en el sticker siguiente.
+- **Desde el navegador:** hoja de 80 × 53 mm.
+- En la ventana del sobre, **"Ajuste del sticker"**: mover el texto hacia abajo o arriba (en mm). Se guarda en ese equipo. No cambia el largo: solo dónde queda el texto dentro del sticker.
+
+## Primera vez (alinear el papel)
+1. Ponga el rollo y avance el papel hasta que **un prepicado quede justo en la barra de corte** de la impresora.
+2. Imprima un sobre. Si el texto queda corrido, ajuste los mm en "Ajuste del sticker" y vuelva a imprimir.
+3. Desde ahí, cada sobre cae en su sticker. Si con el tiempo se corre, vuelva a dejar un prepicado en la barra.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.3.5".
+- [ ] Imprimir dos sobres seguidos: cada uno en su sticker.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v334.test.js`: una hoja de 80 × 53 mm que no se sale; con QZ, 424 puntos exactos y sin corte con ajustes de −3, 0, 4,5 y 20 mm.
+
+---
+
 # fën caja · v3.3.4
 
 **El texto del sobre se imprime en una etiqueta de 80 × 50 mm** (Emmanuel, 4 nov: papel de stickers de 80 mm de ancho). Incluye todo lo de la v3.3.3. Reglas de Firestore y Sistema Fën: sin cambios. · 4 de noviembre de 2026

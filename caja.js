@@ -1,4 +1,6 @@
-// fën caja v3.3.4 · código
+// fën caja v3.3.5 · código
+// v3.3.5: sobre en sticker prepicado de 53 mm (ONE R-200): largo fijo, sin corte, con ajuste del inicio
+// fën caja v3.3.4 · código (antes)
 // v3.3.4: el texto del sobre se imprime en una etiqueta de 80 × 50 mm (QZ y navegador)
 // fën caja v3.3.3 · código (antes)
 // v3.3.3: abrir con MENOS de lo que dejó el cierre también pregunta (está todo / se llevó a la caja de administración / no está)
@@ -9,8 +11,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.3.4'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.4'; // v3.0.0
+import { armarResumen } from './resumen-caja.js?v=3.3.5'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.5'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -2249,7 +2251,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.3.4';
+const CAJA_VERSION = '3.3.5';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3343,6 +3345,7 @@ function mostrarSobre(x) {
   _sobre = textoSobre(x);
   document.getElementById('sobreTexto').innerHTML =
     `<div class="sobre-l1">${escHtml(_sobre.suc)} · ${escHtml(_sobre.fecha)}</div><div class="sobre-monto">${escHtml(_sobre.monto)}</div><div class="sobre-l3">Retiro al cerrar · cerró: ${escHtml(_sobre.quien)}</div>`;
+  const aj = document.getElementById('sobreAjuste'); if (aj) aj.value = String(ajusteSobreMM());
   document.getElementById('modalSobre').classList.add('open');
 }
 window.cerrarSobre = function () { document.getElementById('modalSobre').classList.remove('open'); };
@@ -3351,6 +3354,22 @@ window.copiarSobre = async function () {
   const t = `${_sobre.suc} · ${_sobre.fecha} · ${_sobre.monto} · Retiro al cerrar · cerró: ${_sobre.quien}`;
   try { await navigator.clipboard.writeText(t); showToast('Texto copiado'); } catch (e) { showToast('No se pudo copiar', 'error'); }
 };
+// v3.3.5 · Sticker prepicado: 53 mm de prepicado a prepicado (424 puntos). Ajuste del inicio en mm, guardado en este equipo.
+const LARGO_STICKER = 424;
+function ajusteSobreMM() { try { const n = Number(localStorage.getItem('sobreAjusteMM')); return isFinite(n) ? Math.max(-3, Math.min(20, n)) : 0; } catch (e) { return 0; } }
+window.cambiarAjusteSobre = function (v) { try { localStorage.setItem('sobreAjusteMM', String(Math.max(-3, Math.min(20, Number(v) || 0)))); } catch (e) {} };
+// Los comandos ESC/POS del sticker: siempre avanzan LARGO_STICKER puntos en total (sin corte)
+function comandosSticker(s, ajusteMM) {
+  const ESC = '\x1B', GS = '\x1D', J = n => ESC + 'J' + String.fromCharCode(n);
+  const arriba = Math.max(0, Math.min(200, 24 + Math.round(ajusteMM * 8)));
+  const L = [['SOBRE - RETIRO DE CAJA', 28, true], [s.suc + ' - ' + s.fecha, 28], [s.monto, 56, false, true], ['Cerro: ' + s.quien, 36], ['Firma: ______________________', 28]];
+  let usado = arriba, cmd = ESC + '@' + ESC + 'a' + '\x01' + J(arriba);
+  L.forEach(([t, n, neg, grande]) => { cmd += (neg ? ESC + 'E' + '\x01' : '') + (grande ? GS + '!' + '\x11' : '') + t + J(n) + (grande ? GS + '!' + '\x00' : '') + (neg ? ESC + 'E' + '\x00' : ''); usado += n; });
+  let resto = LARGO_STICKER - usado;
+  while (resto > 0) { const k = Math.min(255, resto); cmd += J(k); resto -= k; }
+  return cmd;
+}
+window.__comandosSticker = comandosSticker;   // para las pruebas
 // Imprime el texto en la impresora de comandas (QZ Tray en el PC; navegador/RawBT en Android), como la comanda
 window.imprimirSobre = async function () {
   if (!_sobre) return;
@@ -3361,11 +3380,10 @@ window.imprimirSobre = async function () {
     try {
       if (!qz.websocket.isActive()) await qz.websocket.connect();
       const config = qz.configs.create(await qz.printers.getDefault());
-      // v3.3.4 · Cabe en una etiqueta de 80 × 50 mm: 6 líneas con interlineado de 3 mm y poco avance antes del corte
-      const ESC = '\x1B', GS = '\x1D';
-      let cmd = ESC + '@' + ESC + '3' + '\x18' + ESC + 'a' + '\x01' + ESC + 'E' + '\x01' + 'SOBRE - RETIRO DE CAJA\n' + ESC + 'E' + '\x00';
-      cmd += s.suc + ' - ' + s.fecha + '\n' + GS + '!' + '\x11' + s.monto + '\n' + GS + '!' + '\x00' + 'Cerro: ' + s.quien + '\n';
-      cmd += 'Firma: ______________________\n' + GS + 'V' + '\x42' + '\x02';
+      // v3.3.5 · Papel de stickers prepicado (ONE R-200, sin sensor): cada sobre avanza EXACTO 53 mm (424 puntos a 203 dpi), sin corte,
+      // para que el siguiente caiga en el sticker siguiente. Cada línea avanza una cantidad fija (ESC J n). El ajuste mueve el texto dentro
+      // del sticker sin cambiar el largo total.
+      const cmd = comandosSticker(s, ajusteSobreMM());
       await qz.print(config, [{ type: 'raw', format: 'command', flavor: 'plain', data: cmd }]);
       showToast('Enviado a la impresora');
     } catch (e) { showToast('No se pudo imprimir: ' + e.message, 'error'); }
@@ -3378,7 +3396,8 @@ window.imprimirSobre = async function () {
   document.getElementById('sbQuien').textContent = `Cerró: ${s.quien}`;
   let st = document.getElementById('pageSizeStyle');
   if (!st) { st = document.createElement('style'); st.id = 'pageSizeStyle'; document.head.appendChild(st); }
-  st.textContent = '@page { size: 80mm 50mm; margin: 0; }';
+  st.textContent = '@page { size: 80mm 53mm; margin: 0; }';
+  document.getElementById('sobrePreview').style.marginTop = (1 + ajusteSobreMM()) + 'mm';
   document.body.classList.add('imp-sobre');
   const fin = () => { document.body.classList.remove('imp-sobre'); window.removeEventListener('afterprint', fin); };
   window.addEventListener('afterprint', fin);
