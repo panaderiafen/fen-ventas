@@ -588,3 +588,12 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .sobre-ajuste { margin: 10px 0 4px; font-size: 13px; }
 .sobre-ajuste summary { cursor: pointer; font-weight: 600; min-height: 36px; display: flex; align-items: center; }
 .sobre-ajuste input { max-width: 120px; }
+
+/* v3.3.6 · Anulaciones sin resolver antes de cerrar */
+.ap-item { border: 1px solid var(--border, #E4DFD3); border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
+.ap-item legend { float: left; width: 100%; padding: 0; margin-bottom: 4px; font-size: 14px; }
+.ap-item legend + * { clear: both; }
+.ap-preg { display: block; font-weight: 600; margin: 6px 0; font-size: 14px; }
+.ap-ops { display: flex; gap: 10px; }
+.ap-ops label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: 1.5px solid var(--border, #D9D3C6); border-radius: 999px; cursor: pointer; font-size: 15px; }
+.ap-ops label:has(input:checked) { border-color: var(--primary, #2F5A45); background: #EAF2EC; font-weight: 700; }

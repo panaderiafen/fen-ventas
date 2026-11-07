@@ -1,3 +1,24 @@
+# fën caja · v3.3.6
+
+**Cerrar con una anulación sin resolver** (Emmanuel, 6 nov). Incluye todo lo anterior. · 6 de noviembre de 2026
+
+## Qué cambia
+- Al tocar "Cerrar caja del día", si hay anulaciones pedidas que la administración no ha resuelto, aparece un aviso con cada venta y la pregunta **"¿La plata de esa venta está en la caja?"** (Sí / No).
+- **Esperar:** no cierra; se puede volver a intentar cuando la resuelvan. **Cerrar igual:** pide responder cada una y sigue con el cierre de siempre.
+- La respuesta queda en el cierre y Sistema Fën (v0.124.13) la muestra en Caja → Cierres.
+- Sin anulaciones pendientes, el cierre es igual que antes.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README a `Respaldo/`.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.3.6".
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v336.test.js` (390 y 1280 px): aviso, Esperar no cierra, sin responder no sigue, "No" queda en la caja y en su evaluación; sin pendientes cierra como siempre.
+
+---
+
 # fën caja · v3.3.5
 
 **El sobre sale en el sticker prepicado de 53 mm** (Emmanuel, 4 nov: impresora ONE R-200, sticker de 80 mm, prepicado cada 53 mm, 1 mm de margen arriba y 2 mm abajo). Incluye la v3.3.4 (que no alcanzó a subir) y todo lo anterior. · 4 de noviembre de 2026

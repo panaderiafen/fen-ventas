@@ -1,4 +1,6 @@
-// fën caja v3.3.5 · código
+// fën caja v3.3.6 · código
+// v3.3.6: al cerrar con anulaciones sin resolver: aviso, "¿La plata de esa venta está en la caja?" (Sí / No), esperar o cerrar igual
+// fën caja v3.3.5 · código (antes)
 // v3.3.5: sobre en sticker prepicado de 53 mm (ONE R-200): largo fijo, sin corte, con ajuste del inicio
 // fën caja v3.3.4 · código (antes)
 // v3.3.4: el texto del sobre se imprime en una etiqueta de 80 × 50 mm (QZ y navegador)
@@ -11,8 +13,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { armarResumen } from './resumen-caja.js?v=3.3.5'; // v2.9.0: el mismo archivo que usa Sistema Fën
-import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.5'; // v3.0.0
+import { armarResumen } from './resumen-caja.js?v=3.3.6'; // v2.9.0: el mismo archivo que usa Sistema Fën
+import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.6'; // v3.0.0
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrG2mij1h5wZ2lIyAYMTfgG9avaVnjcaU",
@@ -2251,7 +2253,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.3.5';
+const CAJA_VERSION = '3.3.6';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3424,17 +3426,53 @@ window.actualizarArqueo = async function() {
 // targetCajaId opcional: una caja de un día anterior que quedó abierta.
 // ═══════════════════════════
 let _cc = null; // { cajaId, caja, montos, efectivo, difs, motivo, volvio }
-window.cerrarCaja = function(targetCajaId) {
+// v3.3.6 · Antes de cerrar: si la caja tiene anulaciones sin resolver, se avisa y se pregunta por cada una si la plata
+// está en la caja (Sí / No). Se puede esperar o cerrar igual; la respuesta queda en el cierre para Sistema Fën.
+let _apCaja = null, _apLista = [];
+window.cerrarCaja = async function (targetCajaId) {
+  const id = targetCajaId || cajaId;
+  let pend = [];
+  try {
+    const sn = await getDocs(query(collection(db, 'solicitudes_anulacion'), where('cajaId', '==', id), where('estado', '==', 'pendiente')));
+    pend = sn.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) { /* sin conexión: se cierra como siempre */ }
+  if (pend.length) { abrirAnulPend(id, pend); return; }
+  abrirCierreModal(targetCajaId, []);
+};
+function abrirAnulPend(id, pend) {
+  _apCaja = id; _apLista = pend;
+  const pesos = n => '$' + (parseInt(n) || 0).toLocaleString('es-CL');
+  const hora = t => { try { const d = t && t.toDate ? t.toDate() : null; return d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''; } catch (e) { return ''; } };
+  document.getElementById('apTitulo').textContent = pend.length === 1 ? 'Hay una anulación sin resolver' : `Hay ${pend.length} anulaciones sin resolver`;
+  document.getElementById('apLista').innerHTML = pend.map(x => `<fieldset class="ap-item"><legend><b>Venta de ${pesos(x.total)}</b>${hora(x.fechaSolicitud) ? ' · pedida a las ' + hora(x.fechaSolicitud) : ''}<br><span class="ef-ayuda">${escHtml(x.lineasResumen || '')}${x.motivo ? ' · ' + escHtml(x.motivo) : ''}</span></legend>
+      <span class="ap-preg">¿La plata de esa venta está en la caja?</span>
+      <div class="ap-ops"><label><input type="radio" name="ap-${x.id}" value="si"> Sí</label><label><input type="radio" name="ap-${x.id}" value="no"> No</label></div></fieldset>`).join('');
+  document.getElementById('apError').textContent = '';
+  document.getElementById('modalAnulPend').classList.add('open');
+}
+window.esperarAnulPend = function () { document.getElementById('modalAnulPend').classList.remove('open'); };
+window.seguirAnulPend = async function () {
+  const err = document.getElementById('apError');
+  const resp = _apLista.map(x => ({ x, v: (document.querySelector(`input[name="ap-${x.id}"]:checked`) || {}).value }));
+  if (resp.some(r => !r.v)) { err.textContent = 'Responda Sí o No en cada una.'; return; }
+  // Lo que se resolvió mientras tanto ya no cuenta
+  let siguen = null;
+  try { const sn = await getDocs(query(collection(db, 'solicitudes_anulacion'), where('cajaId', '==', _apCaja), where('estado', '==', 'pendiente'))); siguen = new Set(sn.docs.map(d => d.id)); } catch (e) { /* sin conexión: se anotan todas */ }
+  const lista = resp.filter(r => !siguen || siguen.has(r.x.id)).map(r => ({ solicitudId: r.x.id, ventaId: r.x.ventaId || '', total: parseInt(r.x.total) || 0, medioPago: r.x.medioPago || '', plataEnCaja: r.v === 'si' }));
+  document.getElementById('modalAnulPend').classList.remove('open');
+  abrirCierreModal(_apCaja, lista);
+};
+function abrirCierreModal(targetCajaId, anulPend) {
   ['cierrEfectivo', 'cierrDebito', 'cierrCredito', 'cierrTransfer', 'cierreFondo', 'cierreNota'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('cierreTargetCajaId').value = targetCajaId || cajaId || '';
   document.getElementById('ccError1').textContent = '';
   document.getElementById('ccError2').textContent = '';
   document.getElementById('ccPaso1').classList.remove('hidden');
   document.getElementById('ccPaso2').classList.add('hidden');
-  _cc = { volvio: 0 };
+  _cc = { volvio: 0, anulPend: anulPend || [] };
   document.getElementById('modalCierreCiego').classList.add('open');
   infoPointCierre(targetCajaId || cajaId); // v2.4.0
-};
+}
 // v2.4.0: lo cobrado con el Point integrado se muestra (ya lo confirmó Mercado Pago) y no se cuenta en el arqueo
 async function infoPointCierre(id) {
   const box = document.getElementById('cierrePointInfo');
@@ -3564,7 +3602,8 @@ window.confirmarCierreCiego = async function() {
     // La caja, su evaluación y el retiro a la caja de administración, de una sola vez
     const lote = writeBatch(db);
     lote.update(doc(db, 'cajas', cajaDocId), {
-      estado: 'cerrada', cierre: ahora, saldoSiguiente: ef.fondo, fondoSiguiente: ef.fondo, retiroCierre: ef.retiro
+      estado: 'cerrada', cierre: ahora, saldoSiguiente: ef.fondo, fondoSiguiente: ef.fondo, retiroCierre: ef.retiro,
+      ...(_cc.anulPend && _cc.anulPend.length ? { anulacionesPendientes: _cc.anulPend } : {})   // v3.3.6
     });
     lote.set(doc(db, 'evaluacion_caja', idNuevo()), {
       cajaId: cajaDocId, sucursal: cajaData.sucursal || sucursal, usuario: cajaData.usuario || usuario.email,
@@ -3581,7 +3620,8 @@ window.confirmarCierreCiego = async function() {
       ingresosTurno: mv.ingresos, retirosTurno: mv.retiros, movsNeto, deberiaEfectivo: ef.deberia,
       fondo: ef.fondo, montoRetirado: ef.retiro, saldoSiguiente: ef.fondo,
       vecesVolvioAContar: _cc.volvio || 0,
-      ...(hayDiferencia ? { notaDescuadre, motivoDescuadre: _cc.motivo } : {})
+      ...(hayDiferencia ? { notaDescuadre, motivoDescuadre: _cc.motivo } : {}),
+      ...(_cc.anulPend && _cc.anulPend.length ? { anulacionesPendientes: _cc.anulPend } : {})   // v3.3.6
     });
     if (ef.retiro > 0) {
       lote.set(doc(db, 'caja_movimientos', idNuevo()), {
