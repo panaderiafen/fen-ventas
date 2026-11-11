@@ -1,3 +1,26 @@
+# fën caja · v3.3.7
+
+**¿A nombre de quién viene la transferencia?** (Emmanuel, 11 nov). Incluye todo lo anterior. · 11 de noviembre de 2026 · Va junto con **Sistema Fën v0.125.0**.
+
+## Qué cambia
+- Al elegir **Transferencia** como medio de pago aparece una casilla opcional: **"¿A nombre de quién viene la transferencia?"**.
+- Si la cajera escribe el nombre, queda guardado en la venta. Sistema Fën lo usa para encontrar el abono en el banco aunque haya otra venta del mismo monto.
+- Si la deja en blanco, la venta se cobra igual que antes.
+- Con otro medio de pago, o con pago dividido, la casilla no aparece ni se guarda nada. Después de cada venta se vacía.
+
+## Dónde va (repo fen-ventas, raíz, los SEIS juntos)
+`index.html`, `caja.js`, `caja.css`, `logo-fen.png`, `resumen-caja.js` y `efectivo-caja.js`. Este README va a `Respaldo/`.
+
+## Checklist
+- [ ] Al lado del correo dice "· v3.3.7".
+- [ ] Al tocar Transferencia aparece la casilla. Al tocar Débito desaparece.
+
+## Pruebas (datos ficticios)
+- `pruebas/caja30/caja-v337.test.js` (390 y 1280 px), nueva. Pasa.
+- Siguen pasando las 14 pruebas de la caja v3.3.0 a la v3.3.6.
+
+---
+
 # fën caja · v3.3.6
 
 **Cerrar con una anulación sin resolver** (Emmanuel, 6 nov). Incluye todo lo anterior. · 6 de noviembre de 2026

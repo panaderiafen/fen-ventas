@@ -597,3 +597,10 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .ap-ops { display: flex; gap: 10px; }
 .ap-ops label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: 1.5px solid var(--border, #D9D3C6); border-radius: 999px; cursor: pointer; font-size: 15px; }
 .ap-ops label:has(input:checked) { border-color: var(--primary, #2F5A45); background: #EAF2EC; font-weight: 700; }
+
+/* v3.3.7 · ¿A nombre de quién viene la transferencia? (opcional) */
+.transfer-nombre { margin-top: 10px; padding: 10px 12px; border: 1.5px solid #9DB5A6; border-radius: 10px; background: #F4F8F5; }
+.transfer-nombre label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.transfer-nombre .opcional { font-weight: 500; color: #5C665F; }
+.transfer-nombre input { width: 100%; box-sizing: border-box; min-height: 44px; font-size: 16px; }
+.transfer-nombre-ayuda { font-size: 12px; color: #5C665F; margin-top: 6px; }

@@ -1619,7 +1619,22 @@ window.selMedio = function(medio) {
   medioSeleccionado = medio;
   document.querySelectorAll('.medio-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('mp-' + medio).classList.add('selected');
+  pintarTransferNombre();   // v3.3.7
 };
+// v3.3.7 · Con Transferencia (un solo medio), la casilla opcional "¿A nombre de quién viene la transferencia?". Al cambiar de medio se vacía.
+function pintarTransferNombre() {
+  const w = document.getElementById('transferNombreWrap'), i = document.getElementById('transferNombre');
+  if (!w || !i) return;
+  const ver = medioSeleccionado === 'transferencia' && !pagoDividido;
+  w.style.display = ver ? '' : 'none';
+  if (!ver) i.value = '';
+}
+// Lo que va en la venta: solo con Transferencia como único medio y si se escribió algo
+function transferNombreVenta(pagoData) {
+  const i = document.getElementById('transferNombre');
+  const n = i ? i.value.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+  return n && !pagoData.pagos && pagoData.medioPago === 'transferencia' ? { transferNombre: n } : {};
+}
 
 // ── Pago dividido (opcional, normalmente no se usa) ──
 window.togglePagoDividido = function() {
@@ -1628,6 +1643,7 @@ window.togglePagoDividido = function() {
   document.getElementById('btnTogglePagoDividido').textContent = pagoDividido ? '− Un solo medio de pago' : '+ Dividir pago';
   document.querySelector('.medio-grid').style.display = pagoDividido ? 'none' : '';
   if (pagoDividido) actualizarRestanteDividido();
+  pintarTransferNombre();   // v3.3.7
 };
 
 function resetPagoDividido() {
@@ -2253,7 +2269,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.3.6';
+const CAJA_VERSION = '3.3.7';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2382,6 +2398,7 @@ window.registrarVenta = async function() {
     })),
     subtotal, descuento, total,
     ...pagoData,
+    ...transferNombreVenta(pagoData),   // v3.3.7
     cajaId
   };
   // v2.2.0: tarjeta y lotes de cada línea (mismas lecturas de stock, antes de guardar)
@@ -2520,6 +2537,7 @@ window.cerrarYCobrarMesa = async function() {
     })),
     subtotal, descuento, total,
     ...pagoData,
+    ...transferNombreVenta(pagoData),   // v3.3.7
     cajaId,
     origenMesa: mesaActivaId, mesaNombre: mesaActivaNombre
   };
