@@ -59,6 +59,34 @@ function avisarPorCorreo(url, datos) {
   })().catch(e => console.error('No se pudo enviar el aviso por correo (' + (datos && datos.tipo) + '):', e));
 }
 
+// v3.4.0 · Los datos del correo del cierre (el script arma el HTML con ellos; aquí no va HTML)
+const NOMBRE_AREA_CORREO = { PAN: 'Panadería', BOL: 'Bollería', PAS: 'Pastelería', CAF: 'Cafetería', REVENTA: 'Reventa', Otros: 'Otros' };
+function horaCorta(ts) { try { const d = ts && ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null); return d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' }) : ''; } catch (e) { return ''; } }
+function datosCorreoCierre(x) {
+  const c = x.cajaData || {}, n = v => Math.round(Number(v) || 0), dia = normalizarFechaCaja(c.fecha) || c.fecha || fechaLocalHoy();
+  const medios = [['efectivo', 'Efectivo (ventas)'], ['debito', 'Débito'], ['credito', 'Crédito'], ['transferencia', 'Transferencia']]
+    .map(([k, t]) => ({ nombre: t, sistema: n(x.sist[k]), contado: n(x.sist[k]) + n(x.dif[k]), dif: n(x.dif[k]) }));
+  const areas = {};
+  if (x.resumen && x.resumen.porProducto) Object.values(x.resumen.porProducto).forEach(p => {
+    const a = areas[p.area] || (areas[p.area] = { area: NOMBRE_AREA_CORREO[p.area] || p.area || 'Otros', clave: p.area, subtotal: 0, productos: [] });
+    const leches = p.porLeche ? Object.entries(p.porLeche).map(([l, q]) => `${l} ${Math.round(q * 1000) / 1000}`).join(', ') : '';
+    a.productos.push({ nombre: String(p.nombre || '').slice(0, 80), cantidad: Math.round((Number(p.cantidad) || 0) * 1000) / 1000, monto: n(p.bruto), leches });
+    a.subtotal += n(p.bruto);
+  });
+  const orden = ['PAN', 'BOL', 'PAS', 'CAF', 'REVENTA', 'Otros'];
+  const lista = Object.values(areas).sort((a, b) => (orden.indexOf(a.clave) + 1 || 99) - (orden.indexOf(b.clave) + 1 || 99));
+  lista.forEach(a => { a.productos.sort((p, q) => q.monto - p.monto); a.productos = a.productos.slice(0, 200); delete a.clave; });
+  return {
+    sucursal: c.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana', dia, fecha: fechaDMY(dia),
+    abrio: String(c.usuario || ''), cerro: String(x.cerro || ''), apertura: horaCorta(c.apertura), cierre: horaCorta(x.cierre),
+    nVentas: n(c.nVentas || (x.resumen && x.resumen.nVentas)), total: n(x.sist.total),
+    medios, totalContado: n(x.sist.total) + n(x.dif.total), difTotal: n(x.dif.total),
+    descuadre: x.hayDiferencia ? { motivo: String(x.motivo || ''), nota: String(x.nota || '').slice(0, 300) } : null,
+    efectivo: Object.fromEntries(Object.entries(x.efectivo).map(([k, v]) => [k, n(v)])),
+    areas: lista, sinDetalle: !x.resumen, anulPend: n(x.anulPend), version: CAJA_VERSION
+  };
+}
+
 function escHtml(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
 
 // v3.2.0 · Confirmación dentro de la página (reemplaza window.confirm). Devuelve una promesa con true o false.
@@ -2269,7 +2297,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.3.7';
+const CAJA_VERSION = '3.4.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3664,20 +3692,21 @@ window.confirmarCierreCiego = async function() {
     showToast(ef.retiro > 0 ? `Caja cerrada · retiro ${pesosEf(ef.retiro)}` : 'Caja cerrada correctamente');
     if (ef.retiro > 0) mostrarSobre({ suc: cajaData.sucursal || sucursal, dia, monto: ef.retiro, quien: usuario.email }); // v3.1.0
 
-    // v2.3.1: aviso por correo del descuadre. Sale sin esperar: el cierre no depende de él.
-    if (hayDiferencia) avisarPorCorreo(APPS_SCRIPT_URL_VENTAS_FEN, {
-      tipo: 'descuadre_caja',
-      filaCaja: {
-        sucursal: cajaData.sucursal === 'ainavillo' ? 'Ainavillo' : 'Barros Arana',
-        fecha: fechaDMY(cajaData.fecha || fechaLocalHoy()),
-        usuario: cajaData.usuario || usuario.email,
-        difTotal, difEfectivo, notaDescuadre
-      }
-    });
-
     // v2.3.0: el resumen del cierre (resumenes_caja)
     const cajaDataFinal = (await getDoc(doc(db, 'cajas', cajaDocId))).data();
-    await cerrarResumen(cajaDocId, cajaDataFinal);
+    const resumen = await cerrarResumen(cajaDocId, cajaDataFinal);
+
+    // v3.4.0: correo con el detalle de cada cierre (reemplaza al aviso que solo llegaba con descuadre, v2.3.1).
+    // Sale sin esperar: el cierre no depende de él. Lo arma y lo envía el script de caja (CierreCaja.gs).
+    try {
+      avisarPorCorreo(APPS_SCRIPT_URL, { tipo: 'cierre_caja', idem: ('cierre-' + cajaDocId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64), cierre: datosCorreoCierre({
+        cajaData, cerro: usuario.email, cierre: ahora, resumen: resumen && typeof resumen === 'object' ? resumen : null,
+        sist: { efectivo: sistEfectivo, debito: sistDebito, credito: sistCredito, transferencia: sistTransfer, total: sistTotal },
+        dif: { efectivo: difEfectivo, debito: difDebito, credito: difCredito, transferencia: difTransfer, total: difTotal },
+        hayDiferencia, motivo: hayDiferencia ? textoDescuadre(_cc.motivo) : '', nota: hayDiferencia ? nota : '',
+        efectivo: { fondoInicial: montoInicial, ventas: sistEfectivo, ingresos: mv.ingresos, retiros: mv.retiros, deberia: ef.deberia, contado: manEfectivo, fondo: ef.fondo, retiro: ef.retiro },
+        anulPend: (_cc.anulPend || []).length }) });
+    } catch (eCorreo) { console.error('Correo del cierre:', eCorreo); }
   } catch(e) {
     err.textContent = 'No se pudo cerrar la caja: ' + (e.message || e) + '. Nada quedó a medias: intente de nuevo.';
   }
@@ -3737,9 +3766,10 @@ async function registrarMovimientoVenta(ventaId, descontados) {
 async function cerrarResumen(cajaDocId, cajaData) {
   try {
     const ventasSnap = await getDocs(query(collection(db, 'ventas'), where('cajaId', '==', cajaDocId)));
-    if (!(await guardarResumenCaja(cajaDocId, cajaData, ventasSnap.docs))) throw new Error('No se pudo guardar el resumen');
+    const r = await guardarResumenCaja(cajaDocId, cajaData, ventasSnap.docs);
+    if (!r) throw new Error('No se pudo guardar el resumen');
     if (cajaData && cajaData.resumenPendiente) await updateDoc(doc(db, 'cajas', cajaDocId), { resumenPendiente: false });
-    return true;
+    return r;   // v3.4.0: el resumen (para el correo del cierre); sigue siendo "verdadero" para quien solo pregunta si se guardó
   } catch (err) {
     console.error('Resumen del cierre pendiente:', cajaDocId, err);
     try { await updateDoc(doc(db, 'cajas', cajaDocId), { resumenPendiente: true }); } catch (e2) {}
@@ -3762,7 +3792,7 @@ async function guardarResumenCaja(cajaDocId, cajaData, ventasDocs) {
     const r = armarResumen({ cajaId: cajaDocId, cajaData, ventas: ventasDocs.map(d => d.data()), infoProd, areaRes,
       fecha: normalizarFechaCaja(cajaData.fecha) || cajaData.fecha || '', ahora: Timestamp.now() });
     await setDoc(doc(db, 'resumenes_caja', cajaDocId), r);
-    return true;
+    return r;   // v3.4.0
   } catch (e) {
     console.error('No se pudo guardar el resumen de la caja', cajaDocId, e);
     return false;
