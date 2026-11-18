@@ -1,4 +1,6 @@
-// fën caja v3.3.6 · código
+// fën caja v3.5.0 · código
+// v3.5.0: el correo del cierre lleva el stock que queda (cantidad y antigüedad) y la lista de lo que está sin stock (sin Cafetería)
+// fën caja v3.3.6 · código (antes)
 // v3.3.6: al cerrar con anulaciones sin resolver: aviso, "¿La plata de esa venta está en la caja?" (Sí / No), esperar o cerrar igual
 // fën caja v3.3.5 · código (antes)
 // v3.3.5: sobre en sticker prepicado de 53 mm (ONE R-200): largo fijo, sin corte, con ajuste del inicio
@@ -62,6 +64,33 @@ function avisarPorCorreo(url, datos) {
 // v3.4.0 · Los datos del correo del cierre (el script arma el HTML con ellos; aquí no va HTML)
 const NOMBRE_AREA_CORREO = { PAN: 'Panadería', BOL: 'Bollería', PAS: 'Pastelería', CAF: 'Cafetería', REVENTA: 'Reventa', Otros: 'Otros' };
 function horaCorta(ts) { try { const d = ts && ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null); return d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' }) : ''; } catch (e) { return ''; } }
+// v3.5.0 · Stock al cierre para el correo: lo que queda en la vitrina de esa sucursal (cantidad y antigüedad) y los que están en 0.
+// Sin Cafetería. "Sin stock" = productos activos que llevan stock y alguna vez se cargaron en esta sucursal (tienen su documento),
+// así no aparecen los que solo se venden en la otra.
+const EDAD_CORREO = { hoy: 'de hoy', ayer: 'de ayer', antesayer: 'de 2 días', cuartoDia: 'de 3 días', ultimaOferta: 'de 4 días o más', permanente: 'sin vencimiento' };
+async function stockParaCorreo(suc) {
+  const snap = await getDocs(query(collection(db, 'stock'), where('sucursal', '==', suc)));
+  const porProd = {};
+  snap.docs.forEach(d => { const x = d.data(); if (!x.productoId) return; (porProd[x.productoId] = porProd[x.productoId] || []).push(x.entradas || {}); });
+  const con = [], sin = [];
+  productos.forEach(p => {
+    if (p.controlStock === false || normalizarArea(p.area) === 'CAF' || !porProd[p.id]) return;
+    const cats = {}; let total = 0;
+    porProd[p.id].forEach(ent => Object.entries(ent).forEach(([k, q]) => {
+      q = Number(q) || 0; if (q <= 0 || k.startsWith('merma')) return;
+      const c = p.autoEliminar === false ? 'permanente' : getCategoriaFecha(k); if (!EDAD_CORREO[c]) return;
+      cats[c] = (cats[c] || 0) + q; total += q;
+    }));
+    const nombre = String(p.nombre || '').slice(0, 80), area = NOMBRE_AREA_CORREO[normalizarArea(p.area)] || 'Otros';
+    if (total > 0) con.push({ nombre, area, total: Math.round(total * 1000) / 1000,
+      edad: Object.keys(EDAD_CORREO).filter(c => cats[c]).map(c => `${Math.round(cats[c] * 1000) / 1000} ${EDAD_CORREO[c]}`).join(', ') });
+    else sin.push(nombre);
+  });
+  const orden = ['Panadería', 'Bollería', 'Pastelería', 'Reventa', 'Otros'];
+  con.sort((a, b) => (orden.indexOf(a.area) - orden.indexOf(b.area)) || a.nombre.localeCompare(b.nombre, 'es'));
+  sin.sort((a, b) => a.localeCompare(b, 'es'));
+  return { con: con.slice(0, 300), sin: sin.slice(0, 300) };
+}
 function datosCorreoCierre(x) {
   const c = x.cajaData || {}, n = v => Math.round(Number(v) || 0), dia = normalizarFechaCaja(c.fecha) || c.fecha || fechaLocalHoy();
   const medios = [['efectivo', 'Efectivo (ventas)'], ['debito', 'Débito'], ['credito', 'Crédito'], ['transferencia', 'Transferencia']]
@@ -83,7 +112,8 @@ function datosCorreoCierre(x) {
     medios, totalContado: n(x.sist.total) + n(x.dif.total), difTotal: n(x.dif.total),
     descuadre: x.hayDiferencia ? { motivo: String(x.motivo || ''), nota: String(x.nota || '').slice(0, 300) } : null,
     efectivo: Object.fromEntries(Object.entries(x.efectivo).map(([k, v]) => [k, n(v)])),
-    areas: lista, sinDetalle: !x.resumen, anulPend: n(x.anulPend), version: CAJA_VERSION
+    areas: lista, sinDetalle: !x.resumen, anulPend: n(x.anulPend), version: CAJA_VERSION,
+    stock: x.stock || null   // v3.5.0
   };
 }
 
@@ -2297,7 +2327,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.4.0';
+const CAJA_VERSION = '3.5.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3698,6 +3728,9 @@ window.confirmarCierreCiego = async function() {
 
     // v3.4.0: correo con el detalle de cada cierre (reemplaza al aviso que solo llegaba con descuadre, v2.3.1).
     // Sale sin esperar: el cierre no depende de él. Lo arma y lo envía el script de caja (CierreCaja.gs).
+    // v3.5.0: el stock que queda (si no se alcanza a leer, el correo sale igual, sin esa parte)
+    let stockCorreo = null;
+    try { stockCorreo = await stockParaCorreo(cajaData.sucursal || sucursal); } catch (eSt) { console.error('Stock del correo:', eSt); }
     try {
       avisarPorCorreo(APPS_SCRIPT_URL, { tipo: 'cierre_caja', idem: ('cierre-' + cajaDocId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64), cierre: datosCorreoCierre({
         cajaData, cerro: usuario.email, cierre: ahora, resumen: resumen && typeof resumen === 'object' ? resumen : null,
@@ -3705,7 +3738,7 @@ window.confirmarCierreCiego = async function() {
         dif: { efectivo: difEfectivo, debito: difDebito, credito: difCredito, transferencia: difTransfer, total: difTotal },
         hayDiferencia, motivo: hayDiferencia ? textoDescuadre(_cc.motivo) : '', nota: hayDiferencia ? nota : '',
         efectivo: { fondoInicial: montoInicial, ventas: sistEfectivo, ingresos: mv.ingresos, retiros: mv.retiros, deberia: ef.deberia, contado: manEfectivo, fondo: ef.fondo, retiro: ef.retiro },
-        anulPend: (_cc.anulPend || []).length }) });
+        anulPend: (_cc.anulPend || []).length, stock: stockCorreo }) });
     } catch (eCorreo) { console.error('Correo del cierre:', eCorreo); }
   } catch(e) {
     err.textContent = 'No se pudo cerrar la caja: ' + (e.message || e) + '. Nada quedó a medias: intente de nuevo.';
