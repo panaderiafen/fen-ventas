@@ -1,4 +1,5 @@
-// fën caja v3.5.0 · código
+// fën caja v3.5.1 · código
+// v3.5.1: Firestore por consulta larga (long polling): la conexión por streaming se quedó colgada el 20 nov
 // v3.5.0: el correo del cierre lleva el stock que queda (cantidad y antigüedad) y la lista de lo que está sin stock (sin Cafetería)
 // fën caja v3.3.6 · código (antes)
 // v3.3.6: al cerrar con anulaciones sin resolver: aviso, "¿La plata de esa venta está en la caja?" (Sí / No), esperar o cerrar igual
@@ -14,7 +15,7 @@
 //         y la sección "Ver la otra sucursal" (stock por tarjeta valorizado y lo vendido hoy, solo lectura)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { armarResumen } from './resumen-caja.js?v=3.3.6'; // v2.9.0: el mismo archivo que usa Sistema Fën
 import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.6'; // v3.0.0
 
@@ -29,7 +30,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+// v3.5.1 (20 nov): la conexión por streaming de Firestore se quedó colgada; la consulta larga (long polling) sí responde
+const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 
 // ─── v2.3.0: la caja ya no llama a Apps Script ──────────────────────────────
 // Los cierres, la merma, las anulaciones y los descuadres quedan solo en Firestore (Sistema Fën los lee de ahí).
@@ -2327,7 +2329,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.5.0';
+const CAJA_VERSION = '3.5.1';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
