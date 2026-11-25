@@ -1,4 +1,6 @@
-// fën caja v3.5.1 · código
+// fën caja v3.6.0 · código
+// v3.6.0: el equipo marcado "Este equipo imprime el sobre en la impresora de etiquetas" (la tablet de Ainavillo) imprime la etiqueta
+//         de 80 × 50 mm directo por Bluetooth (etiqueta.js, sin la app Print Label). Los demás (Barros) siguen igual que antes.
 // v3.5.1: Firestore por consulta larga (long polling): la conexión por streaming se quedó colgada el 20 nov
 // v3.5.0: el correo del cierre lleva el stock que queda (cantidad y antigüedad) y la lista de lo que está sin stock (sin Cafetería)
 // fën caja v3.3.6 · código (antes)
@@ -16,6 +18,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, initializeFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, Timestamp, increment, arrayUnion, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import * as Et from './etiqueta.js?v=3.6.0';   // v3.6.0: etiqueta del sobre de 80 × 50 mm
 import { armarResumen } from './resumen-caja.js?v=3.3.6'; // v2.9.0: el mismo archivo que usa Sistema Fën
 import { MOTIVOS_CAJA, MOTIVOS_DESCUADRE, textoMotivoCaja, textoDescuadre, revisarMovCaja, movsDeCaja, deberiaHaber, calcularCierreEfectivo, fondoSugerido, leerPesos, pesos as pesosEf } from './efectivo-caja.js?v=3.3.6'; // v3.0.0
 
@@ -2329,7 +2332,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.5.1';
+const CAJA_VERSION = '3.6.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -3426,6 +3429,8 @@ function mostrarSobre(x) {
   document.getElementById('sobreTexto').innerHTML =
     `<div class="sobre-l1">${escHtml(_sobre.suc)} · ${escHtml(_sobre.fecha)}</div><div class="sobre-monto">${escHtml(_sobre.monto)}</div><div class="sobre-l3">Retiro al cerrar · cerró: ${escHtml(_sobre.quien)}</div>`;
   const aj = document.getElementById('sobreAjuste'); if (aj) aj.value = String(ajusteSobreMM());
+  Et.prepararLogo('logo-etiqueta.png?v=3.6.0');   // v3.6.0: el logo listo antes de imprimir la etiqueta
+  pintarOpcionSobreBT();
   document.getElementById('modalSobre').classList.add('open');
 }
 window.cerrarSobre = function () { document.getElementById('modalSobre').classList.remove('open'); };
@@ -3469,6 +3474,8 @@ window.imprimirSobre = async function () {
     } catch (e) { showToast('No se pudo imprimir: ' + e.message, 'error'); }
     return;
   }
+  // v3.6.0 · Solo el equipo marcado (la tablet de Ainavillo): impresora de etiquetas Bluetooth, directo, sin app
+  if (sobreEnEtiquetadora()) { etiquetaSobre(); return; }
   // v3.3.4 · Navegador: etiqueta propia de 80 × 50 mm (ya no usa la comanda, que salía más larga)
   document.getElementById('sbTitulo').textContent = 'SOBRE · RETIRO DE CAJA';
   document.getElementById('sbSuc').textContent = `${s.suc} · ${s.fecha}`;
@@ -3484,6 +3491,26 @@ window.imprimirSobre = async function () {
   window.print();
   setTimeout(fin, 1500);
 };
+
+// v3.6.0 · El sobre en la impresora de etiquetas Bluetooth (90-IV-Printer) de Ainavillo. Se marca por equipo en el mismo diálogo;
+// los equipos sin marcar (Barros) siguen igual que antes.
+const sobreEnEtiquetadora = () => localStorage.getItem('sobreEtiquetaBT') === '1';
+window.cambiarSobreEtiquetaBT = on => { localStorage.setItem('sobreEtiquetaBT', on ? '1' : '0'); pintarOpcionSobreBT(); };
+function pintarOpcionSobreBT() {
+  const c = document.getElementById('sobreEtiquetaBT'); if (c) c.checked = sobreEnEtiquetadora();
+  const b = document.getElementById('btnImprimirSobre'); if (b) b.textContent = sobreEnEtiquetadora() ? 'Imprimir etiqueta' : 'Imprimir';
+  const p = document.getElementById('sobreBTAyuda'); if (p) p.hidden = !Et.puedeDirecto();
+}
+let _imprimiendoSobre = false;
+function etiquetaSobre() {
+  if (!_sobre || _imprimiendoSobre) return;
+  const s = _sobre;
+  const d = { titulo: 'SOBRE · RETIRO DE CAJA', sub: `${s.suc} · ${s.fecha}`, filas: [['Retiro al cerrar']], grande: s.monto, pie: [`Cerró: ${s.quien}`.slice(0, 40), 'Firma: ___________'] };
+  const b = document.getElementById('btnImprimirSobre'); _imprimiendoSobre = true; if (b) { b.disabled = true; b.textContent = 'Imprimiendo…'; }
+  Et.imprimirDirecto(d).then(() => showToast('Etiqueta impresa'), e => showToast(e.message, 'error'))
+    .finally(() => { _imprimiendoSobre = false; if (b) b.disabled = false; pintarOpcionSobreBT(); });
+}
+window.__etiquetaSobre = () => (_sobre ? { suc: _sobre.suc, fecha: _sobre.fecha, monto: _sobre.monto } : null);   // para las pruebas
 
 // Actualizar arqueo visible en pantalla
 window.actualizarArqueo = async function() {
