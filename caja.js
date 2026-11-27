@@ -1,4 +1,5 @@
-// fën caja v3.6.0 · código
+// fën caja v3.6.1 · código
+// v3.6.1: el correo del cierre agrupa "Sin stock" por área (CierreCaja.gs v1.2.0); etiqueta.js v1.3.0 (Bluetooth más firme)
 // v3.6.0: el equipo marcado "Este equipo imprime el sobre en la impresora de etiquetas" (la tablet de Ainavillo) imprime la etiqueta
 //         de 80 × 50 mm directo por Bluetooth (etiqueta.js, sin la app Print Label). Los demás (Barros) siguen igual que antes.
 // v3.5.1: Firestore por consulta larga (long polling): la conexión por streaming se quedó colgada el 20 nov
@@ -89,11 +90,11 @@ async function stockParaCorreo(suc) {
     const nombre = String(p.nombre || '').slice(0, 80), area = NOMBRE_AREA_CORREO[normalizarArea(p.area)] || 'Otros';
     if (total > 0) con.push({ nombre, area, total: Math.round(total * 1000) / 1000,
       edad: Object.keys(EDAD_CORREO).filter(c => cats[c]).map(c => `${Math.round(cats[c] * 1000) / 1000} ${EDAD_CORREO[c]}`).join(', ') });
-    else sin.push(nombre);
+    else sin.push({ nombre, area });   // v3.6.1: con su área (el correo los agrupa por área)
   });
   const orden = ['Panadería', 'Bollería', 'Pastelería', 'Reventa', 'Otros'];
   con.sort((a, b) => (orden.indexOf(a.area) - orden.indexOf(b.area)) || a.nombre.localeCompare(b.nombre, 'es'));
-  sin.sort((a, b) => a.localeCompare(b, 'es'));
+  sin.sort((a, b) => (orden.indexOf(a.area) - orden.indexOf(b.area)) || a.nombre.localeCompare(b.nombre, 'es'));
   return { con: con.slice(0, 300), sin: sin.slice(0, 300) };
 }
 function datosCorreoCierre(x) {
@@ -2332,7 +2333,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.6.0';
+const CAJA_VERSION = '3.6.1';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });

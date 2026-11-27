@@ -1,5 +1,9 @@
 // ═══════════════════════════════════════════════
-//  fën · Etiqueta de 80 × 50 mm para la impresora térmica (90-IV-Printer, TSPL, Bluetooth)  v1.1.0
+//  fën · Etiqueta de 80 × 50 mm para la impresora térmica (90-IV-Printer, TSPL, Bluetooth)  v1.3.0
+//  v1.3.0: más firme por Bluetooth (pedido de Emmanuel el 27 nov: tuvo que apagar la impresora): manda con confirmación cuando la
+//          impresora la ofrece (si se pierde un trozo, la impresora quedaba esperando), sin las filas en blanco (menos datos), con tiempo
+//          límite, y suelta la impresora al terminar (así el otro equipo, la caja o logística, se puede conectar).
+//  v1.2.0: hasta 5 filas (el sobre de logística lista cada cliente con su folio u orden) · v1.2.1: renglón en negrita
 //  v1.1.0: imprime DIRECTO por Bluetooth desde Chrome en Android (sin la app), con imprimirDirecto(); probado por Emmanuel el 25 nov
 //          con la página de prueba en la tablet de Ainavillo. Compartir (PDF o imagen a Print Label) queda para el iPhone y el Mac.
 //  El mismo archivo va en la caja, en logística y en Sistema Fën.
@@ -53,17 +57,19 @@ export function dibujar(d) {
     (d.filas || []).slice(0, 1).forEach(([a]) => { ajustar(x, a, 700, 27, AN); x.fillText(a, M, y + 40); y += 40; });
     const t = ajustar(x, d.grande, 800, 86, AN); x.fillText(d.grande, M, y + 16 + t);
   } else {
-    // Filas con su monto a la derecha y, abajo, el total destacado
-    (d.filas || []).slice(0, 3).forEach(([a, b]) => {
-      y += 38;
-      x.textAlign = 'right'; x.font = `800 26px ${LETRA}`; x.fillText(b || '', ANCHO - M, y);
+    // Filas con su monto a la derecha y, abajo, el total destacado. v1.2.0: hasta 5 filas; con más de 3 la letra se achica.
+    const filas = (d.filas || []).slice(0, 5), n = filas.length, f = n <= 3 ? 26 : n === 4 ? 21 : 18, paso = n <= 3 ? 38 : f + 9;
+    filas.forEach(([a, b, negrita]) => {   // v1.2.1: tercer valor true = renglón en negrita (el total cobrado)
+      y += paso;
+      x.textAlign = 'right'; x.font = `800 ${f}px ${LETRA}`; x.fillText(b || '', ANCHO - M, y);
       const wb = x.measureText(b || '').width;
-      x.textAlign = 'left'; ajustar(x, a || '', 600, 26, AN - wb - 16); x.fillText(a || '', M, y);
+      x.textAlign = 'left'; ajustar(x, a || '', negrita ? 800 : 600, f, AN - wb - 16); x.fillText(a || '', M, y);
     });
     if (d.total) {
-      y += 14; x.fillRect(M, y, AN, 3);
-      x.textAlign = 'right'; const t = ajustar(x, d.total[1], 800, 64, AN * 0.62); x.fillText(d.total[1], ANCHO - M, y + 8 + t);
-      x.textAlign = 'left'; x.font = `800 32px ${LETRA}`; x.fillText(d.total[0], M, y + 8 + t - Math.round((t - 32) / 2));
+      const tt = n <= 3 ? 64 : 50;
+      y += n <= 3 ? 14 : 10; x.fillRect(M, y, AN, 3);
+      x.textAlign = 'right'; const t = ajustar(x, d.total[1], 800, tt, AN * 0.62); x.fillText(d.total[1], ANCHO - M, y + 8 + t);
+      x.textAlign = 'left'; x.font = `800 ${n <= 3 ? 32 : 28}px ${LETRA}`; x.fillText(d.total[0], M, y + 8 + t - Math.round((t - (n <= 3 ? 32 : 28)) / 2));
     }
   }
   // Pie: quién y firma
@@ -134,47 +140,75 @@ async function buscarEscritura(dev) {
   }
   throw new Error('La impresora se conectó, pero no recibe datos por este camino.');
 }
+const conLimite = (p, ms, msg) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(msg)), ms))]);
 async function conectarBT() {
   if (bt.car && bt.dev && bt.dev.gatt.connected) return bt.car;
-  if (bt.dev) { try { bt.car = await buscarEscritura(bt.dev); return bt.car; } catch (e) { bt = { dev: null, car: null }; } }
+  // La misma impresora de antes (en esta página): se reconecta sin la lista
+  if (bt.dev) { try { bt.car = await conLimite(buscarEscritura(bt.dev), 10000, 'tiempo'); return bt.car; } catch (e) { soltarBT(); bt = { dev: null, car: null }; } }
   // Lo que ya autorizó antes (si Chrome lo permite), si no, la lista para elegir
   if (navigator.bluetooth.getDevices) {
-    try { for (const d of await navigator.bluetooth.getDevices()) { try { const c = await buscarEscritura(d); bt = { dev: d, car: c }; return c; } catch (e) { /* no está a mano */ } } } catch (e) { /* sin permiso guardado */ }
+    try { for (const d of await navigator.bluetooth.getDevices()) { try { const c = await conLimite(buscarEscritura(d), 8000, 'tiempo'); bt = { dev: d, car: c }; return c; } catch (e) { /* no está a mano */ } } } catch (e) { /* sin permiso guardado */ }
   }
   const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICIOS_BT });
-  const car = await buscarEscritura(dev);
+  const car = await conLimite(buscarEscritura(dev), 12000, 'tiempo');
   dev.addEventListener('gattserverdisconnected', () => { bt.car = null; });
   bt = { dev, car };
   return car;
 }
-// La etiqueta en TSPL: SIZE, GAP y la imagen como BITMAP (bit en 0 = imprime). Probado así en la 90-IV-Printer.
+// Suelta la impresora (la conexión Bluetooth la puede tener un solo equipo a la vez)
+function soltarBT() { try { if (bt.dev && bt.dev.gatt.connected) bt.dev.gatt.disconnect(); } catch (e) { /* ya estaba suelta */ } bt.car = null; }
+// La etiqueta en TSPL: SIZE, GAP y la imagen como BITMAP (bit en 0 = imprime), solo las franjas con algo (las filas en blanco no viajan).
 export function tspl(c, { invertir = false } = {}) {
-  const d = c.getContext('2d').getImageData(0, 0, ANCHO, ALTO).data, ab = ANCHO / 8, bits = new Uint8Array(ab * ALTO);
-  for (let y = 0; y < ALTO; y++) for (let x = 0; x < ANCHO; x++) {
-    const i = (y * ANCHO + x) * 4, negro = (d[i] + d[i + 1] + d[i + 2]) / 3 < 140;
-    if (negro === invertir) bits[y * ab + (x >> 3)] |= 0x80 >> (x & 7);
+  const d = c.getContext('2d').getImageData(0, 0, ANCHO, ALTO).data, ab = ANCHO / 8;
+  const filas = [], llena = [];
+  for (let y = 0; y < ALTO; y++) {
+    const f = new Uint8Array(ab); let algo = false;
+    for (let x = 0; x < ANCHO; x++) {
+      const i = (y * ANCHO + x) * 4, negro = (d[i] + d[i + 1] + d[i + 2]) / 3 < 140;
+      if (negro) algo = true;
+      if (negro === invertir) f[x >> 3] |= 0x80 >> (x & 7);
+    }
+    filas.push(f); llena.push(algo);
   }
-  const cab = ascii(`SIZE 80 mm,50 mm\r\nGAP 2 mm,0 mm\r\nDIRECTION 0\r\nDENSITY 8\r\nCLS\r\nBITMAP 0,0,${ab},${ALTO},0,`), fin = ascii('\r\nPRINT 1,1\r\n');
-  const out = new Uint8Array(cab.length + bits.length + fin.length);
-  out.set(cab, 0); out.set(bits, cab.length); out.set(fin, cab.length + bits.length);
+  // Franjas de filas con algo (se juntan si las separan menos de 12 filas en blanco)
+  const franjas = []; let ini = -1, ult = -1;
+  for (let y = 0; y < ALTO; y++) if (llena[y]) { if (ini < 0) ini = y; else if (y - ult > 12) { franjas.push([ini, ult]); ini = y; } ult = y; }
+  if (ini >= 0) franjas.push([ini, ult]);
+  const partes = [ascii('SIZE 80 mm,50 mm\r\nGAP 2 mm,0 mm\r\nDIRECTION 0\r\nDENSITY 8\r\nCLS\r\n')];
+  franjas.forEach(([a, b]) => {
+    const h = b - a + 1, bits = new Uint8Array(ab * h);
+    for (let y = a; y <= b; y++) bits.set(filas[y], (y - a) * ab);
+    partes.push(ascii(`BITMAP 0,${a},${ab},${h},0,`), bits, ascii('\r\n'));
+  });
+  partes.push(ascii('PRINT 1,1\r\n'));
+  const out = new Uint8Array(partes.reduce((n, p) => n + p.length, 0)); let p = 0;
+  partes.forEach(x => { out.set(x, p); p += x.length; });
   return out;
 }
+const espera = ms => new Promise(r => setTimeout(r, ms));
 async function enviarBT(car, bytes) {
-  const sinResp = car.properties.writeWithoutResponse, n = sinResp ? 180 : 100;
+  // Con confirmación si la impresora la ofrece: cada trozo espera su "recibido" (no se pierde nada). Si no, trozos chicos con pausa.
+  const conResp = !!car.properties.write, n = conResp ? 180 : 100;
   for (let i = 0; i < bytes.length; i += n) {
     const parte = bytes.slice(i, i + n);
-    if (sinResp) await car.writeValueWithoutResponse(parte); else await car.writeValue(parte);
-    if (i % 2000 < n) await new Promise(r => setTimeout(r, 20));
+    if (conResp) await conLimite(car.writeValueWithResponse ? car.writeValueWithResponse(parte) : car.writeValue(parte), 5000, 'tiempo');
+    else { await car.writeValueWithoutResponse(parte); await espera(12); }
   }
 }
 // Imprime la etiqueta directo. Llamar dentro del toque (la primera vez abre la lista de Chrome). → Promise<'impresa'>; lanza un Error con el texto para la persona.
+let ocupada = false;
 export async function imprimirDirecto(d, { invertir = false } = {}) {
   if (!puedeDirecto()) throw new Error('Este equipo no imprime directo por Bluetooth (use Chrome en Android).');
-  let car;
-  try { car = await conectarBT(); }
-  catch (e) { throw new Error(e && e.name === 'NotFoundError' ? 'No se eligió la impresora.' : 'No se pudo conectar con la impresora: ¿está encendida y cerca? Cierre la app Print Label si está abierta.'); }
-  const bytes = tspl(dibujar(d), { invertir });
-  try { await enviarBT(car, bytes); }
-  catch (e) { bt.car = null; throw new Error('Se cortó la conexión con la impresora. Toque otra vez.'); }
-  return 'impresa';
+  if (ocupada) throw new Error('Ya se está imprimiendo: espere un momento.');
+  ocupada = true;
+  try {
+    let car;
+    try { car = await conectarBT(); }
+    catch (e) { throw new Error(e && e.name === 'NotFoundError' ? 'No se eligió la impresora.' : 'No se pudo conectar con la impresora. Revise que esté encendida y cerca, y que ningún otro equipo la esté usando (la app Print Label, la caja o logística abiertos imprimiendo). Toque otra vez.'); }
+    const bytes = tspl(dibujar(d), { invertir });
+    try { await enviarBT(car, bytes); }
+    catch (e) { soltarBT(); throw new Error('Se cortó la conexión con la impresora. Toque otra vez; si sigue igual, apáguela y enciéndala.'); }
+    await espera(1500);   // que termine de recibir antes de soltarla
+    return 'impresa';
+  } finally { soltarBT(); ocupada = false; }
 }
