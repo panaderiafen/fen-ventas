@@ -1,4 +1,5 @@
-// fën caja v3.6.1 · código
+// fën caja v3.7.0 · código
+// v3.7.0: con Efectivo, "¿Con cuánto paga?" (escrito o con un toque al billete) y el vuelto. Solo ayuda: no se guarda.
 // v3.6.1: el correo del cierre agrupa "Sin stock" por área (CierreCaja.gs v1.2.0); etiqueta.js v1.3.0 (Bluetooth más firme)
 // v3.6.0: el equipo marcado "Este equipo imprime el sobre en la impresora de etiquetas" (la tablet de Ainavillo) imprime la etiqueta
 //         de 80 × 50 mm directo por Bluetooth (etiqueta.js, sin la app Print Label). Los demás (Barros) siguen igual que antes.
@@ -1677,6 +1678,7 @@ window.calcularResumen = function() {
   document.getElementById('resumenVenta').dataset.total     = total;
   document.getElementById('resumenVenta').dataset.descuento = descuento;
   document.getElementById('resumenVenta').dataset.subtotal  = subtotal;
+  pintarVuelto();   // v3.7.0: el vuelto sigue al total
 };
 
 window.selMedio = function(medio) {
@@ -1684,7 +1686,30 @@ window.selMedio = function(medio) {
   document.querySelectorAll('.medio-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('mp-' + medio).classList.add('selected');
   pintarTransferNombre();   // v3.3.7
+  pintarVuelto();           // v3.7.0
 };
+// v3.7.0 · Vuelto: con Efectivo como único medio, "¿Con cuánto paga?" y el vuelto. Se vacía al cambiar de medio o al terminar la venta.
+const BILLETES = [1000, 2000, 5000, 10000, 20000];   // los billetes chilenos
+const totalVenta = () => parseInt((document.getElementById('resumenVenta') || {}).dataset?.total) || 0;
+const pesosEscritos = v => { const t = String(v || '').replace(/[^\d]/g, ''); return t ? Number(t) : 0; };
+function pintarVuelto() {
+  const w = document.getElementById('vueltoWrap'), i = document.getElementById('vueltoPaga');
+  if (!w || !i) return;
+  const ver = medioSeleccionado === 'efectivo' && !pagoDividido && pedidoLineas.length > 0;
+  w.style.display = ver ? '' : 'none';
+  if (!ver) { i.value = ''; return; }
+  const total = totalVenta();
+  // Montos típicos con billetes chilenos (el justo primero): lo que sigue en múltiplos de $1.000, $5.000, $10.000 y $20.000. Hasta 4.
+  const ops = [total, ...BILLETES.filter(b => b !== 2000).map(n => Math.ceil((total + 1) / n) * n)]
+    .filter((b, k, a) => b > 0 && a.indexOf(b) === k).sort((a, b) => a - b).slice(0, 4);
+  document.getElementById('vueltoBotones').innerHTML = ops.map(b => `<button type="button" class="btn-sm vuelto-op" onclick="vueltoBillete(${b})">${b === total ? 'Justo' : '$' + b.toLocaleString('es-CL')}</button>`).join('');
+  const paga = pesosEscritos(i.value), r = document.getElementById('vueltoRes');
+  if (!paga) { r.innerHTML = ''; r.className = 'vuelto-res'; return; }
+  if (paga < total) { r.className = 'vuelto-res falta'; r.innerHTML = `Faltan <b>$${(total - paga).toLocaleString('es-CL')}</b>`; return; }
+  r.className = 'vuelto-res ok'; r.innerHTML = `Vuelto <b>$${(paga - total).toLocaleString('es-CL')}</b>`;
+}
+window.vueltoEscribe = el => { const n = pesosEscritos(el.value); el.value = n ? '$' + n.toLocaleString('es-CL') : ''; pintarVuelto(); };
+window.vueltoBillete = b => { const i = document.getElementById('vueltoPaga'); if (i) i.value = '$' + b.toLocaleString('es-CL'); pintarVuelto(); };
 // v3.3.7 · Con Transferencia (un solo medio), la casilla opcional "¿A nombre de quién viene la transferencia?". Al cambiar de medio se vacía.
 function pintarTransferNombre() {
   const w = document.getElementById('transferNombreWrap'), i = document.getElementById('transferNombre');
@@ -1708,6 +1733,7 @@ window.togglePagoDividido = function() {
   document.querySelector('.medio-grid').style.display = pagoDividido ? 'none' : '';
   if (pagoDividido) actualizarRestanteDividido();
   pintarTransferNombre();   // v3.3.7
+  pintarVuelto();           // v3.7.0
 };
 
 function resetPagoDividido() {
@@ -1722,6 +1748,8 @@ function resetPagoDividido() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const vp = document.getElementById('vueltoPaga'); if (vp) vp.value = '';   // v3.7.0
+  pintarVuelto();
 }
 
 window.actualizarRestanteDividido = function() {
@@ -2333,7 +2361,7 @@ async function marcarProductosConVenta(lineas) {
 // tarjeta se vendió y de qué lotes salió, sin lecturas ni escrituras nuevas.
 // Si el stock no se puede leer (por ejemplo, sin conexión), la venta sigue exactamente
 // como en la v2.1.1 (la línea guarda la tarjeta, pero no los lotes).
-const CAJA_VERSION = '3.6.1';
+const CAJA_VERSION = '3.7.0';
 function horaAgotadoCaja(ts) {
   const d = ts && ts.toDate ? ts.toDate() : new Date();
   return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });

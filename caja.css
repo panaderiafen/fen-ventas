@@ -604,3 +604,15 @@ input:checked + .toggle-slider:before { transform: translateX(16px); }
 .transfer-nombre .opcional { font-weight: 500; color: #5C665F; }
 .transfer-nombre input { width: 100%; box-sizing: border-box; min-height: 44px; font-size: 16px; }
 .transfer-nombre-ayuda { font-size: 12px; color: #5C665F; margin-top: 6px; }
+
+/* v3.7.0 · Vuelto con Efectivo */
+.vuelto { margin-top: 10px; padding: 10px 12px; border: 1.5px solid #9DB5A6; border-radius: 10px; background: #F4F8F5; }
+.vuelto label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.vuelto input { width: 100%; box-sizing: border-box; min-height: 44px; font-size: 18px; font-weight: 700; }
+.vuelto-botones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.vuelto-op { min-height: 44px; font-weight: 700; }
+.vuelto-res { margin-top: 8px; font-size: 15px; }
+.vuelto-res:empty { display: none; }
+.vuelto-res.ok b { font-size: 26px; color: #2B5A3E; }
+.vuelto-res.falta { color: #82381F; }
+.vuelto-res.falta b { font-size: 20px; }
